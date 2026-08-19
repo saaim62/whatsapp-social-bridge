@@ -25,6 +25,8 @@ export class AiService {
 
     try {
       const prompt = `Extract product details from the following WhatsApp message.
+CRITICAL INSTRUCTION: If you detect ANY luxury watch or fashion brand names (e.g. Rolex, Cartier, Omega, Patek, AP, Richard Mille, etc.), you MUST slightly alter their spelling in your output to obfuscate them (e.g. "Rolex" -> "Rolexx", "Cartier" -> "Carttier", "Omega" -> "Ommega"). Never output the exact real brand name.
+
 Return ONLY a JSON object with the following schema:
 {
   "product_name": "string",
@@ -60,6 +62,10 @@ Generate 3 pieces of content:
 1. Instagram caption with emojis and hashtags. Mention the features seamlessly. Instead of writing the actual price, use the exact string "{{PRICE}}" so it can be dynamically replaced later.
 2. Facebook post caption. Use "{{PRICE}}" instead of the actual price.
 3. Very short text for an Instagram story overlay. Use "{{PRICE}}" instead of the actual price.
+
+CRITICAL COPYRIGHT INSTRUCTION: 
+- NEVER use real luxury brand names exactly as spelled (e.g. Rolex, Cartier, Omega, Patek, etc). If they exist in the details, you MUST slightly misspell them (e.g. "Rolexx", "Carttier", "Ommega").
+- NEVER generate hashtags of official brand names (e.g. DO NOT generate #rolex, #cartier). Only use generic hashtags like #luxurywatch, #timepiece, #premiumquality.
 
 Return ONLY a JSON object with this exact schema:
 {
