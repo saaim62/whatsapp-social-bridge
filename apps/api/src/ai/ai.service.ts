@@ -35,10 +35,14 @@ In the "features" array, include all specific watch or product specifications li
 If a field is missing, leave it as null or empty array.
 Message:
 ${rawText}`;
-      const result = await this.model.generateContent(prompt);
+      const result = await this.model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: 'application/json',
+        }
+      });
       const responseText = result.response.text();
-      const cleanedText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-      return JSON.parse(cleanedText);
+      return JSON.parse(responseText);
     } catch (e) {
       this.logger.error('Failed to extract product details', e);
       return {};
@@ -63,10 +67,14 @@ Return ONLY a JSON object with this exact schema:
   "facebookCaption": "string",
   "storyText": "string"
 }`;
-      const result = await this.model.generateContent(prompt);
+      const result = await this.model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: 'application/json',
+        }
+      });
       const responseText = result.response.text();
-      const cleanedText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-      return JSON.parse(cleanedText);
+      return JSON.parse(responseText);
     } catch (e) {
       this.logger.error('Failed to generate captions', e);
       return { instagramCaption: '', facebookCaption: '', storyText: '' };

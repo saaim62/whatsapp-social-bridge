@@ -54,7 +54,7 @@ export class SocialService {
     this.logger.log(`Polling Instagram container ${containerId} for completion...`);
     let status = 'IN_PROGRESS';
     let attempts = 0;
-    const maxAttempts = 40; // 2 minutes max (3s * 40)
+    const maxAttempts = 200; // 10 minutes max (3s * 200)
 
     while (status === 'IN_PROGRESS' && attempts < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, 3000));
@@ -225,102 +225,91 @@ export class SocialService {
     const caption = batch.generatedContent?.facebookCaption || batch.rawText;
     
     try {
-      if (batch.mediaAssets && batch.mediaAssets.length > 1) {
-        // Multiple media - publish as album/feed with attached_media
-        const mediaFbids: string[] = [];
-        
-        for (const asset of batch.mediaAssets) {
-          let absolutePath = path.join(process.cwd(), asset.localPath);
-          if (fs.existsSync(absolutePath)) {
-            const isVideo = asset.mimeType?.startsWith('video/');
-            
-            if (isVideo) {
-               absolutePath = await this.compressVideo(absolutePath);
-            }
+      const photos = batch.mediaAssets?.filter((a: any) => !a.mimeType?.startsWith('video/')) || [];
+      const videos = batch.mediaAssets?.filter((a: any) => a.mimeType?.startsWith('video/')) || [];
+      
+      let finalFeedResId = '';
 
+      // 1. Publish all photos as a single Album Feed Post
+      if (photos.length > 1) {
+        const mediaFbids: string[] = [];
+        for (const asset of photos) {
+          const absolutePath = path.join(process.cwd(), asset.localPath);
+          if (fs.existsSync(absolutePath)) {
             const formData = new FormData();
             formData.append('source', fs.createReadStream(absolutePath));
             formData.append('published', 'false');
             formData.append('access_token', accessToken);
 
-            const endpoint = isVideo ? 'videos' : 'photos';
             const res = await axios.post(
-              `https://graph.facebook.com/v19.0/${pageId}/${endpoint}`,
+              `https://graph.facebook.com/v19.0/${pageId}/photos`,
               formData,
-              { 
-                headers: formData.getHeaders(),
-                maxContentLength: Infinity,
-                maxBodyLength: Infinity,
-              }
+              { headers: formData.getHeaders(), maxContentLength: Infinity, maxBodyLength: Infinity }
             );
             mediaFbids.push(res.data.id);
-            // Optional: for large Facebook videos, we might need to poll for status before attaching.
-            // But usually attaching works immediately for standard videos.
           }
         }
 
         const attachedMedia = mediaFbids.map(id => ({ media_fbid: id }));
-        
         const feedRes = await axios.post(
           `https://graph.facebook.com/v19.0/${pageId}/feed`,
           null,
-          {
-            params: {
-              message: caption,
-              attached_media: JSON.stringify(attachedMedia),
-              access_token: accessToken,
-            },
-          }
+          { params: { message: caption, attached_media: JSON.stringify(attachedMedia), access_token: accessToken } }
         );
-        this.logger.log(`Successfully published mixed carousel to Facebook: ${feedRes.data.id}`);
-        return { id: feedRes.data.id };
-
-      } else if (batch.mediaAssets && batch.mediaAssets.length === 1) {
-        // Single media
-        const asset = batch.mediaAssets[0];
-        let absolutePath = path.join(process.cwd(), asset.localPath);
+        finalFeedResId = feedRes.data.id;
+        this.logger.log(`Successfully published photo album to Facebook: ${finalFeedResId}`);
+      } else if (photos.length === 1) {
+        const absolutePath = path.join(process.cwd(), photos[0].localPath);
         if (fs.existsSync(absolutePath)) {
-          const isVideo = asset.mimeType?.startsWith('video/');
-          
-          if (isVideo) {
-             absolutePath = await this.compressVideo(absolutePath);
-          }
-
           const formData = new FormData();
-          formData.append(isVideo ? 'description' : 'message', caption);
+          formData.append('message', caption);
           formData.append('source', fs.createReadStream(absolutePath));
           formData.append('access_token', accessToken);
 
-          const endpoint = isVideo ? 'videos' : 'photos';
           const res = await axios.post(
-            `https://graph.facebook.com/v19.0/${pageId}/${endpoint}`,
+            `https://graph.facebook.com/v19.0/${pageId}/photos`,
             formData,
-            { 
-              headers: formData.getHeaders(),
-              maxContentLength: Infinity,
-              maxBodyLength: Infinity,
-            }
+            { headers: formData.getHeaders(), maxContentLength: Infinity, maxBodyLength: Infinity }
           );
-          this.logger.log(`Successfully published media to Facebook: ${res.data.id}`);
-          return { id: res.data.id };
-        } else {
-          throw new Error(`Local file not found: ${absolutePath}`);
+          finalFeedResId = res.data.id;
+          this.logger.log(`Successfully published single photo to Facebook: ${finalFeedResId}`);
         }
-      } else {
-        // Text-only post
+      }
+
+      // 2. Publish all videos sequentially as individual posts
+      for (const asset of videos) {
+        let absolutePath = path.join(process.cwd(), asset.localPath);
+        if (fs.existsSync(absolutePath)) {
+          absolutePath = await this.compressVideo(absolutePath);
+          
+          const formData = new FormData();
+          formData.append('description', caption);
+          formData.append('source', fs.createReadStream(absolutePath));
+          formData.append('access_token', accessToken);
+
+          // By omitting 'published=false', it directly posts to the page timeline.
+          const res = await axios.post(
+            `https://graph.facebook.com/v19.0/${pageId}/videos`,
+            formData,
+            { headers: formData.getHeaders(), maxContentLength: Infinity, maxBodyLength: Infinity }
+          );
+          finalFeedResId = res.data.id; // overwrite so we return at least one ID
+          this.logger.log(`Successfully published individual video to Facebook: ${res.data.id}`);
+        }
+      }
+
+      // 3. Text-only fallback if absolutely no media
+      if (photos.length === 0 && videos.length === 0) {
         const res = await axios.post(
           `https://graph.facebook.com/v19.0/${pageId}/feed`,
           null,
-          {
-            params: {
-              message: caption,
-              access_token: accessToken,
-            },
-          }
+          { params: { message: caption, access_token: accessToken } }
         );
-        this.logger.log(`Successfully published text to Facebook: ${res.data.id}`);
-        return { id: res.data.id };
+        finalFeedResId = res.data.id;
+        this.logger.log(`Successfully published text to Facebook: ${finalFeedResId}`);
       }
+
+      return { id: finalFeedResId };
     } catch (error: any) {
       this.logger.error('Error publishing to Facebook', error.response?.data || error.message);
       throw error;
