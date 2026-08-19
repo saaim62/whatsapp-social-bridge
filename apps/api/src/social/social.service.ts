@@ -76,6 +76,25 @@ export class SocialService {
     }
   }
 
+  private async padMedia(inputPath: string, isVideo: boolean): Promise<string> {
+    const ext = path.extname(inputPath);
+    const outputPath = inputPath.replace(ext, `_padded_${Date.now()}${ext}`);
+    this.logger.log(`Padding ${isVideo ? 'video' : 'image'} to 1:1 square...`);
+    
+    try {
+      const vf = 'scale=1080:1080:force_original_aspect_ratio=decrease,pad=1080:1080:(ow-iw)/2:(oh-ih)/2:color=black';
+      if (isVideo) {
+        await execPromise(`ffmpeg -i "${inputPath}" -vf "${vf}" -vcodec libx264 -crf 28 -preset fast "${outputPath}"`);
+      } else {
+        await execPromise(`ffmpeg -i "${inputPath}" -vf "${vf}" "${outputPath}"`);
+      }
+      return outputPath;
+    } catch (e) {
+      this.logger.error('Failed to pad media, returning original', e);
+      return inputPath;
+    }
+  }
+
   async publishInstagram(batch: any): Promise<{ id: string }> {
     this.logger.log(`Publishing to Instagram for batch ${batch.id}`);
     const igAccountId = this.configService.get('INSTAGRAM_ACCOUNT_ID');
@@ -89,95 +108,73 @@ export class SocialService {
     let finalCreationId = '';
 
     try {
-      const photos = batch.mediaAssets?.filter((a: any) => !a.mimeType?.startsWith('video/')) || [];
-      const videos = batch.mediaAssets?.filter((a: any) => a.mimeType?.startsWith('video/')) || [];
-
-      // 1. Publish Photos (Carousel or Single)
-      if (photos.length > 1) {
-        // Instagram limit is 10 items per carousel
-        const carouselPhotos = photos.slice(0, 10);
-        const childContainerIds: string[] = [];
-        
-        for (const asset of carouselPhotos) {
-          const absolutePath = path.join(process.cwd(), asset.localPath);
-          if (fs.existsSync(absolutePath)) {
-            const catboxUrl = await this.uploadToCatbox(absolutePath);
-            const itemRes = await axios.post(
-              `https://graph.facebook.com/v19.0/${igAccountId}/media`,
-              null,
-              { params: { image_url: catboxUrl, is_carousel_item: true, access_token: accessToken } }
-            );
-            childContainerIds.push(itemRes.data.id);
-          }
-        }
-
-        const carouselRes = await axios.post(
-          `https://graph.facebook.com/v19.0/${igAccountId}/media`,
-          null,
-          { params: { caption, media_type: 'CAROUSEL', children: childContainerIds.join(','), access_token: accessToken } }
-        );
-        const creationId = carouselRes.data.id;
-        finalCreationId = creationId; // Save as the primary ID
-        
-        await this.pollInstagramContainer(creationId, accessToken);
-        const publishRes = await axios.post(
-          `https://graph.facebook.com/v19.0/${igAccountId}/media_publish`,
-          null,
-          { params: { creation_id: creationId, access_token: accessToken } }
-        );
-        this.logger.log(`Successfully published Instagram photo carousel: ${publishRes.data.id}`);
-        
-      } else if (photos.length === 1) {
-        const absolutePath = path.join(process.cwd(), photos[0].localPath);
-        if (fs.existsSync(absolutePath)) {
-          const catboxUrl = await this.uploadToCatbox(absolutePath);
-          const res = await axios.post(
-            `https://graph.facebook.com/v19.0/${igAccountId}/media`,
-            null,
-            { params: { image_url: catboxUrl, caption, access_token: accessToken } }
-          );
-          const creationId = res.data.id;
-          finalCreationId = creationId;
-          
-          await this.pollInstagramContainer(creationId, accessToken);
-          const publishRes = await axios.post(
-            `https://graph.facebook.com/v19.0/${igAccountId}/media_publish`,
-            null,
-            { params: { creation_id: creationId, access_token: accessToken } }
-          );
-          this.logger.log(`Successfully published single Instagram photo: ${publishRes.data.id}`);
-        }
+      const allAssets = batch.mediaAssets || [];
+      if (allAssets.length === 0) {
+         this.logger.warn('No images/videos found for Instagram.');
+         return { id: 'success' };
       }
 
-      // 2. Publish Videos (Individual REELS)
-      for (const asset of videos) {
+      // Max 10 items for a carousel
+      const carouselAssets = allAssets.slice(0, 10);
+      const childContainerIds: string[] = [];
+      const isVideoMap: Record<string, boolean> = {};
+
+      for (const asset of carouselAssets) {
         let absolutePath = path.join(process.cwd(), asset.localPath);
         if (fs.existsSync(absolutePath)) {
-          absolutePath = await this.compressVideo(absolutePath);
-          const catboxUrl = await this.uploadToCatbox(absolutePath);
+          const isVideo = asset.mimeType?.startsWith('video/') || false;
           
-          const res = await axios.post(
+          // Pad all media (images & videos) to perfect 1:1 square to satisfy Instagram API
+          absolutePath = await this.padMedia(absolutePath, isVideo);
+          
+          const catboxUrl = await this.uploadToCatbox(absolutePath);
+
+          const params: any = {
+            is_carousel_item: 'true',
+            access_token: accessToken,
+          };
+
+          if (isVideo) {
+            params.video_url = catboxUrl;
+            params.media_type = 'VIDEO';
+          } else {
+            params.image_url = catboxUrl;
+          }
+
+          const itemRes = await axios.post(
             `https://graph.facebook.com/v19.0/${igAccountId}/media`,
             null,
-            { params: { video_url: catboxUrl, media_type: 'REELS', caption, access_token: accessToken } }
+            { params }
           );
           
-          const creationId = res.data.id;
-          if (!finalCreationId) finalCreationId = creationId;
-          
-          await this.pollInstagramContainer(creationId, accessToken);
-          const publishRes = await axios.post(
-            `https://graph.facebook.com/v19.0/${igAccountId}/media_publish`,
-            null,
-            { params: { creation_id: creationId, access_token: accessToken } }
-          );
-          this.logger.log(`Successfully published Instagram Reel video: ${publishRes.data.id}`);
+          const itemId = itemRes.data.id;
+          childContainerIds.push(itemId);
+          isVideoMap[itemId] = isVideo;
         }
       }
 
-      if (photos.length === 0 && videos.length === 0) {
-        this.logger.warn('No images/videos found for Instagram.');
+      // Wait for all VIDEO containers to finish processing BEFORE creating the carousel container
+      for (const id of childContainerIds) {
+         if (isVideoMap[id]) {
+             await this.pollInstagramContainer(id, accessToken);
+         }
       }
+
+      const carouselRes = await axios.post(
+        `https://graph.facebook.com/v19.0/${igAccountId}/media`,
+        null,
+        { params: { caption, media_type: 'CAROUSEL', children: childContainerIds.join(','), access_token: accessToken } }
+      );
+      const creationId = carouselRes.data.id;
+      finalCreationId = creationId; // Save as the primary ID
+      
+      await this.pollInstagramContainer(creationId, accessToken);
+      const publishRes = await axios.post(
+        `https://graph.facebook.com/v19.0/${igAccountId}/media_publish`,
+        null,
+        { params: { creation_id: creationId, access_token: accessToken } }
+      );
+      this.logger.log(`Successfully published Unified Instagram Carousel: ${publishRes.data.id}`);
 
       return { id: finalCreationId || 'success' };
     } catch (error: any) {
