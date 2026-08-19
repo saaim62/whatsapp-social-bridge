@@ -34,59 +34,74 @@ export class SocialService {
 
     const caption = batch.generatedContent?.instagramCaption || batch.rawText;
     
-    let imageUrls: string[] = [];
+    // We will collect objects: { url, isVideo }
+    let mediaItems: { url: string, isVideo: boolean }[] = [];
 
     if (batch.mediaAssets && batch.mediaAssets.length > 0) {
       for (const asset of batch.mediaAssets) {
         const absolutePath = path.join(process.cwd(), asset.localPath);
         if (fs.existsSync(absolutePath)) {
+          const isVideo = asset.mimeType?.startsWith('video/') || false;
+          let url = '';
           if (process.env.NODE_ENV === 'production') {
-            // imageUrls.push(`https://yourdomain.com/${asset.localPath}`);
+            // url = `https://yourdomain.com/${asset.localPath}`;
           } else {
-            const url = await this.uploadToCatbox(absolutePath);
-            imageUrls.push(url);
+            url = await this.uploadToCatbox(absolutePath);
           }
+          if (url) mediaItems.push({ url, isVideo });
         }
       }
     }
 
-    if (imageUrls.length === 0) {
+    if (mediaItems.length === 0) {
       this.logger.warn('No images found. Using placeholder URL.');
-      imageUrls.push('https://picsum.photos/800/800');
+      mediaItems.push({ url: 'https://picsum.photos/800/800', isVideo: false });
     }
 
     try {
       let creationId: string;
 
-      if (imageUrls.length === 1) {
-        // Single image post
+      if (mediaItems.length === 1) {
+        // Single media post
+        const media = mediaItems[0];
+        const params: any = {
+          caption: caption,
+          access_token: accessToken,
+        };
+        
+        if (media.isVideo) {
+          params.media_type = 'VIDEO';
+          params.video_url = media.url;
+        } else {
+          params.image_url = media.url;
+        }
+
         const containerRes = await axios.post(
           `https://graph.facebook.com/v19.0/${igAccountId}/media`,
           null,
-          {
-            params: {
-              image_url: imageUrls[0],
-              caption: caption,
-              access_token: accessToken,
-            },
-          }
+          { params }
         );
         creationId = containerRes.data.id;
       } else {
         // Carousel post
         const childContainerIds: string[] = [];
         
-        for (const url of imageUrls) {
+        for (const media of mediaItems) {
+          const params: any = {
+            is_carousel_item: true,
+            access_token: accessToken,
+          };
+          if (media.isVideo) {
+            params.media_type = 'VIDEO';
+            params.video_url = media.url;
+          } else {
+            params.image_url = media.url;
+          }
+
           const itemRes = await axios.post(
             `https://graph.facebook.com/v19.0/${igAccountId}/media`,
             null,
-            {
-              params: {
-                image_url: url,
-                is_carousel_item: true,
-                access_token: accessToken,
-              },
-            }
+            { params }
           );
           childContainerIds.push(itemRes.data.id);
         }
@@ -139,23 +154,25 @@ export class SocialService {
     
     try {
       if (batch.mediaAssets && batch.mediaAssets.length > 1) {
-        // Multiple photos - publish as album/feed with attached_media
+        // Multiple media - publish as album/feed with attached_media
         const mediaFbids: string[] = [];
         
         for (const asset of batch.mediaAssets) {
           const absolutePath = path.join(process.cwd(), asset.localPath);
           if (fs.existsSync(absolutePath)) {
+            const isVideo = asset.mimeType?.startsWith('video/');
             const formData = new FormData();
             formData.append('source', fs.createReadStream(absolutePath));
             formData.append('published', 'false');
             formData.append('access_token', accessToken);
 
-            const photoRes = await axios.post(
-              `https://graph.facebook.com/v19.0/${pageId}/photos`,
+            const endpoint = isVideo ? 'videos' : 'photos';
+            const res = await axios.post(
+              `https://graph.facebook.com/v19.0/${pageId}/${endpoint}`,
               formData,
               { headers: formData.getHeaders() }
             );
-            mediaFbids.push(photoRes.data.id);
+            mediaFbids.push(res.data.id);
           }
         }
 
@@ -172,24 +189,27 @@ export class SocialService {
             },
           }
         );
-        this.logger.log(`Successfully published carousel to Facebook: ${feedRes.data.id}`);
+        this.logger.log(`Successfully published mixed carousel to Facebook: ${feedRes.data.id}`);
         return { id: feedRes.data.id };
 
       } else if (batch.mediaAssets && batch.mediaAssets.length === 1) {
-        // Single photo
-        const absolutePath = path.join(process.cwd(), batch.mediaAssets[0].localPath);
+        // Single media
+        const asset = batch.mediaAssets[0];
+        const absolutePath = path.join(process.cwd(), asset.localPath);
         if (fs.existsSync(absolutePath)) {
+          const isVideo = asset.mimeType?.startsWith('video/');
           const formData = new FormData();
-          formData.append('message', caption);
+          formData.append(isVideo ? 'description' : 'message', caption);
           formData.append('source', fs.createReadStream(absolutePath));
           formData.append('access_token', accessToken);
 
+          const endpoint = isVideo ? 'videos' : 'photos';
           const res = await axios.post(
-            `https://graph.facebook.com/v19.0/${pageId}/photos`,
+            `https://graph.facebook.com/v19.0/${pageId}/${endpoint}`,
             formData,
             { headers: formData.getHeaders() }
           );
-          this.logger.log(`Successfully published photo to Facebook: ${res.data.id}`);
+          this.logger.log(`Successfully published media to Facebook: ${res.data.id}`);
           return { id: res.data.id };
         } else {
           throw new Error(`Local file not found: ${absolutePath}`);

@@ -91,12 +91,15 @@ export class WhatsappService implements OnModuleInit {
     this.logger.log(`Received WhatsApp message from: ${msg.key.remoteJid}`);
 
     const imageMessage = messageContent.imageMessage;
+    const videoMessage = messageContent.videoMessage;
     const documentMessage = messageContent.documentMessage;
     const isImageDocument = documentMessage && documentMessage.mimetype?.startsWith('image/');
-    const isMedia = !!imageMessage || isImageDocument;
+    const isVideoDocument = documentMessage && documentMessage.mimetype?.startsWith('video/');
+    const isMedia = !!imageMessage || !!videoMessage || isImageDocument || isVideoDocument;
     
     let caption = '';
     if (imageMessage) caption = imageMessage.caption || '';
+    else if (videoMessage) caption = videoMessage.caption || '';
     else if (documentMessage) caption = documentMessage.caption || '';
     else if (messageContent.conversation) caption = messageContent.conversation;
     else if (messageContent.extendedTextMessage) caption = messageContent.extendedTextMessage.text || '';
@@ -119,15 +122,15 @@ export class WhatsappService implements OnModuleInit {
           }
         );
         
-        mimeType = imageMessage?.mimetype || documentMessage?.mimetype || 'image/jpeg';
-        const ext = mimeType.split('/')[1] || 'jpeg';
+        mimeType = imageMessage?.mimetype || videoMessage?.mimetype || documentMessage?.mimetype || 'image/jpeg';
+        const ext = mimeType.split('/')[1]?.split(';')[0] || 'jpeg'; // Strip out any charset etc
         const fileName = `${messageId}.${ext}`.replace(/[^a-zA-Z0-9.\-]/g, '_');
         const relPath = `uploads/${fileName}`;
         const absolutePath = path.join(process.cwd(), relPath);
         
         fs.writeFileSync(absolutePath, buffer);
         localPath = relPath;
-        this.logger.log(`Downloaded image to ${localPath}`);
+        this.logger.log(`Downloaded media to ${localPath}`);
       } catch (err) {
         this.logger.error('Failed to download media from Baileys', err);
       }
@@ -137,7 +140,7 @@ export class WhatsappService implements OnModuleInit {
       id: messageId,
       from: msg.key.remoteJid,
       timestamp: msg.messageTimestamp?.toString() || Date.now().toString(),
-      type: isMedia ? 'image' : 'text',
+      type: isMedia ? 'image' : 'text', // BatchService uses 'image' to detect media, so we keep it for now
     };
 
     if (payload.type === 'image') {
