@@ -4,12 +4,37 @@ import axios from 'axios';
 import * as FormData from 'form-data';
 import * as fs from 'fs';
 import * as path from 'path';
+import { exec } from 'child_process';
+import * as util from 'util';
+
+const execPromise = util.promisify(exec);
 
 @Injectable()
 export class SocialService {
   private readonly logger = new Logger(SocialService.name);
 
   constructor(private configService: ConfigService) {}
+
+  private async compressVideo(inputPath: string): Promise<string> {
+    const stats = fs.statSync(inputPath);
+    const sizeMB = stats.size / (1024 * 1024);
+    
+    // Only compress if it's decently large to save processing time
+    if (sizeMB < 5) {
+      return inputPath;
+    }
+
+    const outputPath = inputPath.replace(/\.[^/.]+$/, `_compressed_${Date.now()}.mp4`);
+    this.logger.log(`Compressing video ${inputPath} (${sizeMB.toFixed(2)}MB) to ${outputPath}...`);
+    try {
+      // crf 28 is a good balance between compression and quality, preset fast for speed
+      await execPromise(`ffmpeg -i ${inputPath} -vcodec libx264 -crf 28 -preset fast ${outputPath}`);
+      return outputPath;
+    } catch (e) {
+      this.logger.error('Failed to compress video, returning original', e);
+      return inputPath;
+    }
+  }
 
   private async uploadToCatbox(absolutePath: string): Promise<string> {
     this.logger.log(`Uploading ${absolutePath} temporarily to Catbox.moe...`);
@@ -19,8 +44,36 @@ export class SocialService {
 
     const catboxRes = await axios.post('https://catbox.moe/user/api.php', formData, {
       headers: formData.getHeaders(),
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
     });
     return catboxRes.data;
+  }
+
+  private async pollInstagramContainer(containerId: string, accessToken: string): Promise<void> {
+    this.logger.log(`Polling Instagram container ${containerId} for completion...`);
+    let status = 'IN_PROGRESS';
+    let attempts = 0;
+    const maxAttempts = 40; // 2 minutes max (3s * 40)
+
+    while (status === 'IN_PROGRESS' && attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      try {
+        const statusRes = await axios.get(
+          `https://graph.facebook.com/v19.0/${containerId}`,
+          { params: { fields: 'status_code', access_token: accessToken } }
+        );
+        status = statusRes.data.status_code || 'ERROR';
+        this.logger.log(`Container ${containerId} status: ${status}`);
+      } catch (err: any) {
+        this.logger.warn(`Failed to poll container ${containerId}, retrying...`);
+      }
+      attempts++;
+    }
+
+    if (status !== 'FINISHED') {
+      throw new Error(`Container ${containerId} failed to process. Final status: ${status}`);
+    }
   }
 
   async publishInstagram(batch: any): Promise<{ id: string }> {
@@ -33,18 +86,22 @@ export class SocialService {
     }
 
     const caption = batch.generatedContent?.instagramCaption || batch.rawText;
-    
-    // We will collect objects: { url, isVideo }
     let mediaItems: { url: string, isVideo: boolean }[] = [];
 
     if (batch.mediaAssets && batch.mediaAssets.length > 0) {
       for (const asset of batch.mediaAssets) {
-        const absolutePath = path.join(process.cwd(), asset.localPath);
+        let absolutePath = path.join(process.cwd(), asset.localPath);
         if (fs.existsSync(absolutePath)) {
           const isVideo = asset.mimeType?.startsWith('video/') || false;
+          
+          if (isVideo) {
+             absolutePath = await this.compressVideo(absolutePath);
+          }
+
           let url = '';
           if (process.env.NODE_ENV === 'production') {
-            // url = `https://yourdomain.com/${asset.localPath}`;
+             // Production logic would go here
+             url = await this.uploadToCatbox(absolutePath);
           } else {
             url = await this.uploadToCatbox(absolutePath);
           }
@@ -82,6 +139,11 @@ export class SocialService {
           { params }
         );
         creationId = containerRes.data.id;
+
+        // If it's a video, we must poll before publishing
+        if (media.isVideo) {
+           await this.pollInstagramContainer(creationId, accessToken);
+        }
       } else {
         // Carousel post
         const childContainerIds: string[] = [];
@@ -103,7 +165,14 @@ export class SocialService {
             null,
             { params }
           );
-          childContainerIds.push(itemRes.data.id);
+          
+          const itemId = itemRes.data.id;
+          childContainerIds.push(itemId);
+          
+          // Must wait for video carousel items to process BEFORE creating the carousel container
+          if (media.isVideo) {
+            await this.pollInstagramContainer(itemId, accessToken);
+          }
         }
 
         const carouselRes = await axios.post(
@@ -119,6 +188,9 @@ export class SocialService {
           }
         );
         creationId = carouselRes.data.id;
+        
+        // Polling the carousel container itself just in case
+        await this.pollInstagramContainer(creationId, accessToken);
       }
 
       // Publish the container (single or carousel)
@@ -158,9 +230,14 @@ export class SocialService {
         const mediaFbids: string[] = [];
         
         for (const asset of batch.mediaAssets) {
-          const absolutePath = path.join(process.cwd(), asset.localPath);
+          let absolutePath = path.join(process.cwd(), asset.localPath);
           if (fs.existsSync(absolutePath)) {
             const isVideo = asset.mimeType?.startsWith('video/');
+            
+            if (isVideo) {
+               absolutePath = await this.compressVideo(absolutePath);
+            }
+
             const formData = new FormData();
             formData.append('source', fs.createReadStream(absolutePath));
             formData.append('published', 'false');
@@ -170,9 +247,15 @@ export class SocialService {
             const res = await axios.post(
               `https://graph.facebook.com/v19.0/${pageId}/${endpoint}`,
               formData,
-              { headers: formData.getHeaders() }
+              { 
+                headers: formData.getHeaders(),
+                maxContentLength: Infinity,
+                maxBodyLength: Infinity,
+              }
             );
             mediaFbids.push(res.data.id);
+            // Optional: for large Facebook videos, we might need to poll for status before attaching.
+            // But usually attaching works immediately for standard videos.
           }
         }
 
@@ -195,9 +278,14 @@ export class SocialService {
       } else if (batch.mediaAssets && batch.mediaAssets.length === 1) {
         // Single media
         const asset = batch.mediaAssets[0];
-        const absolutePath = path.join(process.cwd(), asset.localPath);
+        let absolutePath = path.join(process.cwd(), asset.localPath);
         if (fs.existsSync(absolutePath)) {
           const isVideo = asset.mimeType?.startsWith('video/');
+          
+          if (isVideo) {
+             absolutePath = await this.compressVideo(absolutePath);
+          }
+
           const formData = new FormData();
           formData.append(isVideo ? 'description' : 'message', caption);
           formData.append('source', fs.createReadStream(absolutePath));
@@ -207,7 +295,11 @@ export class SocialService {
           const res = await axios.post(
             `https://graph.facebook.com/v19.0/${pageId}/${endpoint}`,
             formData,
-            { headers: formData.getHeaders() }
+            { 
+              headers: formData.getHeaders(),
+              maxContentLength: Infinity,
+              maxBodyLength: Infinity,
+            }
           );
           this.logger.log(`Successfully published media to Facebook: ${res.data.id}`);
           return { id: res.data.id };
