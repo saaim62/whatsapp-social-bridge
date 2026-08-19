@@ -1,0 +1,55 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model ProductBatch {
+  id               String            @id @default(uuid())
+  whatsappMessageId String?          @unique
+  rawText          String?
+  extractedData    Json?
+  status           String            @default("RECEIVED") // RECEIVED, PROCESSING, READY, APPROVED, PUBLISHING, PUBLISHED, PARTIALLY_PUBLISHED, FAILED
+  mediaAssets      MediaAsset[]
+  generatedContent GeneratedContent?
+  publications     Publication[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+}
+
+model MediaAsset {
+  id             String       @id @default(uuid())
+  batchId        String
+  batch          ProductBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  whatsappMediaId String?     @unique
+  mimeType       String?
+  localPath      String?
+  originalUrl    String?
+  createdAt      DateTime     @default(now())
+}
+
+model GeneratedContent {
+  id               String       @id @default(uuid())
+  batchId          String       @unique
+  batch            ProductBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  instagramCaption String?
+  facebookCaption  String?
+  storyText        String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+}
+
+model Publication {
+  id             String       @id @default(uuid())
+  batchId        String
+  batch          ProductBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  platform       String       // INSTAGRAM, FACEBOOK, STORY
+  platformPostId String?
+  status         String       @default("PENDING") // PENDING, PUBLISHED, FAILED
+  error          String?
+  createdAt      DateTime     @default(now())
+  publishedAt    DateTime?
+}

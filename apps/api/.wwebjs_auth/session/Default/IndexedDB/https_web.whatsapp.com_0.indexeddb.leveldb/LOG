@@ -1,0 +1,16 @@
+2026/08/19-17:06:44.719 1935e15 Reusing MANIFEST /Users/ibtisamasif/.gemini/antigravity-ide/scratch/whatsapp-social-bridge/apps/api/.wwebjs_auth/session/Default/IndexedDB/https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
+2026/08/19-17:06:44.720 1935e15 Recovering log #140
+2026/08/19-17:06:44.721 1935e15 Reusing old log /Users/ibtisamasif/.gemini/antigravity-ide/scratch/whatsapp-social-bridge/apps/api/.wwebjs_auth/session/Default/IndexedDB/https_web.whatsapp.com_0.indexeddb.leveldb/000140.log 
+2026/08/19-17:06:45.200 1935e17 Compacting 1@1 + 4@2 files
+2026/08/19-17:06:45.231 1935e17 Generated table #143@1: 60325 keys, 2196925 bytes
+2026/08/19-17:06:45.257 1935e17 Generated table #144@1: 70144 keys, 2234949 bytes
+2026/08/19-17:06:45.268 1935e17 Generated table #145@1: 6147 keys, 2156636 bytes
+2026/08/19-17:06:45.286 1935e17 Generated table #146@1: 22512 keys, 2216444 bytes
+2026/08/19-17:06:45.288 1935e17 Generated table #147@1: 2592 keys, 137031 bytes
+2026/08/19-17:06:45.288 1935e17 Compacted 1@1 + 4@2 files => 8941985 bytes
+2026/08/19-17:06:45.288 1935e17 compacted to: files[ 0 0 5 0 0 0 0 ]
+2026/08/19-17:06:45.288 1935e17 Delete type=2 #138
+2026/08/19-17:06:45.289 1935e17 Delete type=2 #141
+2026/08/19-17:06:45.289 1935e17 Delete type=2 #137
+2026/08/19-17:06:45.289 1935e17 Delete type=2 #136
+2026/08/19-17:06:45.289 1935e17 Delete type=2 #135
