@@ -8,7 +8,7 @@ import { WebhookModule } from './webhook/webhook.module';
 import { BatchModule } from './batch/batch.module';
 import { ProcessorModule } from './processor/processor.module';
 import { SocialModule } from './social/social.module';
-import { TestModule } from './test/test.module';
+
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 
 @Module({
@@ -36,7 +36,7 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
     BatchModule,
     ProcessorModule,
     SocialModule,
-    TestModule,
+
     WhatsappModule,
   ],
 })
