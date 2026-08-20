@@ -8,6 +8,9 @@ import { BatchController } from './batch.controller';
     BullModule.registerQueue({
       name: 'batch-processing',
     }),
+    BullModule.registerQueue({
+      name: 'history-sync-queue',
+    }),
   ],
   controllers: [BatchController],
   providers: [BatchService],

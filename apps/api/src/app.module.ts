@@ -8,8 +8,9 @@ import { WebhookModule } from './webhook/webhook.module';
 import { BatchModule } from './batch/batch.module';
 import { ProcessorModule } from './processor/processor.module';
 import { SocialModule } from './social/social.module';
-
 import { WhatsappModule } from './whatsapp/whatsapp.module';
+import { AiModule } from './ai/ai.module';
+import { SettingsModule } from './settings/settings.module';
 
 @Module({
   imports: [
@@ -36,8 +37,9 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
     BatchModule,
     ProcessorModule,
     SocialModule,
-
     WhatsappModule,
+    AiModule,
+    SettingsModule,
   ],
 })
 export class AppModule {}

@@ -10,6 +10,8 @@ datasource db {
 model ProductBatch {
   id               String            @id @default(uuid())
   whatsappMessageId String?          @unique
+  senderId         String?
+  senderName       String?
   rawText          String?
   extractedData    Json?
   status           String            @default("RECEIVED") // RECEIVED, PROCESSING, READY, APPROVED, PUBLISHING, PUBLISHED, PARTIALLY_PUBLISHED, FAILED
@@ -52,4 +54,11 @@ model Publication {
   error          String?
   createdAt      DateTime     @default(now())
   publishedAt    DateTime?
+}
+
+model Settings {
+  id                    String   @id @default(uuid())
+  isSyncActive          Boolean  @default(true)
+  historySyncDepthHours Int      @default(24) // 6, 24, 72, 168, 336, 720
+  updatedAt             DateTime @updatedAt
 }

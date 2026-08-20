@@ -29,4 +29,9 @@ export class BatchController {
   async rejectBatch(@Param('id') id: string) {
     return this.batchService.rejectBatch(id);
   }
+
+  @Post('media/:mediaId/delete')
+  async deleteMedia(@Param('mediaId') mediaId: string) {
+    return this.batchService.deleteMedia(mediaId);
+  }
 }

@@ -42,12 +42,20 @@ export class BatchProcessor extends WorkerHost {
       throw new Error(`Batch ${batchId} not found`);
     }
 
+    if (!batch.mediaAssets || batch.mediaAssets.length === 0) {
+      this.logger.warn(`Batch ${batchId} has no media assets. Processing as a text-only batch.`);
+    }
+
     try {
       // 1. AI Extraction
-      let extractedData = {};
+      let extractedData: any = {};
       if (batch.rawText) {
         extractedData = await this.aiService.extractProductDetails(batch.rawText);
       }
+      
+      // Fallbacks if AI couldn't extract or no text was provided
+      if (!extractedData.product_name) extractedData.product_name = 'Unknown Product (No text provided)';
+      if (!extractedData.price) extractedData.price = 'Price not specified';
 
       // 2. Generate Content
       const generatedCaptions = await this.aiService.generateCaptions(extractedData);

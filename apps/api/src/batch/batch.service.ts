@@ -18,12 +18,18 @@ export class BatchService {
     private prisma: PrismaService,
     private configService: ConfigService,
     @InjectQueue('batch-processing') private batchQueue: Queue,
+    @InjectQueue('history-sync-queue') private historySyncQueue: Queue,
   ) {}
+
+  async queueHistoryMessage(message: any) {
+    await this.historySyncQueue.add('process-history-message', message);
+  }
 
   async handleMessage(message: any) {
     // 1. Extract info from message
     const messageId = message.id;
     const from = message.from; // Sender ID (conversation)
+    const senderName = message.senderName || '';
     const timestamp = parseInt(message.timestamp, 10);
     const type = message.type; // 'text', 'image', etc.
 
@@ -45,24 +51,72 @@ export class BatchService {
       }
     }
 
-    // 2. Find or create active batch for this sender
-    // We look for a batch that is still in "RECEIVED" state
+    this.logger.log(`BatchService extraction -> type: ${type}, mediaId: ${mediaId}, textLength: ${textContent?.length}`);
+
+    // 2. State Machine logic to slice batches
     let activeBatch = await this.prisma.productBatch.findFirst({
       where: {
         status: 'RECEIVED',
-        // In a real app, we'd filter by sender ID, assuming we add senderId to ProductBatch
+        senderId: from,
       },
+      include: { mediaAssets: { orderBy: { createdAt: 'asc' } } },
       orderBy: { createdAt: 'desc' },
     });
 
-    if (!activeBatch) {
+    const isMediaMsg = !!mediaId;
+    const isDescMsg = textContent.trim().length > 15;
+
+    let shouldCreateNew = !activeBatch;
+
+    if (activeBatch && (isMediaMsg || isDescMsg)) {
+      const batchHasMedia = activeBatch.mediaAssets.length > 0;
+      const batchHasDesc = !!activeBatch.rawText && activeBatch.rawText.trim().length > 15;
+      
+      let firstItemType = 'desc';
+      if (batchHasMedia && !batchHasDesc) firstItemType = 'media';
+      else if (batchHasMedia && batchHasDesc) {
+        const firstMediaTime = activeBatch.mediaAssets[0]?.createdAt.getTime() || 0;
+        const batchTime = activeBatch.createdAt.getTime();
+        // If first media was created within 100ms of batch creation, media came first.
+        if (firstMediaTime <= batchTime + 100) {
+          firstItemType = 'media';
+        }
+      }
+
+      if (isDescMsg && !isMediaMsg) {
+        if (batchHasDesc) shouldCreateNew = true;
+      } else if (isMediaMsg && !isDescMsg) {
+        if (batchHasDesc && (firstItemType === 'media' || firstItemType === 'both')) shouldCreateNew = true;
+      } else if (isMediaMsg && isDescMsg) {
+        if (batchHasDesc) shouldCreateNew = true;
+      }
+    }
+
+    if (shouldCreateNew) {
+      if (activeBatch) {
+        // Immediately close the old batch!
+        this.logger.log(`State machine slicing batch ${activeBatch.id}. Queueing processing immediately.`);
+        await this.prisma.productBatch.update({
+          where: { id: activeBatch.id },
+          data: { status: 'PROCESSING' },
+        });
+        await this.batchQueue.add('process-batch', { batchId: activeBatch.id });
+        if (this.activeTimeouts.has(activeBatch.id)) {
+          clearTimeout(this.activeTimeouts.get(activeBatch.id));
+          this.activeTimeouts.delete(activeBatch.id);
+        }
+      }
+
       try {
         activeBatch = await this.prisma.productBatch.create({
           data: {
             whatsappMessageId: messageId,
+            senderId: from,
+            senderName: senderName,
             rawText: textContent,
             status: 'RECEIVED',
           },
+          include: { mediaAssets: true }
         });
       } catch (err: any) {
         if (err.code === 'P2002') {
@@ -71,7 +125,7 @@ export class BatchService {
         }
         throw err;
       }
-    } else {
+    } else if (activeBatch) {
       // Append text if any
       if (textContent) {
         await this.prisma.productBatch.update({
@@ -82,7 +136,7 @@ export class BatchService {
     }
 
     // Add media if image
-    if (mediaId) {
+    if (mediaId && activeBatch) {
       await this.prisma.mediaAsset.create({
         data: {
           batchId: activeBatch.id,
@@ -93,7 +147,9 @@ export class BatchService {
       });
     }
 
-    // 3. Debounce processing
+    // 3. Debounce processing as a fallback
+    if (!activeBatch) return;
+    
     const batchWindowStr = this.configService.get('BATCH_WINDOW_SECONDS', '30');
     const batchWindowMs = parseInt(batchWindowStr, 10) * 1000;
 
@@ -102,13 +158,13 @@ export class BatchService {
     }
 
     const timeout = setTimeout(async () => {
-      this.logger.log(`Batch window closed for ${activeBatch.id}. Queueing processing.`);
+      this.logger.log(`Fallback window closed for ${activeBatch!.id}. Queueing processing.`);
       await this.prisma.productBatch.update({
-        where: { id: activeBatch.id },
+        where: { id: activeBatch!.id },
         data: { status: 'PROCESSING' },
       });
-      await this.batchQueue.add('process-batch', { batchId: activeBatch.id });
-      this.activeTimeouts.delete(activeBatch.id);
+      await this.batchQueue.add('process-batch', { batchId: activeBatch!.id });
+      this.activeTimeouts.delete(activeBatch!.id);
     }, batchWindowMs);
 
     this.activeTimeouts.set(activeBatch.id, timeout);
@@ -176,6 +232,19 @@ export class BatchService {
       where: { id },
       data: { status: 'FAILED' },
     });
+    return { success: true };
+  }
+
+  async deleteMedia(mediaId: string) {
+    const media = await this.prisma.mediaAsset.findUnique({ where: { id: mediaId } });
+    if (!media) return { success: false, message: 'Media not found' };
+    
+    // Optional: Delete physical file if needed
+    // if (media.localPath && fs.existsSync(path.join(process.cwd(), media.localPath))) {
+    //   fs.unlinkSync(path.join(process.cwd(), media.localPath));
+    // }
+
+    await this.prisma.mediaAsset.delete({ where: { id: mediaId } });
     return { success: true };
   }
 
