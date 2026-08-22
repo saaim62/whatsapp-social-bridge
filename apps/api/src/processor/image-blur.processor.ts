@@ -22,7 +22,15 @@ export class ImageBlurProcessor extends WorkerHost {
     const { mediaId, localPath } = job.data;
     this.logger.log(`Processing image-blur for media ${mediaId}`);
 
-    await this.detectAndBlurLogo(mediaId, localPath);
+    try {
+      await this.detectAndBlurLogo(mediaId, localPath);
+    } finally {
+      // Ensure we clear the processing state regardless of success or failure
+      await this.prisma.mediaAsset.update({
+        where: { id: mediaId },
+        data: { isProcessing: false },
+      });
+    }
   }
 
   private async detectAndBlurLogo(mediaId: string, localPath: string) {
@@ -40,14 +48,19 @@ export class ImageBlurProcessor extends WorkerHost {
     if (detectedBrands.length > 0) {
       try {
         let imageBuffer = fs.readFileSync(absolutePath);
+        
+        // Save backup for reverting later
+        const ext = path.extname(absolutePath);
+        const originalPath = absolutePath.replace(ext, `_original${ext}`);
+        if (!fs.existsSync(originalPath)) {
+           fs.writeFileSync(originalPath, imageBuffer);
+        }
 
         for (const box of detectedBrands) {
           if (box.confidence !== undefined && box.confidence < minConfidence) {
             minConfidence = box.confidence;
           }
 
-          // We now blur ALL detected logos because the user requested it.
-          // We still flag low confidence ones for review.
           if (box.confidence !== undefined && box.confidence < 0.85) {
             this.logger.warn(`Low confidence detection (${box.confidence}) for brand ${box.brand}. Flagging for review, but still blurring!`);
             needsManualReview = true;
@@ -56,8 +69,7 @@ export class ImageBlurProcessor extends WorkerHost {
           const metadata = await sharp(imageBuffer).metadata();
           
           if (box.polygon) {
-            // Polygon mask approach for precise blurring (handles rotated text beautifully)
-            const padding = 25; // padding around the bounding box
+            const padding = 25;
             const left = Math.max(0, box.left - padding);
             const top = Math.max(0, box.top - padding);
             const width = Math.min(metadata.width! - left, box.width + padding * 2);
@@ -67,7 +79,7 @@ export class ImageBlurProcessor extends WorkerHost {
             const maskSvg = `<svg width="${width}" height="${height}"><polygon points="${localizedSvgPoints}" fill="white" /></svg>`;
 
             const maskBuffer = await sharp(Buffer.from(maskSvg))
-              .blur(2) // slight feathering to blend the edges of the blur
+              .blur(2)
               .toBuffer();
 
             const blurredCrop = await sharp(imageBuffer)
@@ -75,7 +87,6 @@ export class ImageBlurProcessor extends WorkerHost {
               .blur(25)
               .toBuffer();
 
-            // Mask the blurred image using the polygon SVG
             const maskedBlurred = await sharp(blurredCrop)
               .composite([{ input: maskBuffer, blend: 'dest-in' }])
               .png()
@@ -85,7 +96,6 @@ export class ImageBlurProcessor extends WorkerHost {
               .composite([{ input: maskedBlurred, left, top }])
               .toBuffer();
           } else {
-             // Fallback for when polygon isn't available
              const padding = 25;
              const left = Math.max(0, box.left - padding);
              const top = Math.max(0, box.top - padding);
@@ -111,7 +121,6 @@ export class ImageBlurProcessor extends WorkerHost {
       }
     }
 
-    // Update the database with the findings
     await this.prisma.mediaAsset.update({
       where: { id: mediaId },
       data: {

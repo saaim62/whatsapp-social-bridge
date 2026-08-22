@@ -174,10 +174,11 @@ export class BatchService {
       });
 
       if (localPath) {
-        await this.imageBlurQueue.add('blur-image', {
-          mediaId: media.id,
-          localPath: localPath,
-        });
+        await this.imageBlurQueue.add(
+          'blur-image',
+          { mediaId: media.id, localPath: localPath },
+          { jobId: `blur-${media.id}` }
+        );
       }
     }
 
@@ -192,15 +193,20 @@ export class BatchService {
     }
 
     const timeout = setTimeout(async () => {
-      this.logger.log(
-        `Fallback window closed for ${activeBatch.id}. Queueing processing.`,
-      );
-      await this.prisma.productBatch.update({
-        where: { id: activeBatch.id },
-        data: { status: 'PROCESSING' },
-      });
-      await this.batchQueue.add('process-batch', { batchId: activeBatch.id });
-      this.activeTimeouts.delete(activeBatch.id);
+      try {
+        this.logger.log(
+          `Fallback window closed for ${activeBatch.id}. Queueing processing.`,
+        );
+        await this.prisma.productBatch.update({
+          where: { id: activeBatch.id },
+          data: { status: 'PROCESSING' },
+        });
+        await this.batchQueue.add('process-batch', { batchId: activeBatch.id });
+      } catch (err) {
+        this.logger.warn(`Could not update batch ${activeBatch.id} - it may have been deleted.`);
+      } finally {
+        this.activeTimeouts.delete(activeBatch.id);
+      }
     }, batchWindowMs);
 
     this.activeTimeouts.set(activeBatch.id, timeout);
@@ -325,7 +331,7 @@ export class BatchService {
 
   async maskMediaLogo(
     mediaId: string,
-    box: { left: number; top: number; width: number; height: number },
+    boxes: { left: number; top: number; width: number; height: number }[],
   ) {
     const media = await this.prisma.mediaAsset.findUnique({
       where: { id: mediaId },
@@ -340,40 +346,75 @@ export class BatchService {
     }
 
     try {
-      const imageBuffer = fs.readFileSync(absolutePath);
-      const metadata = await sharp(imageBuffer).metadata();
+      let imageBuffer = fs.readFileSync(absolutePath);
+      
+      // Save backup for reverting later if not exists
+      const ext = path.extname(absolutePath);
+      const originalPath = absolutePath.replace(ext, `_original${ext}`);
+      if (!fs.existsSync(originalPath)) {
+         fs.writeFileSync(originalPath, imageBuffer);
+      }
+      
+      for (const box of boxes) {
+        const metadata = await sharp(imageBuffer).metadata();
 
-      const left = Math.max(
-        0,
-        Math.min(metadata.width! - 1, Math.round(box.left)),
-      );
-      const top = Math.max(
-        0,
-        Math.min(metadata.height! - 1, Math.round(box.top)),
-      );
-      const width = Math.min(
-        metadata.width! - left,
-        Math.max(1, Math.round(box.width)),
-      );
-      const height = Math.min(
-        metadata.height! - top,
-        Math.max(1, Math.round(box.height)),
-      );
+        const left = Math.max(
+          0,
+          Math.min(metadata.width! - 1, Math.round(box.left)),
+        );
+        const top = Math.max(
+          0,
+          Math.min(metadata.height! - 1, Math.round(box.top)),
+        );
+        const width = Math.min(
+          metadata.width! - left,
+          Math.max(1, Math.round(box.width)),
+        );
+        const height = Math.min(
+          metadata.height! - top,
+          Math.max(1, Math.round(box.height)),
+        );
 
-      const croppedArea = await sharp(imageBuffer)
-        .extract({ left, top, width, height })
-        .blur(15)
-        .toBuffer();
+        const croppedArea = await sharp(imageBuffer)
+          .extract({ left, top, width, height })
+          .blur(15)
+          .toBuffer();
 
-      const newBuffer = await sharp(imageBuffer)
-        .composite([{ input: croppedArea, left, top }])
-        .toBuffer();
+        imageBuffer = await sharp(imageBuffer)
+          .composite([{ input: croppedArea, left, top }])
+          .toBuffer();
+      }
 
-      fs.writeFileSync(absolutePath, newBuffer);
-      return { success: true, message: 'Logo masked successfully' };
+      fs.writeFileSync(absolutePath, imageBuffer);
+      return { success: true, message: 'Logos masked successfully' };
     } catch (e: any) {
       this.logger.error(`Failed to mask logo for media ${mediaId}`, e);
       return { success: false, message: e.message || 'Failed to mask logo' };
+    }
+  }
+
+  async revertMediaLogo(mediaId: string) {
+    const media = await this.prisma.mediaAsset.findUnique({
+      where: { id: mediaId },
+    });
+    if (!media || !media.localPath) {
+      return { success: false, message: 'Media or local file not found' };
+    }
+
+    const absolutePath = path.join(process.cwd(), media.localPath);
+    const ext = path.extname(absolutePath);
+    const originalPath = absolutePath.replace(ext, `_original${ext}`);
+    
+    if (fs.existsSync(originalPath)) {
+      try {
+        fs.copyFileSync(originalPath, absolutePath);
+        return { success: true, message: 'Image reverted to original successfully' };
+      } catch (e: any) {
+        this.logger.error(`Failed to revert logo for media ${mediaId}`, e);
+        return { success: false, message: 'Failed to copy backup file' };
+      }
+    } else {
+      return { success: false, message: 'No backup found to revert' };
     }
   }
 
@@ -428,6 +469,38 @@ export class BatchService {
         err.response?.data || err.message,
       );
       return null;
+    }
+  }
+
+  async stopMediaBlur(mediaId: string) {
+    try {
+      // Try to remove by jobId if it's waiting
+      const job = await this.imageBlurQueue.getJob(`blur-${mediaId}`);
+      if (job) {
+        const state = await job.getState();
+        if (state === 'waiting' || state === 'delayed') {
+          await job.remove();
+          this.logger.log(`Removed waiting blur job for media ${mediaId}`);
+        }
+      }
+      
+      // Fallback: iterate over waiting just in case it was queued without jobId
+      const waitingJobs = await this.imageBlurQueue.getWaiting();
+      for (const wJob of waitingJobs) {
+        if (wJob.data && wJob.data.mediaId === mediaId) {
+          await wJob.remove();
+        }
+      }
+
+      await this.prisma.mediaAsset.update({
+        where: { id: mediaId },
+        data: { isProcessing: false },
+      });
+
+      return { success: true };
+    } catch (error) {
+      this.logger.error(`Error stopping blur for media ${mediaId}:`, error);
+      return { success: false, message: 'Failed to stop blur process' };
     }
   }
 }

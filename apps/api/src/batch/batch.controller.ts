@@ -51,11 +51,28 @@ export class BatchController {
   @Post('media/:mediaId/mask')
   async maskMedia(
     @Param('mediaId') mediaId: string,
-    @Body() body: { left: number; top: number; width: number; height: number },
+    @Body() body: { boxes: { left: number; top: number; width: number; height: number }[] },
   ) {
-    const result = await this.batchService.maskMediaLogo(mediaId, body);
+    const result = await this.batchService.maskMediaLogo(mediaId, body.boxes);
     if (!result.success) {
       throw new HttpException(result.message, HttpStatus.BAD_REQUEST);
+    }
+    return result;
+  }
+
+  @Post('media/:mediaId/revert')
+  async revertMedia(@Param('mediaId') mediaId: string) {
+    const result = await this.batchService.revertMediaLogo(mediaId);
+    if (!result.success) {
+      throw new HttpException(result.message, HttpStatus.BAD_REQUEST);
+    }
+    return result;
+  }
+  @Post('media/:mediaId/stop-blur')
+  async stopMediaBlur(@Param('mediaId') mediaId: string) {
+    const result = await this.batchService.stopMediaBlur(mediaId);
+    if (!result.success) {
+      throw new HttpException(result.message || 'Failed to stop blur', HttpStatus.BAD_REQUEST);
     }
     return result;
   }

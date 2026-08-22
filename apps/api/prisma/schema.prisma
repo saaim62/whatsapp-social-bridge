@@ -32,6 +32,7 @@ model MediaAsset {
   originalUrl    String?
   ocrConfidence  Float?
   needsManualReview Boolean @default(false)
+  isProcessing   Boolean      @default(true)
   createdAt      DateTime     @default(now())
 }
 
