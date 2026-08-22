@@ -4,14 +4,16 @@ import { BatchProcessor } from './batch.processor';
 import { AiModule } from '../ai/ai.module';
 import { SocialModule } from '../social/social.module';
 
+import { ImageBlurProcessor } from './image-blur.processor';
+
 @Module({
   imports: [
     BullModule.registerQueue({
       name: 'batch-processing',
     }),
     AiModule,
-    SocialModule
+    SocialModule,
   ],
-  providers: [BatchProcessor],
+  providers: [BatchProcessor, ImageBlurProcessor],
 })
 export class ProcessorModule {}

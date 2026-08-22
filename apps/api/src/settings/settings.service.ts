@@ -18,7 +18,10 @@ export class SettingsService {
     return settings;
   }
 
-  async updateSettings(data: { isSyncActive?: boolean; historySyncDepthHours?: number }) {
+  async updateSettings(data: {
+    isSyncActive?: boolean;
+    historySyncDepthHours?: number;
+  }) {
     const settings = await this.getSettings();
     return this.prisma.settings.update({
       where: { id: settings.id },

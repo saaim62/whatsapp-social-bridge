@@ -9,7 +9,7 @@ export class WebhookService {
 
   async processIncomingMessage(message: any) {
     this.logger.log(`Received message: ${message.id}`);
-    
+
     // Add to batch processing queue or handle directly
     // For MVP, we will handle it directly by calling BatchService
     await this.batchService.handleMessage(message);

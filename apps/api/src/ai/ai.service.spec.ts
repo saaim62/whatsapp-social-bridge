@@ -26,7 +26,9 @@ describe('AiService', () => {
   });
 
   it('should extract mock product details when no real key is provided', async () => {
-    const result = await service.extractProductDetails('Nike Air Max 270\nPrice: Rs 24,999');
+    const result = await service.extractProductDetails(
+      'Nike Air Max 270\nPrice: Rs 24,999',
+    );
     expect(result.productName).toBe('Mock Product');
     expect(result.price).toBe('Rs. 1000');
   });

@@ -32,7 +32,7 @@ export class BatchProcessor extends WorkerHost {
 
   private async handleProcessBatch(batchId: string) {
     this.logger.log(`Processing batch ${batchId}...`);
-    
+
     const batch = await this.prisma.productBatch.findUnique({
       where: { id: batchId },
       include: { mediaAssets: true },
@@ -43,29 +43,35 @@ export class BatchProcessor extends WorkerHost {
     }
 
     if (!batch.mediaAssets || batch.mediaAssets.length === 0) {
-      this.logger.warn(`Batch ${batchId} has no media assets. Processing as a text-only batch.`);
+      this.logger.warn(
+        `Batch ${batchId} has no media assets. Processing as a text-only batch.`,
+      );
     }
 
     try {
       // 1. AI Extraction
       let extractedData: any = {};
       if (batch.rawText) {
-        extractedData = await this.aiService.extractProductDetails(batch.rawText);
+        extractedData = await this.aiService.extractProductDetails(
+          batch.rawText,
+        );
       }
-      
+
       // Fallbacks if AI couldn't extract or no text was provided
-      if (!extractedData.product_name) extractedData.product_name = 'Unknown Product (No text provided)';
+      if (!extractedData.product_name)
+        extractedData.product_name = 'Unknown Product (No text provided)';
       if (!extractedData.price) extractedData.price = 'Price not specified';
 
       // 2. Generate Content
-      const generatedCaptions = await this.aiService.generateCaptions(extractedData);
+      const generatedCaptions =
+        await this.aiService.generateCaptions(extractedData);
 
       // 3. Update DB
       await this.prisma.$transaction(async (tx) => {
         await tx.productBatch.update({
           where: { id: batchId },
           data: {
-            extractedData: extractedData as any,
+            extractedData: extractedData,
             status: 'READY',
           },
         });
@@ -83,7 +89,8 @@ export class BatchProcessor extends WorkerHost {
       this.logger.log(`Batch ${batchId} is READY for approval.`);
 
       // Auto publish if configured
-      const autoPublish = this.configService.get('AUTO_PUBLISH', 'false') === 'true';
+      const autoPublish =
+        this.configService.get('AUTO_PUBLISH', 'false') === 'true';
       if (autoPublish) {
         this.logger.log(`AUTO_PUBLISH is true. Approving batch ${batchId}...`);
         await this.prisma.productBatch.update({
@@ -104,7 +111,7 @@ export class BatchProcessor extends WorkerHost {
 
   private async handlePublishBatch(batchId: string) {
     this.logger.log(`Publishing batch ${batchId}...`);
-    
+
     await this.prisma.productBatch.update({
       where: { id: batchId },
       data: { status: 'PUBLISHING' },
@@ -126,13 +133,23 @@ export class BatchProcessor extends WorkerHost {
     try {
       const igResult = await this.socialService.publishInstagram(batch);
       await this.prisma.publication.create({
-        data: { batchId, platform: 'INSTAGRAM', platformPostId: igResult.id, status: 'PUBLISHED' }
+        data: {
+          batchId,
+          platform: 'INSTAGRAM',
+          platformPostId: igResult.id,
+          status: 'PUBLISHED',
+        },
       });
       anySuccess = true;
     } catch (e) {
       allSuccess = false;
       await this.prisma.publication.create({
-        data: { batchId, platform: 'INSTAGRAM', status: 'FAILED', error: e.message }
+        data: {
+          batchId,
+          platform: 'INSTAGRAM',
+          status: 'FAILED',
+          error: e.message,
+        },
       });
     }
 
@@ -140,17 +157,31 @@ export class BatchProcessor extends WorkerHost {
     try {
       const fbResult = await this.socialService.publishFacebook(batch);
       await this.prisma.publication.create({
-        data: { batchId, platform: 'FACEBOOK', platformPostId: fbResult.id, status: 'PUBLISHED' }
+        data: {
+          batchId,
+          platform: 'FACEBOOK',
+          platformPostId: fbResult.id,
+          status: 'PUBLISHED',
+        },
       });
       anySuccess = true;
     } catch (e) {
       allSuccess = false;
       await this.prisma.publication.create({
-        data: { batchId, platform: 'FACEBOOK', status: 'FAILED', error: e.message }
+        data: {
+          batchId,
+          platform: 'FACEBOOK',
+          status: 'FAILED',
+          error: e.message,
+        },
       });
     }
 
-    const finalStatus = allSuccess ? 'PUBLISHED' : (anySuccess ? 'PARTIALLY_PUBLISHED' : 'FAILED');
+    const finalStatus = allSuccess
+      ? 'PUBLISHED'
+      : anySuccess
+        ? 'PARTIALLY_PUBLISHED'
+        : 'FAILED';
 
     await this.prisma.productBatch.update({
       where: { id: batchId },

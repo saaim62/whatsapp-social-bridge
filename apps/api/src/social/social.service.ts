@@ -18,17 +18,24 @@ export class SocialService {
   private async compressVideo(inputPath: string): Promise<string> {
     const stats = fs.statSync(inputPath);
     const sizeMB = stats.size / (1024 * 1024);
-    
+
     // Only compress if it's decently large to save processing time
     if (sizeMB < 5) {
       return inputPath;
     }
 
-    const outputPath = inputPath.replace(/\.[^/.]+$/, `_compressed_${Date.now()}.mp4`);
-    this.logger.log(`Compressing video ${inputPath} (${sizeMB.toFixed(2)}MB) to ${outputPath}...`);
+    const outputPath = inputPath.replace(
+      /\.[^/.]+$/,
+      `_compressed_${Date.now()}.mp4`,
+    );
+    this.logger.log(
+      `Compressing video ${inputPath} (${sizeMB.toFixed(2)}MB) to ${outputPath}...`,
+    );
     try {
       // crf 28 is a good balance between compression and quality, preset fast for speed
-      await execPromise(`ffmpeg -i ${inputPath} -vcodec libx264 -crf 28 -preset fast ${outputPath}`);
+      await execPromise(
+        `ffmpeg -i ${inputPath} -vcodec libx264 -crf 28 -preset fast ${outputPath}`,
+      );
       return outputPath;
     } catch (e) {
       this.logger.error('Failed to compress video, returning original', e);
@@ -42,37 +49,50 @@ export class SocialService {
     formData.append('reqtype', 'fileupload');
     formData.append('fileToUpload', fs.createReadStream(absolutePath));
 
-    const catboxRes = await axios.post('https://catbox.moe/user/api.php', formData, {
-      headers: formData.getHeaders(),
-      maxContentLength: Infinity,
-      maxBodyLength: Infinity,
-    });
+    const catboxRes = await axios.post(
+      'https://catbox.moe/user/api.php',
+      formData,
+      {
+        headers: formData.getHeaders(),
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+      },
+    );
     return catboxRes.data;
   }
 
-  private async pollInstagramContainer(containerId: string, accessToken: string): Promise<void> {
-    this.logger.log(`Polling Instagram container ${containerId} for completion...`);
+  private async pollInstagramContainer(
+    containerId: string,
+    accessToken: string,
+  ): Promise<void> {
+    this.logger.log(
+      `Polling Instagram container ${containerId} for completion...`,
+    );
     let status = 'IN_PROGRESS';
     let attempts = 0;
     const maxAttempts = 200; // 10 minutes max (3s * 200)
 
     while (status === 'IN_PROGRESS' && attempts < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      await new Promise((resolve) => setTimeout(resolve, 3000));
       try {
         const statusRes = await axios.get(
           `https://graph.facebook.com/v19.0/${containerId}`,
-          { params: { fields: 'status_code', access_token: accessToken } }
+          { params: { fields: 'status_code', access_token: accessToken } },
         );
         status = statusRes.data.status_code || 'ERROR';
         this.logger.log(`Container ${containerId} status: ${status}`);
       } catch (err: any) {
-        this.logger.warn(`Failed to poll container ${containerId}, retrying...`);
+        this.logger.warn(
+          `Failed to poll container ${containerId}, retrying...`,
+        );
       }
       attempts++;
     }
 
     if (status !== 'FINISHED') {
-      throw new Error(`Container ${containerId} failed to process. Final status: ${status}`);
+      throw new Error(
+        `Container ${containerId} failed to process. Final status: ${status}`,
+      );
     }
   }
 
@@ -80,13 +100,18 @@ export class SocialService {
     const ext = path.extname(inputPath);
     const outputPath = inputPath.replace(ext, `_padded_${Date.now()}${ext}`);
     this.logger.log(`Padding ${isVideo ? 'video' : 'image'} to 1:1 square...`);
-    
+
     try {
-      const vf = 'scale=1080:1080:force_original_aspect_ratio=decrease,pad=1080:1080:(ow-iw)/2:(oh-ih)/2:color=black';
+      const vf =
+        'scale=1080:1080:force_original_aspect_ratio=decrease,pad=1080:1080:(ow-iw)/2:(oh-ih)/2:color=black';
       if (isVideo) {
-        await execPromise(`ffmpeg -i "${inputPath}" -vf "${vf}" -vcodec libx264 -crf 28 -preset fast "${outputPath}"`);
+        await execPromise(
+          `ffmpeg -i "${inputPath}" -vf "${vf}" -vcodec libx264 -crf 28 -preset fast "${outputPath}"`,
+        );
       } else {
-        await execPromise(`ffmpeg -i "${inputPath}" -vf "${vf}" "${outputPath}"`);
+        await execPromise(
+          `ffmpeg -i "${inputPath}" -vf "${vf}" "${outputPath}"`,
+        );
       }
       return outputPath;
     } catch (e) {
@@ -110,8 +135,8 @@ export class SocialService {
     try {
       const allAssets = batch.mediaAssets || [];
       if (allAssets.length === 0) {
-         this.logger.warn('No images/videos found for Instagram.');
-         return { id: 'success' };
+        this.logger.warn('No images/videos found for Instagram.');
+        return { id: 'success' };
       }
 
       // Max 10 items for a carousel
@@ -123,10 +148,10 @@ export class SocialService {
         let absolutePath = path.join(process.cwd(), asset.localPath);
         if (fs.existsSync(absolutePath)) {
           const isVideo = asset.mimeType?.startsWith('video/') || false;
-          
+
           // Pad all media (images & videos) to perfect 1:1 square to satisfy Instagram API
           absolutePath = await this.padMedia(absolutePath, isVideo);
-          
+
           const catboxUrl = await this.uploadToCatbox(absolutePath);
 
           const params: any = {
@@ -144,9 +169,9 @@ export class SocialService {
           const itemRes = await axios.post(
             `https://graph.facebook.com/v19.0/${igAccountId}/media`,
             null,
-            { params }
+            { params },
           );
-          
+
           const itemId = itemRes.data.id;
           childContainerIds.push(itemId);
           isVideoMap[itemId] = isVideo;
@@ -155,30 +180,42 @@ export class SocialService {
 
       // Wait for all VIDEO containers to finish processing BEFORE creating the carousel container
       for (const id of childContainerIds) {
-         if (isVideoMap[id]) {
-             await this.pollInstagramContainer(id, accessToken);
-         }
+        if (isVideoMap[id]) {
+          await this.pollInstagramContainer(id, accessToken);
+        }
       }
 
       const carouselRes = await axios.post(
         `https://graph.facebook.com/v19.0/${igAccountId}/media`,
         null,
-        { params: { caption, media_type: 'CAROUSEL', children: childContainerIds.join(','), access_token: accessToken } }
+        {
+          params: {
+            caption,
+            media_type: 'CAROUSEL',
+            children: childContainerIds.join(','),
+            access_token: accessToken,
+          },
+        },
       );
       const creationId = carouselRes.data.id;
       finalCreationId = creationId; // Save as the primary ID
-      
+
       await this.pollInstagramContainer(creationId, accessToken);
       const publishRes = await axios.post(
         `https://graph.facebook.com/v19.0/${igAccountId}/media_publish`,
         null,
-        { params: { creation_id: creationId, access_token: accessToken } }
+        { params: { creation_id: creationId, access_token: accessToken } },
       );
-      this.logger.log(`Successfully published Unified Instagram Carousel: ${publishRes.data.id}`);
+      this.logger.log(
+        `Successfully published Unified Instagram Carousel: ${publishRes.data.id}`,
+      );
 
       return { id: finalCreationId || 'success' };
     } catch (error: any) {
-      this.logger.error('Error publishing to Instagram', error.response?.data || error.message);
+      this.logger.error(
+        'Error publishing to Instagram',
+        error.response?.data || error.message,
+      );
       throw error;
     }
   }
@@ -193,11 +230,17 @@ export class SocialService {
     }
 
     const caption = batch.generatedContent?.facebookCaption || batch.rawText;
-    
+
     try {
-      const photos = batch.mediaAssets?.filter((a: any) => !a.mimeType?.startsWith('video/')) || [];
-      const videos = batch.mediaAssets?.filter((a: any) => a.mimeType?.startsWith('video/')) || [];
-      
+      const photos =
+        batch.mediaAssets?.filter(
+          (a: any) => !a.mimeType?.startsWith('video/'),
+        ) || [];
+      const videos =
+        batch.mediaAssets?.filter((a: any) =>
+          a.mimeType?.startsWith('video/'),
+        ) || [];
+
       let finalFeedResId = '';
 
       // 1. Publish all photos as a single Album Feed Post
@@ -214,20 +257,32 @@ export class SocialService {
             const res = await axios.post(
               `https://graph.facebook.com/v19.0/${pageId}/photos`,
               formData,
-              { headers: formData.getHeaders(), maxContentLength: Infinity, maxBodyLength: Infinity }
+              {
+                headers: formData.getHeaders(),
+                maxContentLength: Infinity,
+                maxBodyLength: Infinity,
+              },
             );
             mediaFbids.push(res.data.id);
           }
         }
 
-        const attachedMedia = mediaFbids.map(id => ({ media_fbid: id }));
+        const attachedMedia = mediaFbids.map((id) => ({ media_fbid: id }));
         const feedRes = await axios.post(
           `https://graph.facebook.com/v19.0/${pageId}/feed`,
           null,
-          { params: { message: caption, attached_media: JSON.stringify(attachedMedia), access_token: accessToken } }
+          {
+            params: {
+              message: caption,
+              attached_media: JSON.stringify(attachedMedia),
+              access_token: accessToken,
+            },
+          },
         );
         finalFeedResId = feedRes.data.id;
-        this.logger.log(`Successfully published photo album to Facebook: ${finalFeedResId}`);
+        this.logger.log(
+          `Successfully published photo album to Facebook: ${finalFeedResId}`,
+        );
       } else if (photos.length === 1) {
         const absolutePath = path.join(process.cwd(), photos[0].localPath);
         if (fs.existsSync(absolutePath)) {
@@ -239,10 +294,16 @@ export class SocialService {
           const res = await axios.post(
             `https://graph.facebook.com/v19.0/${pageId}/photos`,
             formData,
-            { headers: formData.getHeaders(), maxContentLength: Infinity, maxBodyLength: Infinity }
+            {
+              headers: formData.getHeaders(),
+              maxContentLength: Infinity,
+              maxBodyLength: Infinity,
+            },
           );
           finalFeedResId = res.data.id;
-          this.logger.log(`Successfully published single photo to Facebook: ${finalFeedResId}`);
+          this.logger.log(
+            `Successfully published single photo to Facebook: ${finalFeedResId}`,
+          );
         }
       }
 
@@ -251,7 +312,7 @@ export class SocialService {
         let absolutePath = path.join(process.cwd(), asset.localPath);
         if (fs.existsSync(absolutePath)) {
           absolutePath = await this.compressVideo(absolutePath);
-          
+
           const formData = new FormData();
           formData.append('description', caption);
           formData.append('source', fs.createReadStream(absolutePath));
@@ -261,10 +322,16 @@ export class SocialService {
           const res = await axios.post(
             `https://graph.facebook.com/v19.0/${pageId}/videos`,
             formData,
-            { headers: formData.getHeaders(), maxContentLength: Infinity, maxBodyLength: Infinity }
+            {
+              headers: formData.getHeaders(),
+              maxContentLength: Infinity,
+              maxBodyLength: Infinity,
+            },
           );
           finalFeedResId = res.data.id; // overwrite so we return at least one ID
-          this.logger.log(`Successfully published individual video to Facebook: ${res.data.id}`);
+          this.logger.log(
+            `Successfully published individual video to Facebook: ${res.data.id}`,
+          );
         }
       }
 
@@ -273,15 +340,20 @@ export class SocialService {
         const res = await axios.post(
           `https://graph.facebook.com/v19.0/${pageId}/feed`,
           null,
-          { params: { message: caption, access_token: accessToken } }
+          { params: { message: caption, access_token: accessToken } },
         );
         finalFeedResId = res.data.id;
-        this.logger.log(`Successfully published text to Facebook: ${finalFeedResId}`);
+        this.logger.log(
+          `Successfully published text to Facebook: ${finalFeedResId}`,
+        );
       }
 
       return { id: finalFeedResId };
     } catch (error: any) {
-      this.logger.error('Error publishing to Facebook', error.response?.data || error.message);
+      this.logger.error(
+        'Error publishing to Facebook',
+        error.response?.data || error.message,
+      );
       throw error;
     }
   }

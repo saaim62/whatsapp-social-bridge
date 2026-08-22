@@ -30,6 +30,8 @@ model MediaAsset {
   mimeType       String?
   localPath      String?
   originalUrl    String?
+  ocrConfidence  Float?
+  needsManualReview Boolean @default(false)
   createdAt      DateTime     @default(now())
 }
 

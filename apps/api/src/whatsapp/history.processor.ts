@@ -28,22 +28,29 @@ export class HistoryProcessor extends WorkerHost {
     const bundle = job.data;
     if (!bundle || !Array.isArray(bundle) || bundle.length === 0) return;
 
-    this.logger.log(`Processing historical bundle of ${bundle.length} messages from ${bundle[0]?.key?.remoteJid}`);
+    this.logger.log(
+      `Processing historical bundle of ${bundle.length} messages from ${bundle[0]?.key?.remoteJid}`,
+    );
 
     // Process all messages in this bundle (they are from the same sender and same time window)
     for (const msg of bundle) {
       try {
         await this.whatsappService.handleIncomingMessage(msg);
       } catch (err) {
-        this.logger.error(`Failed to process historical message ${msg.key?.id}`, err);
+        this.logger.error(
+          `Failed to process historical message ${msg.key?.id}`,
+          err,
+        );
       }
     }
 
-    this.logger.log(`Completed historical bundle. Delaying next job to prevent rate limits...`);
-    
+    this.logger.log(
+      `Completed historical bundle. Delaying next job to prevent rate limits...`,
+    );
+
     // Crucial: Wait a significant amount of time so the debounce window in batch.service.ts (30s) CLOSES
     // and sends this bundle to AI, before we start the next bundle.
     // Also gives the AI service time to process it silently.
-    await new Promise(resolve => setTimeout(resolve, 40000)); // 40 seconds
+    await new Promise((resolve) => setTimeout(resolve, 40000)); // 40 seconds
   }
 }

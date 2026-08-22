@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Body, Query, Res, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Query,
+  Res,
+  HttpStatus,
+} from '@nestjs/common';
 import { Response } from 'express';
 import { WebhookService } from './webhook.service';
 import { ConfigService } from '@nestjs/config';
@@ -39,8 +47,14 @@ export class WebhookController {
       if (body.object === 'whatsapp_business_account') {
         for (const entry of body.entry) {
           for (const change of entry.changes) {
-            if (change.value && change.value.messages && change.value.messages[0]) {
-              await this.webhookService.processIncomingMessage(change.value.messages[0]);
+            if (
+              change.value &&
+              change.value.messages &&
+              change.value.messages[0]
+            ) {
+              await this.webhookService.processIncomingMessage(
+                change.value.messages[0],
+              );
             }
           }
         }

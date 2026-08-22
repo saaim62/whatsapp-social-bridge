@@ -6,3 +6,5 @@ node_modules
 
 .baileys_auth/
 uploads/
+venv/
+eng.traineddata

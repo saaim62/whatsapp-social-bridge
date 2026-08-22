@@ -41,7 +41,11 @@ export class WhatsappService implements OnModuleInit {
   }
 
   private async initializeWhatsApp() {
-    const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = await this.loadBaileys();
+    const {
+      default: makeWASocket,
+      useMultiFileAuthState,
+      DisconnectReason,
+    } = await this.loadBaileys();
     const { state, saveCreds } = await useMultiFileAuthState('./.baileys_auth');
 
     this.client = makeWASocket({
@@ -53,9 +57,11 @@ export class WhatsappService implements OnModuleInit {
 
     this.client.ev.on('connection.update', async (update: any) => {
       const { connection, lastDisconnect, qr } = update;
-      
+
       if (qr) {
-        this.logger.log('New QR code generated! View it at http://localhost:3001/api/whatsapp/qr');
+        this.logger.log(
+          'New QR code generated! View it at http://localhost:3001/api/whatsapp/qr',
+        );
         try {
           this.currentQrUrl = await qrcode.toDataURL(qr);
         } catch (err) {
@@ -64,8 +70,12 @@ export class WhatsappService implements OnModuleInit {
       }
 
       if (connection === 'close') {
-        const shouldReconnect = (lastDisconnect?.error as any)?.output?.statusCode !== DisconnectReason.loggedOut;
-        this.logger.warn('WhatsApp disconnected. Reconnecting: ' + shouldReconnect);
+        const shouldReconnect =
+          lastDisconnect?.error?.output?.statusCode !==
+          DisconnectReason.loggedOut;
+        this.logger.warn(
+          'WhatsApp disconnected. Reconnecting: ' + shouldReconnect,
+        );
         this.clientReady = false;
         if (shouldReconnect) {
           this.initializeWhatsApp();
@@ -80,7 +90,9 @@ export class WhatsappService implements OnModuleInit {
     this.client.ev.on('messages.upsert', async (m: any) => {
       const settings = await this.settingsService.getSettings();
       if (!settings.isSyncActive) {
-        this.logger.log('Live Sync is paused in settings. Ignoring incoming messages.');
+        this.logger.log(
+          'Live Sync is paused in settings. Ignoring incoming messages.',
+        );
         return;
       }
 
@@ -88,139 +100,180 @@ export class WhatsappService implements OnModuleInit {
         for (const msg of m.messages) {
           // Allow messages from ourselves for testing
           // if (msg.key.fromMe) continue;
-          
+
           const senderId = msg.key.remoteJid;
           if (!senderId) continue;
-          
+
           if (!this.messageBuffer.has(senderId)) {
             this.messageBuffer.set(senderId, []);
           }
           this.messageBuffer.get(senderId)!.push(msg);
 
           if (this.bufferTimers.has(senderId)) {
-            clearTimeout(this.bufferTimers.get(senderId)!);
+            clearTimeout(this.bufferTimers.get(senderId));
           }
-          
+
           // Wait 3.5 seconds of silence before processing to allow heavy videos to catch up
-          this.bufferTimers.set(senderId, setTimeout(() => this.flushMessageBuffer(senderId), 3500));
+          this.bufferTimers.set(
+            senderId,
+            setTimeout(() => this.flushMessageBuffer(senderId), 3500),
+          );
         }
       }
     });
 
-    this.client.ev.on('messaging-history.set', async ({ chats, contacts, messages, isLatest }: any) => {
-      this.logger.log(`Received historical sync: ${messages?.length || 0} messages`);
-      
-      const settings = await this.settingsService.getSettings();
-      if (!settings.isSyncActive) {
-        this.logger.log('Live Sync is paused in settings. Ignoring historical sync as well.');
-        return;
-      }
-      
-      if (!messages || messages.length === 0) return;
-
-      this.logger.log(`Processing total historical messages to form product bundles`);
-
-      const cutoffTimeMs = Date.now() - (settings.historySyncDepthHours * 60 * 60 * 1000);
-      const cutoffSeconds = Math.floor(cutoffTimeMs / 1000);
-
-      // Group messages by chat FIRST to avoid intertwining senders
-      const chatGroups: Record<string, any[]> = {};
-      let droppedCount = 0;
-      for (const msg of messages) {
-        if (!msg.message) continue;
-        
-        const msgTime = parseInt(msg.messageTimestamp) || 0;
-        if (msgTime < cutoffSeconds) {
-          droppedCount++;
-          continue;
-        }
-
-        const sender = msg.key.remoteJid;
-        if (!chatGroups[sender]) chatGroups[sender] = [];
-        chatGroups[sender].push(msg);
-      }
-      this.logger.log(`Ignored ${droppedCount} historical messages older than ${settings.historySyncDepthHours} hours.`);
-
-      for (const sender in chatGroups) {
-        // Sort messages strictly by WhatsApp timestamp
-        const sortedChatMessages = chatGroups[sender].sort((a: any, b: any) => 
-          (parseInt(a.messageTimestamp) || 0) - (parseInt(b.messageTimestamp) || 0)
+    this.client.ev.on(
+      'messaging-history.set',
+      async ({ chats, contacts, messages, isLatest }: any) => {
+        this.logger.log(
+          `Received historical sync: ${messages?.length || 0} messages`,
         );
 
-        let currentBundle: any[] = [];
-        let bundleHasMedia = false;
-        let bundleHasDesc = false;
-        let bundleFirstItemType: 'media' | 'desc' | 'both' | null = null;
-        let lastTimestamp = 0;
+        const settings = await this.settingsService.getSettings();
+        if (!settings.isSyncActive) {
+          this.logger.log(
+            'Live Sync is paused in settings. Ignoring historical sync as well.',
+          );
+          return;
+        }
 
-        const productBundles: any[][] = [];
+        if (!messages || messages.length === 0) return;
 
-        for (const msg of sortedChatMessages) {
-          const content = this.unwrapMessage(msg.message);
-          const isMedia = !!(content.imageMessage || content.videoMessage || content.documentMessage?.mimetype?.startsWith('image/') || content.documentMessage?.mimetype?.startsWith('video/'));
-          
-          let caption = '';
-          if (content.imageMessage) caption = content.imageMessage.caption || '';
-          else if (content.videoMessage) caption = content.videoMessage.caption || '';
-          else if (content.documentMessage) caption = content.documentMessage.caption || '';
-          else if (content.conversation) caption = content.conversation;
-          else if (content.extendedTextMessage) caption = content.extendedTextMessage.text || '';
+        this.logger.log(
+          `Processing total historical messages to form product bundles`,
+        );
 
-          const hasMedia = isMedia;
-          const hasDesc = caption.trim().length > 5;
+        const cutoffTimeMs =
+          Date.now() - settings.historySyncDepthHours * 60 * 60 * 1000;
+        const cutoffSeconds = Math.floor(cutoffTimeMs / 1000);
 
-          if (!hasMedia && !hasDesc) {
-            // Log what we're dropping so we can debug
-            const droppedKeys = Object.keys(content).filter(k => k !== 'messageContextInfo');
-            if (caption.trim().length > 0) {
-              this.logger.log(`  [bundle-drop] Msg ${msg.key.id} from ${sender}: too short (${caption.length} chars): "${caption.substring(0,50)}"`);
-            }
+        // Group messages by chat FIRST to avoid intertwining senders
+        const chatGroups: Record<string, any[]> = {};
+        let droppedCount = 0;
+        for (const msg of messages) {
+          if (!msg.message) continue;
+
+          const msgTime = parseInt(msg.messageTimestamp) || 0;
+          if (msgTime < cutoffSeconds) {
+            droppedCount++;
             continue;
           }
 
-          let shouldStartNewBundle = false;
-          const ts = parseInt(msg.messageTimestamp) || 0;
+          const sender = msg.key.remoteJid;
+          if (!chatGroups[sender]) chatGroups[sender] = [];
+          chatGroups[sender].push(msg);
+        }
+        this.logger.log(
+          `Ignored ${droppedCount} historical messages older than ${settings.historySyncDepthHours} hours.`,
+        );
 
-          if (currentBundle.length > 0 && lastTimestamp > 0 && (ts - lastTimestamp > 300)) {
-            // Strict Fallback: 5 minutes gap guarantees a new product drop
-            shouldStartNewBundle = true;
-          } else if (hasDesc && !hasMedia) {
-            if (bundleHasDesc) shouldStartNewBundle = true;
-          } else if (hasMedia && !hasDesc) {
-            if (bundleHasDesc && (bundleFirstItemType === 'media' || bundleFirstItemType === 'both')) shouldStartNewBundle = true;
-          } else if (hasMedia && hasDesc) {
-            if (bundleHasDesc) shouldStartNewBundle = true;
-          }
+        for (const sender in chatGroups) {
+          // Sort messages strictly by WhatsApp timestamp
+          const sortedChatMessages = chatGroups[sender].sort(
+            (a: any, b: any) =>
+              (parseInt(a.messageTimestamp) || 0) -
+              (parseInt(b.messageTimestamp) || 0),
+          );
 
-          if (shouldStartNewBundle) {
-            if (currentBundle.length > 0) productBundles.push(currentBundle);
-            currentBundle = [msg];
-            bundleHasMedia = hasMedia;
-            bundleHasDesc = hasDesc;
-            bundleFirstItemType = (hasMedia && hasDesc) ? 'both' : (hasMedia ? 'media' : 'desc');
-            lastTimestamp = ts;
-          } else {
-            currentBundle.push(msg);
-            if (!bundleFirstItemType) {
-              bundleFirstItemType = (hasMedia && hasDesc) ? 'both' : (hasMedia ? 'media' : 'desc');
+          let currentBundle: any[] = [];
+          let bundleHasMedia = false;
+          let bundleHasDesc = false;
+          let bundleFirstItemType: 'media' | 'desc' | 'both' | null = null;
+          let lastTimestamp = 0;
+
+          const productBundles: any[][] = [];
+
+          for (const msg of sortedChatMessages) {
+            const content = this.unwrapMessage(msg.message);
+            const isMedia = !!(
+              content.imageMessage ||
+              content.videoMessage ||
+              content.documentMessage?.mimetype?.startsWith('image/') ||
+              content.documentMessage?.mimetype?.startsWith('video/')
+            );
+
+            let caption = '';
+            if (content.imageMessage)
+              caption = content.imageMessage.caption || '';
+            else if (content.videoMessage)
+              caption = content.videoMessage.caption || '';
+            else if (content.documentMessage)
+              caption = content.documentMessage.caption || '';
+            else if (content.conversation) caption = content.conversation;
+            else if (content.extendedTextMessage)
+              caption = content.extendedTextMessage.text || '';
+
+            const hasMedia = isMedia;
+            const hasDesc = caption.trim().length > 5;
+
+            if (!hasMedia && !hasDesc) {
+              // Log what we're dropping so we can debug
+              const droppedKeys = Object.keys(content).filter(
+                (k) => k !== 'messageContextInfo',
+              );
+              if (caption.trim().length > 0) {
+                this.logger.log(
+                  `  [bundle-drop] Msg ${msg.key.id} from ${sender}: too short (${caption.length} chars): "${caption.substring(0, 50)}"`,
+                );
+              }
+              continue;
             }
-            if (hasMedia) bundleHasMedia = true;
-            if (hasDesc) bundleHasDesc = true;
-            lastTimestamp = ts;
-          }
-        }
-        if (currentBundle.length > 0) productBundles.push(currentBundle);
 
-        // Process each bundle as a live message blast to reuse the exact same logic
-        for (const bundle of productBundles) {
-          for (const msg of bundle) {
-            await this.handleIncomingMessage(msg);
+            let shouldStartNewBundle = false;
+            const ts = parseInt(msg.messageTimestamp) || 0;
+
+            if (
+              currentBundle.length > 0 &&
+              lastTimestamp > 0 &&
+              ts - lastTimestamp > 300
+            ) {
+              // Strict Fallback: 5 minutes gap guarantees a new product drop
+              shouldStartNewBundle = true;
+            } else if (hasDesc && !hasMedia) {
+              if (bundleHasDesc) shouldStartNewBundle = true;
+            } else if (hasMedia && !hasDesc) {
+              if (
+                bundleHasDesc &&
+                (bundleFirstItemType === 'media' ||
+                  bundleFirstItemType === 'both')
+              )
+                shouldStartNewBundle = true;
+            } else if (hasMedia && hasDesc) {
+              if (bundleHasDesc) shouldStartNewBundle = true;
+            }
+
+            if (shouldStartNewBundle) {
+              if (currentBundle.length > 0) productBundles.push(currentBundle);
+              currentBundle = [msg];
+              bundleHasMedia = hasMedia;
+              bundleHasDesc = hasDesc;
+              bundleFirstItemType =
+                hasMedia && hasDesc ? 'both' : hasMedia ? 'media' : 'desc';
+              lastTimestamp = ts;
+            } else {
+              currentBundle.push(msg);
+              if (!bundleFirstItemType) {
+                bundleFirstItemType =
+                  hasMedia && hasDesc ? 'both' : hasMedia ? 'media' : 'desc';
+              }
+              if (hasMedia) bundleHasMedia = true;
+              if (hasDesc) bundleHasDesc = true;
+              lastTimestamp = ts;
+            }
           }
-          // Add a tiny delay between bundles so BatchService can isolate them safely
-          await new Promise(resolve => setTimeout(resolve, 500));
+          if (currentBundle.length > 0) productBundles.push(currentBundle);
+
+          // Process each bundle as a live message blast to reuse the exact same logic
+          for (const bundle of productBundles) {
+            for (const msg of bundle) {
+              await this.handleIncomingMessage(msg);
+            }
+            // Add a tiny delay between bundles so BatchService can isolate them safely
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          }
         }
-      }
-    });
+      },
+    );
 
     this.logger.log('Initializing WhatsApp Web Bridge (Baileys)...');
   }
@@ -229,18 +282,20 @@ export class WhatsappService implements OnModuleInit {
     const messages = this.messageBuffer.get(senderId) || [];
     this.messageBuffer.delete(senderId);
     this.bufferTimers.delete(senderId);
-    
+
     if (messages.length === 0) return;
 
-    this.logger.log(`Flushing buffered ${messages.length} messages for ${senderId}`);
+    this.logger.log(
+      `Flushing buffered ${messages.length} messages for ${senderId}`,
+    );
 
-    // DO NOT sort by messageTimestamp. 
-    // WhatsApp processes forwarded text messages faster than media, so sorting by timestamp 
+    // DO NOT sort by messageTimestamp.
+    // WhatsApp processes forwarded text messages faster than media, so sorting by timestamp
     // puts all texts before all media, destroying the natural sequence of forwarded batches.
     // The arrival order (m.messages push order) is the most accurate reflection of the chat.
 
     for (const msg of messages) {
-       await this.handleIncomingMessage(msg);
+      await this.handleIncomingMessage(msg);
     }
   }
 
@@ -293,7 +348,7 @@ export class WhatsappService implements OnModuleInit {
         }
       }
     }
-    
+
     if (!senderName) {
       senderName = 'Direct Message';
     }
@@ -303,24 +358,34 @@ export class WhatsappService implements OnModuleInit {
     const imageMessage = messageContent.imageMessage;
     const videoMessage = messageContent.videoMessage;
     const documentMessage = messageContent.documentMessage;
-    const isImageDocument = documentMessage && documentMessage.mimetype?.startsWith('image/');
-    const isVideoDocument = documentMessage && documentMessage.mimetype?.startsWith('video/');
-    const isMedia = !!imageMessage || !!videoMessage || isImageDocument || isVideoDocument;
-    
+    const isImageDocument =
+      documentMessage && documentMessage.mimetype?.startsWith('image/');
+    const isVideoDocument =
+      documentMessage && documentMessage.mimetype?.startsWith('video/');
+    const isMedia =
+      !!imageMessage || !!videoMessage || isImageDocument || isVideoDocument;
+
     let caption = '';
     if (imageMessage) caption = imageMessage.caption || '';
     else if (videoMessage) caption = videoMessage.caption || '';
     else if (documentMessage) caption = documentMessage.caption || '';
     else if (messageContent.conversation) caption = messageContent.conversation;
-    else if (messageContent.extendedTextMessage) caption = messageContent.extendedTextMessage.text || '';
+    else if (messageContent.extendedTextMessage)
+      caption = messageContent.extendedTextMessage.text || '';
 
     // DEBUG: Log what we extracted
-    const msgKeys = Object.keys(messageContent).filter(k => k !== 'messageContextInfo');
-    this.logger.log(`  -> msgKeys: [${msgKeys.join(', ')}], isMedia: ${isMedia}, captionLen: ${caption.length}, captionPreview: "${caption.substring(0, 80)}"`);
+    const msgKeys = Object.keys(messageContent).filter(
+      (k) => k !== 'messageContextInfo',
+    );
+    this.logger.log(
+      `  -> msgKeys: [${msgKeys.join(', ')}], isMedia: ${isMedia}, captionLen: ${caption.length}, captionPreview: "${caption.substring(0, 80)}"`,
+    );
 
     // DEBUG: Dump raw message structure for non-media messages to find text
     if (!isMedia) {
-      this.logger.log(`  -> RAW TEXT MSG: ${JSON.stringify(messageContent).substring(0, 500)}`);
+      this.logger.log(
+        `  -> RAW TEXT MSG: ${JSON.stringify(messageContent).substring(0, 500)}`,
+      );
     }
 
     if (!isMedia && !caption) return;
@@ -335,18 +400,22 @@ export class WhatsappService implements OnModuleInit {
           msg,
           'buffer',
           {},
-          { 
+          {
             logger: this.logger as any,
-            reuploadRequest: this.client.updateMediaMessage 
-          }
+            reuploadRequest: this.client.updateMediaMessage,
+          },
         );
-        
-        mimeType = imageMessage?.mimetype || videoMessage?.mimetype || documentMessage?.mimetype || 'image/jpeg';
+
+        mimeType =
+          imageMessage?.mimetype ||
+          videoMessage?.mimetype ||
+          documentMessage?.mimetype ||
+          'image/jpeg';
         const ext = mimeType.split('/')[1]?.split(';')[0] || 'jpeg'; // Strip out any charset etc
         const fileName = `${messageId}.${ext}`.replace(/[^a-zA-Z0-9.\-]/g, '_');
         const relPath = `uploads/${fileName}`;
         const absolutePath = path.join(process.cwd(), relPath);
-        
+
         fs.writeFileSync(absolutePath, buffer);
         localPath = relPath;
         this.logger.log(`Downloaded media to ${localPath}`);
@@ -371,8 +440,8 @@ export class WhatsappService implements OnModuleInit {
       };
       payload._localPath = localPath; // Tells BatchService the media is already downloaded
     }
-    
-    // ALWAYS provide payload.text if caption exists, even for media messages, 
+
+    // ALWAYS provide payload.text if caption exists, even for media messages,
     // so BatchService can detect isDescMsg accurately!
     if (caption) {
       payload.text = { body: caption };
