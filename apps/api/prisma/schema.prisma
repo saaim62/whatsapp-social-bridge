@@ -65,3 +65,13 @@ model Settings {
   historySyncDepthHours Int      @default(24) // 6, 24, 72, 168, 336, 720
   updatedAt             DateTime @updatedAt
 }
+
+model WhatsappSource {
+  id        String   @id @default(uuid())
+  jid       String   @unique
+  name      String
+  type      String   // GROUP, INDIVIDUAL, CHANNEL
+  isEnabled Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

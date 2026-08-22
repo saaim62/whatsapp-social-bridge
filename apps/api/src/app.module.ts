@@ -11,6 +11,7 @@ import { SocialModule } from './social/social.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { AiModule } from './ai/ai.module';
 import { SettingsModule } from './settings/settings.module';
+import { SourcesModule } from './sources/sources.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { SettingsModule } from './settings/settings.module';
     WhatsappModule,
     AiModule,
     SettingsModule,
+    SourcesModule,
   ],
 })
 export class AppModule {}

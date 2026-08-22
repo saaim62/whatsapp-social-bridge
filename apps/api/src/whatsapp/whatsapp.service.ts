@@ -4,6 +4,8 @@ import { BatchService } from '../batch/batch.service';
 import { SettingsService } from '../settings/settings.service';
 import * as fs from 'fs';
 import * as path from 'path';
+import { SourcesService } from '../sources/sources.service';
+import { forwardRef, Inject } from '@nestjs/common';
 
 @Injectable()
 export class WhatsappService implements OnModuleInit {
@@ -19,6 +21,8 @@ export class WhatsappService implements OnModuleInit {
   constructor(
     private readonly batchService: BatchService,
     private readonly settingsService: SettingsService,
+    @Inject(forwardRef(() => SourcesService))
+    private readonly sourcesService: SourcesService,
   ) {}
 
   onModuleInit() {
@@ -31,6 +35,10 @@ export class WhatsappService implements OnModuleInit {
 
   isReady() {
     return this.clientReady;
+  }
+
+  getClient() {
+    return this.client;
   }
 
   private async loadBaileys() {
@@ -103,6 +111,9 @@ export class WhatsappService implements OnModuleInit {
 
           const senderId = msg.key.remoteJid;
           if (!senderId) continue;
+          
+          const isAllowed = await this.sourcesService.isSourceAllowed(senderId, msg.pushName);
+          if (!isAllowed) continue;
 
           if (!this.messageBuffer.has(senderId)) {
             this.messageBuffer.set(senderId, []);
@@ -148,7 +159,7 @@ export class WhatsappService implements OnModuleInit {
         const cutoffSeconds = Math.floor(cutoffTimeMs / 1000);
 
         // Group messages by chat FIRST to avoid intertwining senders
-        const chatGroups: Record<string, any[]> = {};
+        const chatGroups: Record<string, any[] | null> = {};
         let droppedCount = 0;
         for (const msg of messages) {
           if (!msg.message) continue;
@@ -160,14 +171,25 @@ export class WhatsappService implements OnModuleInit {
           }
 
           const sender = msg.key.remoteJid;
-          if (!chatGroups[sender]) chatGroups[sender] = [];
-          chatGroups[sender].push(msg);
+          if (!chatGroups[sender]) {
+            const isAllowed = await this.sourcesService.isSourceAllowed(sender, msg.pushName);
+            if (!isAllowed) {
+              chatGroups[sender] = null; // Mark as disabled
+            } else {
+              chatGroups[sender] = [];
+            }
+          }
+          if (chatGroups[sender] !== null) {
+            chatGroups[sender].push(msg);
+          }
         }
         this.logger.log(
           `Ignored ${droppedCount} historical messages older than ${settings.historySyncDepthHours} hours.`,
         );
 
         for (const sender in chatGroups) {
+          if (chatGroups[sender] === null) continue;
+          
           // Sort messages strictly by WhatsApp timestamp
           const sortedChatMessages = chatGroups[sender].sort(
             (a: any, b: any) =>

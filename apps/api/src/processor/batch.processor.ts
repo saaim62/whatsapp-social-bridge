@@ -44,8 +44,10 @@ export class BatchProcessor extends WorkerHost {
 
     if (!batch.mediaAssets || batch.mediaAssets.length === 0) {
       this.logger.warn(
-        `Batch ${batchId} has no media assets. Processing as a text-only batch.`,
+        `Batch ${batchId} has no media assets. Dropping casual conversation.`,
       );
+      await this.prisma.productBatch.delete({ where: { id: batchId } });
+      return { success: false, message: 'Dropped text-only batch' };
     }
 
     try {
