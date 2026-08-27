@@ -457,6 +457,11 @@ export class WhatsappService implements OnModuleInit {
         const relPath = `uploads/${fileName}`;
         const absolutePath = path.join(process.cwd(), relPath);
 
+        const uploadsDir = path.dirname(absolutePath);
+        if (!fs.existsSync(uploadsDir)) {
+          fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+
         fs.writeFileSync(absolutePath, buffer);
         localPath = relPath;
         this.logger.log(`Downloaded media to ${localPath}`);
