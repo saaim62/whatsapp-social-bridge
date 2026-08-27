@@ -200,14 +200,9 @@ export class WhatsappService implements OnModuleInit {
         for (const msg of messages) {
           if (!msg.message) continue;
 
-          const msgTime = parseInt(msg.messageTimestamp) || 0;
-          if (msgTime < cutoffSeconds) {
-            droppedCount++;
-            continue;
-          }
-
+          // Register EVERY person/group we've ever chatted with in history, regardless of how old the message is
           const sender = msg.key.remoteJid;
-          if (!chatGroups[sender]) {
+          if (sender && !chatGroups[sender]) {
             const pushName = msg.key.fromMe ? undefined : msg.pushName;
             const isAllowed = await this.sourcesService.isSourceAllowed(sender, pushName, userId);
             if (!isAllowed) {
@@ -218,7 +213,13 @@ export class WhatsappService implements OnModuleInit {
           }
           
           if (msg.key.fromMe) continue; // Ignore messages sent by ourselves from processing
-          
+
+          const msgTime = parseInt(msg.messageTimestamp) || 0;
+          if (msgTime < cutoffSeconds) {
+            droppedCount++;
+            continue;
+          }
+
           if (chatGroups[sender] !== null) {
             chatGroups[sender].push(msg);
           }
