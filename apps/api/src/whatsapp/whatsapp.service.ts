@@ -115,6 +115,13 @@ export class WhatsappService implements OnModuleInit {
       }
     });
 
+    client.ev.on('contacts.upsert', async (contacts: any[]) => {
+      this.logger.log(`Received contacts upsert for ${contacts.length} contacts.`);
+      if (contacts && contacts.length > 0) {
+        await this.sourcesService.syncContacts(userId, contacts);
+      }
+    });
+
     client.ev.on('messages.upsert', async (m: any) => {
       const settings = await this.settingsService.getSettings(userId);
       if (!settings.isSyncActive) {
@@ -126,14 +133,16 @@ export class WhatsappService implements OnModuleInit {
 
       if (m.type === 'notify') {
         for (const msg of m.messages) {
-          // Ignore messages sent by ourselves
-          if (msg.key.fromMe) continue;
-
           const senderId = msg.key.remoteJid;
           if (!senderId) continue;
           
+          // Register the source even if it's from us (so we catch people we message)
           const pushName = msg.key.fromMe ? undefined : msg.pushName;
           const isAllowed = await this.sourcesService.isSourceAllowed(senderId, pushName, userId);
+          
+          // Ignore messages sent by ourselves from being processed as product drops
+          if (msg.key.fromMe) continue;
+          
           if (!isAllowed) continue;
 
           const bufferKey = `${userId}_${senderId}`;
@@ -190,7 +199,6 @@ export class WhatsappService implements OnModuleInit {
         let droppedCount = 0;
         for (const msg of messages) {
           if (!msg.message) continue;
-          if (msg.key.fromMe) continue; // Ignore messages sent by ourselves
 
           const msgTime = parseInt(msg.messageTimestamp) || 0;
           if (msgTime < cutoffSeconds) {
@@ -200,13 +208,17 @@ export class WhatsappService implements OnModuleInit {
 
           const sender = msg.key.remoteJid;
           if (!chatGroups[sender]) {
-            const isAllowed = await this.sourcesService.isSourceAllowed(sender, msg.pushName, userId);
+            const pushName = msg.key.fromMe ? undefined : msg.pushName;
+            const isAllowed = await this.sourcesService.isSourceAllowed(sender, pushName, userId);
             if (!isAllowed) {
               chatGroups[sender] = null; // Mark as disabled
             } else {
               chatGroups[sender] = [];
             }
           }
+          
+          if (msg.key.fromMe) continue; // Ignore messages sent by ourselves from processing
+          
           if (chatGroups[sender] !== null) {
             chatGroups[sender].push(msg);
           }
