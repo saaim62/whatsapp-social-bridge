@@ -294,7 +294,7 @@ export default function ProductDetailPage() {
                           </div>
                         )}
                         
-                        <div className={`absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-end justify-between p-2 ${asset.isProcessing ? 'hidden' : ''}`}>
+                        <div className={`absolute inset-0 bg-gradient-to-t from-slate-900/80 via-transparent to-slate-900/40 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity flex flex-col items-end justify-between p-2 ${asset.isProcessing ? 'hidden' : ''}`}>
                           <button
                             onClick={async (e) => {
                               e.preventDefault();
@@ -312,7 +312,7 @@ export default function ProductDetailPage() {
                                 setConfirmDeleteMediaId(null);
                               }
                             }}
-                            className={`p-1.5 rounded-lg shadow-sm transition-all flex items-center gap-1 ${
+                            className={`p-1.5 rounded-lg shadow-sm transition-all flex items-center gap-1 backdrop-blur-md ${
                               confirmDeleteMediaId === asset.id 
                                 ? "bg-rose-700 text-white hover:bg-rose-800" 
                                 : "bg-rose-600/90 text-white hover:bg-rose-600"
@@ -330,7 +330,7 @@ export default function ProductDetailPage() {
                                 setMaskingMediaId(asset.id);
                                 setMaskingMediaUrl(`${API_URL}/${asset.localPath}`);
                               }}
-                              className="w-full py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-800 text-white text-xs font-semibold shadow-sm transition-all"
+                              className="w-full py-2 lg:py-1.5 rounded-lg bg-slate-800/90 backdrop-blur-md hover:bg-slate-800 text-white text-sm lg:text-xs font-semibold shadow-sm transition-all border border-white/10"
                             >
                               Mask Logo
                             </button>
