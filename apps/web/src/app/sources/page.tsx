@@ -12,6 +12,8 @@ export default function SourcesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isDeletingBulk, setIsDeletingBulk] = useState(false);
 
   const fetchSources = async () => {
     try {
@@ -99,6 +101,51 @@ export default function SourcesPage() {
     }
   };
 
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      setSelectedIds(new Set(filteredSources.map(s => s.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const toggleSelection = (id: string) => {
+    const newSelection = new Set(selectedIds);
+    if (newSelection.has(id)) {
+      newSelection.delete(id);
+    } else {
+      newSelection.add(id);
+    }
+    setSelectedIds(newSelection);
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Are you sure you want to delete ${selectedIds.size} sources?`)) return;
+    
+    setIsDeletingBulk(true);
+    const idsToDelete = Array.from(selectedIds);
+    const previous = [...sources];
+    
+    setSources(sources.filter(s => !selectedIds.has(s.id)));
+    setSelectedIds(new Set());
+    
+    try {
+      const res = await fetchWithAuth(`${API_URL}/api/sources/bulk-delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: idsToDelete }),
+      });
+      if (!res.ok) throw new Error("Failed to delete");
+    } catch (err) {
+      console.error(err);
+      setSources(previous);
+      alert("Failed to delete selected sources");
+    } finally {
+      setIsDeletingBulk(false);
+    }
+  };
+
   const filteredSources = sources.filter((s) =>
     s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
     s.jid.toLowerCase().includes(searchQuery.toLowerCase())
@@ -146,8 +193,8 @@ export default function SourcesPage() {
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col min-h-[500px]">
-        <div className="p-4 border-b border-slate-100 bg-slate-50/50">
-          <div className="relative max-w-md">
+        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-center gap-4">
+          <div className="relative w-full max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
@@ -156,6 +203,27 @@ export default function SourcesPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
             />
+          </div>
+          <div className="flex items-center gap-4 w-full sm:w-auto">
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={filteredSources.length > 0 && selectedIds.size === filteredSources.length}
+                onChange={handleSelectAll}
+                className="w-4 h-4 text-brand-500 rounded border-slate-300 focus:ring-brand-500"
+              />
+              Select All
+            </label>
+            {selectedIds.size > 0 && (
+              <button
+                onClick={handleBulkDelete}
+                disabled={isDeletingBulk}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {isDeletingBulk ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Delete ({selectedIds.size})
+              </button>
+            )}
           </div>
         </div>
 
@@ -185,6 +253,12 @@ export default function SourcesPage() {
                     }`}
                   >
                     <div className="flex items-center gap-4 overflow-hidden">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(source.id)}
+                        onChange={() => toggleSelection(source.id)}
+                        className="w-4 h-4 text-brand-500 rounded border-slate-300 focus:ring-brand-500 ml-2"
+                      />
                       <div className={`p-2.5 rounded-xl ${
                         source.isEnabled ? 'bg-white shadow-sm' : 'bg-slate-50'
                       }`}>

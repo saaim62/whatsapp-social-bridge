@@ -32,6 +32,21 @@ export class SourcesService {
     });
   }
 
+  async bulkDelete(ids: string[], userId: string) {
+    return this.prisma.whatsappSource.deleteMany({
+      where: {
+        id: { in: ids },
+        userId,
+      },
+    });
+  }
+
+  async clearAllSources(userId: string) {
+    await this.prisma.whatsappSource.deleteMany({ where: { userId } });
+    await this.prisma.whatsappContact.deleteMany({ where: { userId } });
+    this.logger.log(`Cleared all sources and contacts for user ${userId}`);
+  }
+
   async syncGroups(userId: string) {
     try {
       const client = this.whatsappService.getClient(userId);

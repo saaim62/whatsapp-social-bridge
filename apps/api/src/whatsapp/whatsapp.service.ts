@@ -597,7 +597,7 @@ export class WhatsappService implements OnModuleInit {
     }
 
     this.logger.log(`Disconnected WhatsApp for user ${userId}`);
-    
+
     // Automatically reinitialize so the user can scan a new QR code right away
     this.initializeWhatsApp(userId).catch(err => {
       this.logger.error(`Failed to reinitialize WhatsApp after disconnect:`, err);

@@ -60,7 +60,24 @@ export default function ProductDetailPage() {
       const res = await fetchWithAuth(`${API_URL}/api/batches/${id}`);
       if (res.ok) {
         const data = await res.json();
-        setBatch(data);
+        
+        // Auto-bust browser cache when media finishes processing
+        setBatch((prev: any) => {
+          if (prev?.mediaAssets) {
+            const newTimestamps: Record<string, number> = {};
+            for (const asset of data.mediaAssets || []) {
+              const prevAsset = prev.mediaAssets.find((a: any) => a.id === asset.id);
+              if (prevAsset?.isProcessing && !asset.isProcessing) {
+                newTimestamps[asset.id] = Date.now();
+              }
+            }
+            if (Object.keys(newTimestamps).length > 0) {
+              setMediaTimestamps((ts) => ({ ...ts, ...newTimestamps }));
+            }
+          }
+          return data;
+        });
+        
         if (!hasInitializedEdits.current) {
           if (data.generatedContent) {
             setEditedInstagram(data.generatedContent.instagramCaption || "");

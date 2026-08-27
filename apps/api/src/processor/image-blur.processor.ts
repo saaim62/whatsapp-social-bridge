@@ -73,7 +73,13 @@ export class ImageBlurProcessor extends WorkerHost {
           const metadata = await sharp(imageBuffer).metadata();
           
           if (box.polygon) {
-            const padding = 25;
+            // Adaptive padding: proportional to text size (min 3px, max 10px)
+            const textSize = Math.max(box.width, box.height);
+            const padding = Math.max(3, Math.min(10, Math.round(textSize * 0.04)));
+            
+            // Adaptive blur radius: proportional to text size (min 5, max 15)
+            const blurRadius = Math.max(5, Math.min(15, Math.round(textSize * 0.06)));
+            
             const targetLeft = box.left - padding;
             const targetTop = box.top - padding;
             const targetWidth = box.width + padding * 2;
@@ -84,16 +90,20 @@ export class ImageBlurProcessor extends WorkerHost {
             const width = Math.max(1, Math.min(metadata.width! - left, Math.round(targetWidth)));
             const height = Math.max(1, Math.min(metadata.height! - top, Math.round(targetHeight)));
 
+            // Create a polygon mask with slight feathering for smooth edges
             const localizedSvgPoints = box.polygon.map((p: any) => `${p[0] - left},${p[1] - top}`).join(' ');
-            const maskSvg = `<svg width="${width}" height="${height}"><polygon points="${localizedSvgPoints}" fill="white" /></svg>`;
+            const feather = Math.max(1, Math.round(padding * 0.5));
+            const maskSvg = `<svg width="${width}" height="${height}">
+              <defs><filter id="f"><feGaussianBlur stdDeviation="${feather}"/></filter></defs>
+              <polygon points="${localizedSvgPoints}" fill="white" filter="url(#f)" />
+            </svg>`;
 
             const maskBuffer = await sharp(Buffer.from(maskSvg))
-              .blur(2)
               .toBuffer();
 
             const blurredCrop = await sharp(imageBuffer)
               .extract({ left, top, width, height })
-              .blur(25)
+              .blur(blurRadius)
               .toBuffer();
 
             const maskedBlurred = await sharp(blurredCrop)
@@ -105,7 +115,11 @@ export class ImageBlurProcessor extends WorkerHost {
               .composite([{ input: maskedBlurred, left, top }])
               .toBuffer();
           } else {
-             const padding = 25;
+             // Fallback: adaptive rectangular blur
+             const textSize = Math.max(box.width, box.height);
+             const padding = Math.max(3, Math.min(10, Math.round(textSize * 0.04)));
+             const blurRadius = Math.max(5, Math.min(15, Math.round(textSize * 0.06)));
+             
              const targetLeft = box.left - padding;
              const targetTop = box.top - padding;
              const targetWidth = box.width + padding * 2;
@@ -118,7 +132,7 @@ export class ImageBlurProcessor extends WorkerHost {
 
              const blurredRegion = await sharp(imageBuffer)
               .extract({ left, top, width, height })
-              .blur(25) 
+              .blur(blurRadius) 
               .toBuffer();
 
              imageBuffer = await sharp(imageBuffer)

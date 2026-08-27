@@ -7,11 +7,12 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "dotenv -e .env -- npm run dev --workspaces",
+    "dev": "dotenv -e .env -- concurrently \"npm run dev -w api\" \"npm run dev -w web\"",
     "build": "dotenv -e .env -- npm run build --workspaces",
     "start": "dotenv -e .env -- npm run start --workspaces"
   },
   "devDependencies": {
+    "concurrently": "^9.0.1",
     "dotenv-cli": "^11.0.0"
   }
 }

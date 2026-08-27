@@ -4,7 +4,7 @@ echo "🚀 Starting OCR Server on Macbook..."
 
 # 1. Start Python OCR server in the background
 cd apps/api
-python3 ocr_server.py --port 8001 &
+python3 ocr_server.py --port 8000 &
 OCR_PID=$!
 
 echo "✅ OCR Server running in background (PID: $OCR_PID)"
@@ -13,7 +13,7 @@ echo "Press CTRL+C or type 'exit' inside the SSH session to stop both the tunnel
 echo "--------------------------------------------------------"
 
 # 2. Start SSH Tunnel in the foreground
-ssh -i ~/Downloads/ssh-key-2026-08-27.key -R 9000:localhost:8001 opc@130.110.113.71
+ssh -i ~/Downloads/ssh-key-2026-08-27.key -R 9000:localhost:8000 opc@130.110.113.71
 
 # 3. If SSH connection closes or user presses CTRL+C, kill the OCR server
 echo "--------------------------------------------------------"

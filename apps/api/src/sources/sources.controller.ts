@@ -61,4 +61,12 @@ export class SourcesController {
   async deleteSource(@Request() req: any, @Param('id') id: string) {
     return this.sourcesService.deleteSource(id, req.user.userId);
   }
+
+  @Post('bulk-delete')
+  async bulkDeleteSources(@Request() req: any, @Body() body: { ids: string[] }) {
+    if (!body.ids || !Array.isArray(body.ids)) {
+      throw new HttpException('ids must be an array of strings', HttpStatus.BAD_REQUEST);
+    }
+    return this.sourcesService.bulkDelete(body.ids, req.user.userId);
+  }
 }
