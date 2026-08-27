@@ -29,7 +29,9 @@ app = FastAPI()
 # We will manually handle angle rotation below instead.
 ocr_instance = PaddleOCR(
     ocr_version='PP-OCRv4',
-    lang='en'
+    lang='en',
+    use_angle_cls=False,
+    use_doc_unwarping=False
 )
 
 def _unrotate_polygon(poly, angle_ccw, orig_w, orig_h):
