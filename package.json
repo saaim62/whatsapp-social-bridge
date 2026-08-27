@@ -7,7 +7,10 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspaces",
-    "build": "npm run build --workspaces"
+    "dev": "dotenv -e .env -- npm run dev --workspaces",
+    "build": "dotenv -e .env -- npm run build --workspaces"
+  },
+  "devDependencies": {
+    "dotenv-cli": "^11.0.0"
   }
 }
