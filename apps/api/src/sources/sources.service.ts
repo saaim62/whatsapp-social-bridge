@@ -99,6 +99,9 @@ export class SourcesService {
         });
       }
 
+      // Also heal any missing individual contact names from the local contact cache
+      await this.healSourceNames(userId);
+
       this.logger.log(`Synced ${syncedCount} active WhatsApp groups to the database for user ${userId}.`);
       return { success: true, count: syncedCount };
     } catch (err) {
@@ -114,21 +117,65 @@ export class SourcesService {
     });
   }
 
+  async healSourceNames(userId: string) {
+    try {
+      const sources = await this.prisma.whatsappSource.findMany({
+        where: { userId, type: 'INDIVIDUAL' }
+      });
+      let healed = 0;
+      for (const source of sources) {
+        if (!source.name || source.name === source.jid.split('@')[0] || source.name === 'Unknown') {
+          const contact = await this.prisma.whatsappContact.findUnique({
+            where: { userId_jid: { userId, jid: source.jid } }
+          });
+          if (contact && contact.name) {
+            await this.prisma.whatsappSource.update({
+              where: { id: source.id },
+              data: { name: contact.name }
+            });
+            healed++;
+          }
+        }
+      }
+      if (healed > 0) {
+        this.logger.log(`Healed ${healed} individual source names for user ${userId} from contact cache.`);
+      }
+      return { success: true, count: healed };
+    } catch (err) {
+      this.logger.error(`Failed to heal source names for user ${userId}`, err);
+      return { success: false };
+    }
+  }
+
   async syncContacts(userId: string, contacts: any[]) {
     try {
       let syncedCount = 0;
       for (let i = 0; i < contacts.length; i += 100) {
         const chunk = contacts.slice(i, i + 100);
         await Promise.all(
-          chunk.map((c: any) => {
+          chunk.map(async (c: any) => {
             if (!c.id || !c.name) return;
-            return this.prisma.whatsappContact.upsert({
-              where: { userId_jid: { userId, jid: c.id } },
-              update: { name: c.name },
-              create: { userId, jid: c.id, name: c.name },
-            }).catch(err => {
+            try {
+              await this.prisma.whatsappContact.upsert({
+                where: { userId_jid: { userId, jid: c.id } },
+                update: { name: c.name },
+                create: { userId, jid: c.id, name: c.name },
+              });
+
+              // Also auto-heal any existing WhatsappSource that has a raw number name
+              const source = await this.prisma.whatsappSource.findUnique({
+                where: { userId_jid: { userId, jid: c.id } }
+              });
+              
+              if (source && (source.name === source.jid.split('@')[0] || !source.name || source.name === 'Unknown')) {
+                await this.prisma.whatsappSource.update({
+                  where: { id: source.id },
+                  data: { name: c.name }
+                });
+              }
+            } catch (err) {
               // Ignore unique constraint or other minor errors during bulk sync
-            });
+            }
           })
         );
         syncedCount += chunk.length;
@@ -178,6 +225,16 @@ export class SourcesService {
         },
       });
       this.logger.log(`Auto-added new source ${jid} (${source.name}) for user ${userId} - Defaulting to blocked.`);
+    } else {
+      // Auto-heal existing source if we now have a pushName but it was previously a raw number
+      if (pushName && (source.name === source.jid.split('@')[0] || !source.name || source.name === 'Unknown')) {
+        await this.prisma.whatsappSource.update({
+          where: { id: source.id },
+          data: { name: pushName }
+        });
+        source.name = pushName;
+        this.logger.log(`Auto-healed source name for ${jid} to ${pushName}`);
+      }
     }
 
     return source.isEnabled;

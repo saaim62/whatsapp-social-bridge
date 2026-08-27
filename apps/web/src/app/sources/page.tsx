@@ -141,7 +141,7 @@ export default function SourcesPage() {
           ) : (
             <RefreshCw className="w-4 h-4" />
           )}
-          {syncing ? "Syncing..." : "Sync WhatsApp Groups"}
+          {syncing ? "Syncing..." : "Sync Contacts & Groups"}
         </button>
       </div>
 
