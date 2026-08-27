@@ -43,20 +43,35 @@ export function ImageMaskModal({
 
   if (!isOpen) return null;
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+  const getCoordinates = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    let clientX, clientY;
+    
+    if ('touches' in e) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else {
+      clientX = (e as React.MouseEvent).clientX;
+      clientY = (e as React.MouseEvent).clientY;
+    }
+    
+    return {
+      x: clientX - rect.left,
+      y: clientY - rect.top
+    };
+  };
+
+  const handlePointerDown = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    const { x, y } = getCoordinates(e);
     setStartPos({ x, y });
     setCurrentBox({ left: x, top: y, width: 0, height: 0 });
     setIsDrawing(true);
   };
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handlePointerMove = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
     if (!isDrawing) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    let x = e.clientX - rect.left;
-    let y = e.clientY - rect.top;
+    let { x, y } = getCoordinates(e);
     
     // clamp
     x = Math.max(0, Math.min(x, rect.width));
@@ -164,11 +179,15 @@ export function ImageMaskModal({
           
           <div className="p-6 overflow-auto flex-1 bg-slate-50 flex items-center justify-center select-none">
             <div
-              className="relative shadow-md bg-white cursor-crosshair inline-block max-w-full"
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
+              className="relative shadow-md bg-white cursor-crosshair inline-block max-w-full touch-none"
+              onMouseDown={handlePointerDown}
+              onMouseMove={handlePointerMove}
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseUp}
+              onTouchStart={handlePointerDown}
+              onTouchMove={handlePointerMove}
+              onTouchEnd={handleMouseUp}
+              onTouchCancel={handleMouseUp}
             >
               {/* Force a cache bust so it reloads if edited */}
               <img
