@@ -13,7 +13,7 @@ echo "Press CTRL+C or type 'exit' inside the SSH session to stop both the tunnel
 echo "--------------------------------------------------------"
 
 # 2. Start SSH Tunnel in the foreground
-ssh -i ~/Downloads/ssh-key-2026-08-27.key -R 9000:localhost:8000 opc@130.110.113.71
+ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -i ~/Downloads/ssh-key-2026-08-27.key -R 9000:127.0.0.1:8000 opc@130.110.113.71
 
 # 3. If SSH connection closes or user presses CTRL+C, kill the OCR server
 echo "--------------------------------------------------------"
