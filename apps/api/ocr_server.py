@@ -77,12 +77,24 @@ async def detect_text(file: UploadFile = File(...)):
                 else:
                     res = reader.ocr(img_np)
                     results = []
-                    if res and res[0]:
-                        for line in res[0]:
-                            bbox = line[0]
-                            text = line[1][0]
-                            prob = line[1][1]
-                            results.append((bbox, text, prob))
+                    if res and isinstance(res, list):
+                        if len(res) > 0 and isinstance(res[0], dict):
+                            page = res[0]
+                            texts = page.get('rec_texts', [])
+                            scores = page.get('rec_scores', [])
+                            polys = page.get('dt_polys', [])
+                            for i in range(len(texts)):
+                                if i < len(polys):
+                                    bbox = polys[i].tolist() if hasattr(polys[i], 'tolist') else polys[i]
+                                    text = texts[i]
+                                    prob = scores[i] if i < len(scores) else 1.0
+                                    results.append((bbox, text, prob))
+                        elif res[0]:
+                            for line in res[0]:
+                                bbox = line[0]
+                                text = line[1][0]
+                                prob = line[1][1]
+                                results.append((bbox, text, prob))
             
             for bbox, text, prob in results:
                 if not text or not text.strip():
