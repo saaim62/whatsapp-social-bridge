@@ -126,8 +126,8 @@ export class WhatsappService implements OnModuleInit {
 
       if (m.type === 'notify') {
         for (const msg of m.messages) {
-          // Allow messages from ourselves for testing
-          // if (msg.key.fromMe) continue;
+          // Ignore messages sent by ourselves
+          if (msg.key.fromMe) continue;
 
           const senderId = msg.key.remoteJid;
           if (!senderId) continue;
@@ -190,6 +190,7 @@ export class WhatsappService implements OnModuleInit {
         let droppedCount = 0;
         for (const msg of messages) {
           if (!msg.message) continue;
+          if (msg.key.fromMe) continue; // Ignore messages sent by ourselves
 
           const msgTime = parseInt(msg.messageTimestamp) || 0;
           if (msgTime < cutoffSeconds) {
