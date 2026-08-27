@@ -8,7 +8,8 @@
   ],
   "scripts": {
     "dev": "dotenv -e .env -- npm run dev --workspaces",
-    "build": "dotenv -e .env -- npm run build --workspaces"
+    "build": "dotenv -e .env -- npm run build --workspaces",
+    "start": "dotenv -e .env -- npm run start --workspaces"
   },
   "devDependencies": {
     "dotenv-cli": "^11.0.0"
