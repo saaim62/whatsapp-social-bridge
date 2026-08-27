@@ -25,9 +25,11 @@ export class SocialController {
     try {
       await this.socialService.handleMetaOAuthCallback(code, state);
       // Redirect to the frontend settings on success
-      return res.redirect('http://localhost:3000/settings?social=success');
+      const frontendUrl = process.env.FRONTEND_URL || 'http://130.110.113.71:3000';
+      return res.redirect(`${frontendUrl}/settings?social=success`);
     } catch (err: any) {
-      return res.redirect(`http://localhost:3000/settings?social=error&message=${encodeURIComponent(err.message)}`);
+      const frontendUrl = process.env.FRONTEND_URL || 'http://130.110.113.71:3000';
+      return res.redirect(`${frontendUrl}/settings?social=error&message=${encodeURIComponent(err.message)}`);
     }
   }
 

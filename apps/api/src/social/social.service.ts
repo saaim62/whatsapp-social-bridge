@@ -433,7 +433,7 @@ export class SocialService {
 
   getMetaOAuthUrl(userId: string): string {
     const appId = this.configService.get('META_APP_ID');
-    const redirectUri = this.configService.get('FACEBOOK_REDIRECT_URI') || 'http://localhost:3001/api/social/oauth/facebook/callback';
+    const redirectUri = this.configService.get('FACEBOOK_REDIRECT_URI') || 'http://130.110.113.71:3001/api/social/oauth/facebook/callback';
     
     // Encode userId in state to correlate the callback
     const state = Buffer.from(JSON.stringify({ userId })).toString('base64');
@@ -446,7 +446,7 @@ export class SocialService {
   async handleMetaOAuthCallback(code: string, stateBase64: string): Promise<void> {
     const appId = this.configService.get('META_APP_ID');
     const appSecret = this.configService.get('META_APP_SECRET');
-    const redirectUri = this.configService.get('FACEBOOK_REDIRECT_URI') || 'http://localhost:3001/api/social/oauth/facebook/callback';
+    const redirectUri = this.configService.get('FACEBOOK_REDIRECT_URI') || 'http://130.110.113.71:3001/api/social/oauth/facebook/callback';
 
     // Decode state
     let userId: string;
