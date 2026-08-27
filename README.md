@@ -1,80 +1,110 @@
-# WhatsApp Social Bridge
+<div align="center">
+  <img src="docs/dashboard.jpg" alt="Dashboard Preview" width="100%">
+</div>
 
-A full-stack prototype that automatically converts product messages received through WhatsApp into social media posts on Instagram and Facebook.
+# WhatsApp Social Bridge 🌉
 
-## Tech Stack
-- **Frontend**: Next.js (App Router), Tailwind CSS
-- **Backend**: NestJS, BullMQ (Redis)
-- **Database**: PostgreSQL (Prisma ORM)
-- **AI**: Gemini Flash 1.5 (Product extraction & Captions)
+WhatsApp Social Bridge is a powerful, modern enterprise application designed to connect and automate your WhatsApp Business, Facebook Pages, and Instagram Business accounts all from one sleek dashboard. 
 
-## QUICK START — 15 MINUTE TEST
-
-Follow these exact commands to test the prototype locally in Development Mode without needing Meta Webhook approval:
-
-1. **Install dependencies:**
-   ```bash
-   npm install
-   ```
-
-2. **Start Infrastructure (PostgreSQL & Redis):**
-   ```bash
-   docker-compose up -d
-   ```
-
-3. **Initialize Database:**
-   ```bash
-   cd apps/api
-   npx prisma db push
-   npx prisma generate
-   ```
-
-4. **Start Backend API:**
-   ```bash
-   # From root directory
-   npm run dev --workspace=apps/api
-   ```
-   *(API will start on http://localhost:3001)*
-
-5. **Start Frontend App:**
-   Open a new terminal and run:
-   ```bash
-   # From root directory
-   npm run dev --workspace=apps/web
-   ```
-   *(Frontend will start on http://localhost:3000)*
-
-6. **Test the Application:**
-   - Open your browser to `http://localhost:3000`
-   - Navigate to **Test Mode** (sidebar)
-   - Upload multiple product images
-   - Paste a sample WhatsApp message (e.g., "Nike Air Max 270\nPrice: Rs. 24,999\nSizes: 40, 41, 42")
-   - Click **Simulate Incoming Webhook**
-   - Navigate to **Products**, select the newly received product, watch it process, extract details via AI, and generate captions.
-   - Click **Approve & Publish** to see it simulate publishing to Meta APIs!
+With zero complex setup for non-technical users, this bridge acts as your central hub to view statistics, manage active bot sessions, and synchronize your cross-platform messaging.
 
 ---
 
-## META CONFIGURATION
+## 🌟 Key Features
 
-To connect the system to real Meta services, you must obtain API credentials and configure the application environments:
+- **Unified Dashboard**: View analytics across WhatsApp, Facebook, and Instagram in one place.
+- **WhatsApp Bot Management**: Connect your WhatsApp via a simple QR code (using Baileys WebSockets) and run automated chatbots 24/7.
+- **Facebook & Instagram Integration**: Easily link your Meta Pages to track engagement and auto-publish content.
+- **Modern UI/UX**: A stunning, dark-mode first design built with Next.js, Framer Motion, and Tailwind CSS.
+- **Robust Backend**: Powered by NestJS, PostgreSQL (via Prisma), and Redis (for background jobs using BullMQ).
 
-### Environment Variables (.env in `apps/api`)
-```env
-# Meta Configuration
-WHATSAPP_ACCESS_TOKEN=your_whatsapp_token
-WHATSAPP_PHONE_NUMBER_ID=your_phone_id
-WHATSAPP_VERIFY_TOKEN=your_secure_verify_token_here
-META_APP_ID=your_app_id
-META_APP_SECRET=your_app_secret
-INSTAGRAM_ACCOUNT_ID=your_ig_id
-FACEBOOK_PAGE_ID=your_fb_page_id
-FACEBOOK_PAGE_ACCESS_TOKEN=your_fb_token
+<div align="center">
+  <img src="docs/settings.jpg" alt="Settings Preview" width="100%">
+</div>
 
-# AI Configuration
-LLM_API_KEY=your_gemini_api_key
+---
+
+## 🚀 Getting Started (For Non-Tech Users)
+
+If you just want to use the application without looking at the code, follow these simple steps to get started!
+
+### 1. Connect Your Database (Supabase)
+1. Go to [Supabase](https://supabase.com/) and create a free account.
+2. Create a new project. Once it's ready, go to **Project Settings -> Database** and copy the **Connection String (URI)**.
+3. Paste that URI into the `.env` file of this project as `DATABASE_URL`.
+
+### 2. Connect Redis (Upstash)
+1. Go to [Upstash](https://upstash.com/) and create a free Redis database.
+2. Copy the **Endpoint (Host)** and **Port**, and paste them into the `.env` file as `REDIS_HOST` and `REDIS_PORT`.
+
+### 3. Deploy the App
+* **Frontend:** Create an account on [Vercel.com](https://vercel.com). Import this GitHub repository, and Vercel will automatically build and host the website for you!
+* **Backend:** To keep your WhatsApp bots running 24/7, deploy the backend (`apps/api`) to a platform like [Railway.app](https://railway.app) or a free Oracle Cloud Virtual Machine.
+
+---
+
+## 💻 Developer Setup Guide
+
+For developers looking to run this project locally, it is built as a **Turborepo** monorepo containing a Next.js Frontend (`apps/web`) and a NestJS Backend (`apps/api`).
+
+### Prerequisites
+- [Node.js](https://nodejs.org/en/) (v20+)
+- [Docker](https://www.docker.com/) (For running Postgres and Redis locally)
+
+### 1. Start Local Databases
+We have included a `docker-compose.yml` file to instantly spin up your databases.
+```bash
+docker compose up -d
+```
+*(This starts PostgreSQL on port 5432 and Redis on port 6379).*
+
+### 2. Install Dependencies
+Run this in the root of the project to install all dependencies for both the frontend and backend:
+```bash
+npm install
 ```
 
-### Steps to connect:
-1. **WhatsApp Webhook:** Go to your Meta Developer Dashboard > WhatsApp > Configuration. Set the Callback URL to `https://your-domain.com/webhooks/whatsapp` and set the Verify Token to match `WHATSAPP_VERIFY_TOKEN`.
-2. **Instagram & Facebook:** Ensure your Meta App has `instagram_basic`, `instagram_content_publish`, `pages_show_list`, `pages_read_engagement`, and `pages_manage_posts` permissions. Replace the mocked `social.service.ts` implementations with real Axios requests to `graph.facebook.com`.
+### 3. Setup Environment Variables
+We have consolidated the environment variables into a single file at the root.
+1. Copy `.env.example` to `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+2. Fill out the `WHATSAPP_ACCESS_TOKEN` and `LLM_API_KEY` if you are using AI integrations.
+
+### 4. Initialize the Database
+Push the Prisma schema to your running Postgres database:
+```bash
+cd apps/api
+npx prisma db push
+```
+
+### 5. Run the Project
+To start both the Frontend and Backend simultaneously, run:
+```bash
+npm run dev
+```
+
+- **Frontend (Next.js)** will be available at: `http://localhost:3000`
+- **Backend (NestJS)** will be available at: `http://localhost:3001`
+
+---
+
+## 🔗 How to Connect WhatsApp
+
+1. Open the web portal at `http://localhost:3000`.
+2. Navigate to the **Settings** or **Integrations** page.
+3. Under "WhatsApp Business API", click **Scan QR Code**.
+4. Open WhatsApp on your phone -> Linked Devices -> Link a Device, and scan the QR code on your screen.
+5. Your session will be saved in the backend securely, and the bot will start running!
+
+---
+
+## 🛠 Tech Stack
+
+- **Frontend:** Next.js 15, React 19, Tailwind CSS v4, Framer Motion, Lucide Icons.
+- **Backend:** NestJS 11, Prisma ORM, BullMQ (Redis).
+- **Integrations:** `@whiskeysockets/baileys` (WhatsApp), Axios.
+
+---
+*Created with ❤️ by the WhatsApp Social Bridge Team.*
