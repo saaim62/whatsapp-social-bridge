@@ -12,6 +12,7 @@ import {
   Save,
   Trash2,
   AlertCircle,
+  AlertTriangle,
   Loader2,
   XCircle,
   RotateCcw,
@@ -288,8 +289,11 @@ export default function ProductDetailPage() {
                   <StatusBadge status={batch.status} />
                 </div>
               </div>
-              <p className="text-xs sm:text-sm text-slate-500 mt-0.5 truncate">
+              <p className="text-xs sm:text-sm text-slate-500 mt-0.5 truncate flex items-center gap-2">
                 From {batch.senderName || "WhatsApp"}
+                <span className="text-yellow-700 font-bold bg-yellow-100 px-1.5 py-0.5 rounded-md text-[10px] sm:text-xs">
+                  Expires in {Math.max(0, 14 - Math.floor((new Date().getTime() - new Date(batch.createdAt).getTime()) / (1000 * 60 * 60 * 24)))} days
+                </span>
               </p>
             </div>
           </div>
@@ -310,6 +314,14 @@ export default function ProductDetailPage() {
       </div>
 
       <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-7xl mx-auto">
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-xl mb-6 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5 text-yellow-600" />
+          <div>
+            <h4 className="font-bold text-sm">Storage Notice</h4>
+            <p className="text-sm mt-0.5 text-yellow-700">To save storage, this product will be automatically removed 14 days after creation.</p>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left column */}
           <div className="lg:col-span-5 space-y-6">

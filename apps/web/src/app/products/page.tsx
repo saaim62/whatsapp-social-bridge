@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { formatDistanceToNow } from "date-fns";
-import { Layers, Clock3, CheckCircle2, ImageIcon, Trash2, Loader2 } from "lucide-react";
+import { Layers, Clock3, CheckCircle2, ImageIcon, Trash2, Loader2, AlertTriangle } from "lucide-react";
 import { API_URL, fetchWithAuth } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
@@ -70,6 +70,14 @@ export default function ProductsPage() {
         title="Product Catalog"
         description="All WhatsApp product batches — review, edit captions, and publish to social media."
       />
+
+      <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-xl mb-6 flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5 text-yellow-600" />
+        <div>
+          <h4 className="font-bold text-sm">Storage Notice</h4>
+          <p className="text-sm mt-0.5 text-yellow-700">To save storage, all products are automatically removed 14 days after they are created.</p>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
         <StatCard
@@ -161,9 +169,14 @@ export default function ProductsPage() {
                 <span className="truncate pr-2">
                   From: {batch.senderName || batch.senderId?.split("@")[0] || "Unknown"}
                 </span>
-                <span className="whitespace-nowrap">
-                  {formatDistanceToNow(new Date(batch.createdAt))} ago
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="whitespace-nowrap">
+                    {formatDistanceToNow(new Date(batch.createdAt))} ago
+                  </span>
+                  <span className="text-yellow-700 font-bold bg-yellow-100 px-1.5 py-0.5 rounded-md whitespace-nowrap">
+                    {Math.max(0, 14 - Math.floor((new Date().getTime() - new Date(batch.createdAt).getTime()) / (1000 * 60 * 60 * 24)))}d left
+                  </span>
+                </div>
               </div>
 
               {/* Actions */}
@@ -270,7 +283,10 @@ export default function ProductsPage() {
                       "Unknown"}
                   </td>
                   <td className="px-6 py-4 text-sm text-slate-400">
-                    {formatDistanceToNow(new Date(batch.createdAt))} ago
+                    <div>{formatDistanceToNow(new Date(batch.createdAt))} ago</div>
+                    <div className="text-yellow-700 font-bold text-xs mt-1 bg-yellow-100 inline-block px-1.5 py-0.5 rounded-md">
+                      Expires in {Math.max(0, 14 - Math.floor((new Date().getTime() - new Date(batch.createdAt).getTime()) / (1000 * 60 * 60 * 24)))} days
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

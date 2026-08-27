@@ -329,6 +329,17 @@ export class BatchService {
             this.logger.error(`Failed to delete file: ${absolutePath}`, err);
           }
         }
+
+        const ext = path.extname(absolutePath);
+        const originalPath = absolutePath.replace(ext, `_original${ext}`);
+        if (fs.existsSync(originalPath)) {
+          try {
+            fs.unlinkSync(originalPath);
+            this.logger.log(`Deleted physical original file: ${originalPath}`);
+          } catch (err) {
+            this.logger.error(`Failed to delete original file: ${originalPath}`, err);
+          }
+        }
       }
     }
 
@@ -351,6 +362,16 @@ export class BatchService {
           fs.unlinkSync(absolutePath);
         } catch (err) {
           this.logger.error(`Failed to delete file: ${absolutePath}`, err);
+        }
+      }
+
+      const ext = path.extname(absolutePath);
+      const originalPath = absolutePath.replace(ext, `_original${ext}`);
+      if (fs.existsSync(originalPath)) {
+        try {
+          fs.unlinkSync(originalPath);
+        } catch (err) {
+          this.logger.error(`Failed to delete original file: ${originalPath}`, err);
         }
       }
     }

@@ -51,6 +51,14 @@ export default function DashboardPage() {
         description="Real-time metrics for your WhatsApp-to-social automation pipeline."
       />
 
+      <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-xl mb-6 flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5 text-yellow-600" />
+        <div>
+          <h4 className="font-bold text-sm">Storage Notice</h4>
+          <p className="text-sm mt-0.5 text-yellow-700">To save storage, all products are automatically removed 14 days after they are created.</p>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-10">
         <StatCard
           title="Received"
@@ -182,6 +190,9 @@ export default function DashboardPage() {
                       {batch.senderName || "Direct"} ·{" "}
                       {batch.mediaAssets?.length || 0} media ·{" "}
                       {formatDistanceToNow(new Date(batch.createdAt))} ago
+                      <span className="text-yellow-700 font-bold ml-2 bg-yellow-100 px-1.5 py-0.5 rounded-md">
+                        Expires in {Math.max(0, 14 - Math.floor((new Date().getTime() - new Date(batch.createdAt).getTime()) / (1000 * 60 * 60 * 24)))} days
+                      </span>
                     </p>
                   </div>
                   </div>
