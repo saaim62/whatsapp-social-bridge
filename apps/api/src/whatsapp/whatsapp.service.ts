@@ -1,18 +1,19 @@
-import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
+import { Injectable, OnModuleInit, Logger, forwardRef, Inject } from '@nestjs/common';
 import * as qrcode from 'qrcode';
 import { BatchService } from '../batch/batch.service';
 import { SettingsService } from '../settings/settings.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import { SourcesService } from '../sources/sources.service';
-import { forwardRef, Inject } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class WhatsappService implements OnModuleInit {
-  private client: any;
+  private clients: Map<string, any> = new Map();
+  private qrUrls: Map<string, string | null> = new Map();
+  private clientsReady: Map<string, boolean> = new Map();
+  
   private readonly logger = new Logger(WhatsappService.name);
-  private currentQrUrl: string | null = null;
-  private clientReady: boolean = false;
   private messageBuffer: Map<string, any[]> = new Map();
   private bufferTimers: Map<string, NodeJS.Timeout> = new Map();
   private groupNameCache: Map<string, string> = new Map();
@@ -23,22 +24,26 @@ export class WhatsappService implements OnModuleInit {
     private readonly settingsService: SettingsService,
     @Inject(forwardRef(() => SourcesService))
     private readonly sourcesService: SourcesService,
+    private readonly prisma: PrismaService,
   ) {}
 
-  onModuleInit() {
-    this.initializeWhatsApp();
+  async onModuleInit() {
+    const users = await this.prisma.user.findMany();
+    for (const user of users) {
+      this.initializeWhatsApp(user.id);
+    }
   }
 
-  getQrCodeUrl() {
-    return this.currentQrUrl;
+  getQrCodeUrl(userId: string) {
+    return this.qrUrls.get(userId) || null;
   }
 
-  isReady() {
-    return this.clientReady;
+  isReady(userId: string) {
+    return !!this.clientsReady.get(userId);
   }
 
-  getClient() {
-    return this.client;
+  getClient(userId: string) {
+    return this.clients.get(userId);
   }
 
   private async loadBaileys() {
@@ -48,32 +53,38 @@ export class WhatsappService implements OnModuleInit {
     return this.baileysModule;
   }
 
-  private async initializeWhatsApp() {
+  async initializeWhatsApp(userId: string) {
     const {
       default: makeWASocket,
       useMultiFileAuthState,
       DisconnectReason,
     } = await this.loadBaileys();
-    const { state, saveCreds } = await useMultiFileAuthState('./.baileys_auth');
+    
+    // Store session files securely in separate folders per user
+    const sessionDir = `./sessions/user_${userId}_auth`;
+    if (!fs.existsSync('./sessions')) {
+      fs.mkdirSync('./sessions');
+    }
+    const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
 
-    this.client = makeWASocket({
+    const client = makeWASocket({
       auth: state,
       printQRInTerminal: false,
     });
+    
+    this.clients.set(userId, client);
 
-    this.client.ev.on('creds.update', saveCreds);
+    client.ev.on('creds.update', saveCreds);
 
-    this.client.ev.on('connection.update', async (update: any) => {
+    client.ev.on('connection.update', async (update: any) => {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
-        this.logger.log(
-          'New QR code generated! View it at http://localhost:3001/api/whatsapp/qr',
-        );
+        this.logger.log(`New QR code generated for user ${userId}!`);
         try {
-          this.currentQrUrl = await qrcode.toDataURL(qr);
+          this.qrUrls.set(userId, await qrcode.toDataURL(qr));
         } catch (err) {
-          this.logger.error('Failed to generate QR data URL', err);
+          this.logger.error(`Failed to generate QR data URL for user ${userId}`, err);
         }
       }
 
@@ -81,22 +92,20 @@ export class WhatsappService implements OnModuleInit {
         const shouldReconnect =
           lastDisconnect?.error?.output?.statusCode !==
           DisconnectReason.loggedOut;
-        this.logger.warn(
-          'WhatsApp disconnected. Reconnecting: ' + shouldReconnect,
-        );
-        this.clientReady = false;
+        this.logger.warn(`WhatsApp disconnected for user ${userId}. Reconnecting: ${shouldReconnect}`);
+        this.clientsReady.set(userId, false);
         if (shouldReconnect) {
-          this.initializeWhatsApp();
+          this.initializeWhatsApp(userId);
         }
       } else if (connection === 'open') {
-        this.logger.log('✅ WhatsApp Linked Device connected and active!');
-        this.clientReady = true;
-        this.currentQrUrl = null;
+        this.logger.log(`✅ WhatsApp Linked Device connected and active for user ${userId}!`);
+        this.clientsReady.set(userId, true);
+        this.qrUrls.set(userId, null);
       }
     });
 
-    this.client.ev.on('messages.upsert', async (m: any) => {
-      const settings = await this.settingsService.getSettings();
+    client.ev.on('messages.upsert', async (m: any) => {
+      const settings = await this.settingsService.getSettings(userId);
       if (!settings.isSyncActive) {
         this.logger.log(
           'Live Sync is paused in settings. Ignoring incoming messages.',
@@ -112,40 +121,46 @@ export class WhatsappService implements OnModuleInit {
           const senderId = msg.key.remoteJid;
           if (!senderId) continue;
           
-          const isAllowed = await this.sourcesService.isSourceAllowed(senderId, msg.pushName);
+          const isAllowed = await this.sourcesService.isSourceAllowed(senderId, msg.pushName, userId);
           if (!isAllowed) continue;
 
-          if (!this.messageBuffer.has(senderId)) {
-            this.messageBuffer.set(senderId, []);
+          const bufferKey = `${userId}_${senderId}`;
+          if (!this.messageBuffer.has(bufferKey)) {
+            this.messageBuffer.set(bufferKey, []);
           }
-          this.messageBuffer.get(senderId)!.push(msg);
+          this.messageBuffer.get(bufferKey)!.push(msg);
 
-          if (this.bufferTimers.has(senderId)) {
-            clearTimeout(this.bufferTimers.get(senderId));
+          if (this.bufferTimers.has(bufferKey)) {
+            clearTimeout(this.bufferTimers.get(bufferKey));
           }
 
           // Wait 3.5 seconds of silence before processing to allow heavy videos to catch up
           this.bufferTimers.set(
-            senderId,
-            setTimeout(() => this.flushMessageBuffer(senderId), 3500),
+            bufferKey,
+            setTimeout(() => this.flushMessageBuffer(userId, senderId), 3500),
           );
         }
       }
     });
 
-    this.client.ev.on(
+    client.ev.on(
       'messaging-history.set',
       async ({ chats, contacts, messages, isLatest }: any) => {
         this.logger.log(
           `Received historical sync: ${messages?.length || 0} messages`,
         );
 
-        const settings = await this.settingsService.getSettings();
+        const settings = await this.settingsService.getSettings(userId);
         if (!settings.isSyncActive) {
           this.logger.log(
             'Live Sync is paused in settings. Ignoring historical sync as well.',
           );
           return;
+        }
+
+        if (contacts && contacts.length > 0) {
+          this.logger.log(`Syncing ${contacts.length} contacts...`);
+          await this.sourcesService.syncContacts(userId, contacts);
         }
 
         if (!messages || messages.length === 0) return;
@@ -172,7 +187,7 @@ export class WhatsappService implements OnModuleInit {
 
           const sender = msg.key.remoteJid;
           if (!chatGroups[sender]) {
-            const isAllowed = await this.sourcesService.isSourceAllowed(sender, msg.pushName);
+            const isAllowed = await this.sourcesService.isSourceAllowed(sender, msg.pushName, userId);
             if (!isAllowed) {
               chatGroups[sender] = null; // Mark as disabled
             } else {
@@ -288,7 +303,7 @@ export class WhatsappService implements OnModuleInit {
           // Process each bundle as a live message blast to reuse the exact same logic
           for (const bundle of productBundles) {
             for (const msg of bundle) {
-              await this.handleIncomingMessage(msg);
+              await this.handleIncomingMessage(userId, msg);
             }
             // Add a tiny delay between bundles so BatchService can isolate them safely
             await new Promise((resolve) => setTimeout(resolve, 500));
@@ -300,10 +315,11 @@ export class WhatsappService implements OnModuleInit {
     this.logger.log('Initializing WhatsApp Web Bridge (Baileys)...');
   }
 
-  private async flushMessageBuffer(senderId: string) {
-    const messages = this.messageBuffer.get(senderId) || [];
-    this.messageBuffer.delete(senderId);
-    this.bufferTimers.delete(senderId);
+  private async flushMessageBuffer(userId: string, senderId: string) {
+    const bufferKey = `${userId}_${senderId}`;
+    const messages = this.messageBuffer.get(bufferKey) || [];
+    this.messageBuffer.set(bufferKey, []);
+    this.bufferTimers.delete(bufferKey);
 
     if (messages.length === 0) return;
 
@@ -317,7 +333,7 @@ export class WhatsappService implements OnModuleInit {
     // The arrival order (m.messages push order) is the most accurate reflection of the chat.
 
     for (const msg of messages) {
-      await this.handleIncomingMessage(msg);
+      await this.handleIncomingMessage(userId, msg);
     }
   }
 
@@ -347,10 +363,13 @@ export class WhatsappService implements OnModuleInit {
     return content;
   }
 
-  async handleIncomingMessage(msg: any) {
+  async handleIncomingMessage(userId: string, msg: any) {
     const { downloadMediaMessage } = await this.loadBaileys();
     const messageContent = this.unwrapMessage(msg.message);
     if (!messageContent) return;
+    
+    const client = this.clients.get(userId);
+    if (!client) return;
 
     const jid = msg.key.remoteJid;
     let senderName = msg.pushName;
@@ -360,7 +379,7 @@ export class WhatsappService implements OnModuleInit {
         senderName = this.groupNameCache.get(jid)!;
       } else {
         try {
-          const groupMeta = await this.client.groupMetadata(jid);
+          const groupMeta = await client.groupMetadata(jid);
           if (groupMeta && groupMeta.subject) {
             senderName = groupMeta.subject;
             this.groupNameCache.set(jid, senderName);
@@ -424,7 +443,7 @@ export class WhatsappService implements OnModuleInit {
           {},
           {
             logger: this.logger as any,
-            reuploadRequest: this.client.updateMediaMessage,
+            reuploadRequest: client.updateMediaMessage,
           },
         );
 
@@ -452,6 +471,7 @@ export class WhatsappService implements OnModuleInit {
       senderName: senderName,
       timestamp: msg.messageTimestamp?.toString() || Date.now().toString(),
       type: isMedia ? 'image' : 'text', // BatchService uses 'image' to detect media, so we keep it for now
+      userId: userId,
     };
 
     if (payload.type === 'image') {
@@ -471,5 +491,34 @@ export class WhatsappService implements OnModuleInit {
 
     // Hand off to existing BatchService pipeline
     await this.batchService.handleMessage(payload);
+  }
+
+  async disconnectWhatsApp(userId: string) {
+    const client = this.clients.get(userId);
+    if (client) {
+      try {
+        await client.logout();
+      } catch (err) {
+        this.logger.error(`Error logging out WhatsApp client for user ${userId}`, err);
+      }
+      this.clients.delete(userId);
+    }
+    
+    this.qrUrls.delete(userId);
+    this.clientsReady.set(userId, false);
+
+    const sessionDir = `./sessions/user_${userId}_auth`;
+    if (fs.existsSync(sessionDir)) {
+      fs.rmSync(sessionDir, { recursive: true, force: true });
+    }
+
+    this.logger.log(`Disconnected WhatsApp for user ${userId}`);
+    
+    // Automatically reinitialize so the user can scan a new QR code right away
+    this.initializeWhatsApp(userId).catch(err => {
+      this.logger.error(`Failed to reinitialize WhatsApp after disconnect:`, err);
+    });
+
+    return { success: true };
   }
 }

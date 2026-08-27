@@ -5,6 +5,7 @@ node_modules
 /generated/prisma
 
 .baileys_auth/
+sessions/
 uploads/
 venv/
 eng.traineddata

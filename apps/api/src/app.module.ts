@@ -12,6 +12,7 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { AiModule } from './ai/ai.module';
 import { SettingsModule } from './settings/settings.module';
 import { SourcesModule } from './sources/sources.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { SourcesModule } from './sources/sources.module';
     AiModule,
     SettingsModule,
     SourcesModule,
+    AuthModule,
   ],
 })
 export class AppModule {}

@@ -7,13 +7,18 @@ import * as path from 'path';
 import { exec } from 'child_process';
 import * as util from 'util';
 
+import { PrismaService } from '../prisma/prisma.service';
+
 const execPromise = util.promisify(exec);
 
 @Injectable()
 export class SocialService {
   private readonly logger = new Logger(SocialService.name);
 
-  constructor(private configService: ConfigService) {}
+  constructor(
+    private configService: ConfigService,
+    private prisma: PrismaService,
+  ) {}
 
   private async compressVideo(inputPath: string): Promise<string> {
     const stats = fs.statSync(inputPath);
@@ -120,14 +125,76 @@ export class SocialService {
     }
   }
 
+  private async getMetaPublishingContext(userAccessToken: string): Promise<{ pageId: string, pageName: string, pageAccessToken: string, igAccountId?: string }> {
+    try {
+      // 1. Get the user's Facebook Pages
+      const accountsRes = await axios.get(`https://graph.facebook.com/v19.0/me/accounts`, {
+        params: { access_token: userAccessToken }
+      });
+      
+      const pages = accountsRes.data.data;
+      if (!pages || pages.length === 0) {
+        throw new Error('No Facebook Pages found for this user.');
+      }
+      
+      let selectedPage = pages[0];
+      let igAccountId: string | undefined = undefined;
+
+      // 2. Find a page that has an Instagram Business Account linked
+      for (const page of pages) {
+        try {
+          const igRes = await axios.get(`https://graph.facebook.com/v19.0/${page.id}`, {
+            params: { fields: 'instagram_business_account', access_token: page.access_token }
+          });
+          if (igRes.data.instagram_business_account?.id) {
+            selectedPage = page;
+            igAccountId = igRes.data.instagram_business_account.id;
+            break; // Found a good page!
+          }
+        } catch (igErr) {
+          this.logger.warn(`Could not fetch Instagram account for page ${page.id}`);
+        }
+      }
+      
+      this.logger.log(`Selected Facebook Page: ${selectedPage.name} (${selectedPage.id})`);
+      if (igAccountId) {
+        this.logger.log(`Found linked Instagram Business Account: ${igAccountId}`);
+      } else {
+        this.logger.warn(`No Instagram Business Account linked to ${selectedPage.name}`);
+      }
+
+      return { 
+        pageId: selectedPage.id, 
+        pageName: selectedPage.name,
+        pageAccessToken: selectedPage.access_token, 
+        igAccountId 
+      };
+    } catch (err: any) {
+      this.logger.error('Failed to fetch Meta publishing context', err.response?.data || err.message);
+      throw new Error('Failed to fetch Facebook Pages. Ensure your user account has the required permissions.');
+    }
+  }
+
   async publishInstagram(batch: any): Promise<{ id: string }> {
     this.logger.log(`Publishing to Instagram for batch ${batch.id}`);
-    const igAccountId = this.configService.get('INSTAGRAM_ACCOUNT_ID');
-    const accessToken = this.configService.get('FACEBOOK_PAGE_ACCESS_TOKEN');
+    
+    // We assume the Meta account is linked
+    const socialAcc = await this.prisma.socialAccount.findUnique({
+      where: { userId_platform: { userId: batch.userId, platform: 'META' } }
+    });
 
-    if (!igAccountId || !accessToken) {
-      throw new Error('Instagram Account ID or Page Access Token is missing');
+    const userAccessToken = socialAcc?.accessToken;
+
+    if (!userAccessToken) {
+      throw new Error('User Access Token is missing. Please connect your Meta account.');
     }
+
+    const { pageAccessToken, igAccountId } = await this.getMetaPublishingContext(userAccessToken);
+
+    if (!igAccountId) {
+      throw new Error('No Instagram Business Account linked to your Facebook Page.');
+    }
+    const accessToken = pageAccessToken;
 
     const caption = batch.generatedContent?.instagramCaption || batch.rawText;
     let finalCreationId = '';
@@ -222,12 +289,18 @@ export class SocialService {
 
   async publishFacebook(batch: any): Promise<{ id: string }> {
     this.logger.log(`Publishing to Facebook for batch ${batch.id}`);
-    const pageId = this.configService.get('FACEBOOK_PAGE_ID');
-    const accessToken = this.configService.get('FACEBOOK_PAGE_ACCESS_TOKEN');
+    
+    const socialAcc = await this.prisma.socialAccount.findUnique({
+      where: { userId_platform: { userId: batch.userId, platform: 'META' } }
+    });
 
-    if (!pageId || !accessToken) {
-      throw new Error('Facebook Page ID or Access Token is missing');
+    const userAccessToken = socialAcc?.accessToken;
+
+    if (!userAccessToken) {
+      throw new Error('Access Token is missing. Please connect your Meta account.');
     }
+
+    const { pageId, pageAccessToken: accessToken } = await this.getMetaPublishingContext(userAccessToken);
 
     const caption = batch.generatedContent?.facebookCaption || batch.rawText;
 
@@ -356,5 +429,84 @@ export class SocialService {
       );
       throw error;
     }
+  }
+
+  getMetaOAuthUrl(userId: string): string {
+    const appId = this.configService.get('META_APP_ID');
+    const redirectUri = this.configService.get('FACEBOOK_REDIRECT_URI') || 'http://localhost:3001/api/social/oauth/facebook/callback';
+    
+    // Encode userId in state to correlate the callback
+    const state = Buffer.from(JSON.stringify({ userId })).toString('base64');
+    
+    const scope = ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts', 'instagram_basic', 'instagram_content_publish'].join(',');
+    
+    return `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=${scope}`;
+  }
+
+  async handleMetaOAuthCallback(code: string, stateBase64: string): Promise<void> {
+    const appId = this.configService.get('META_APP_ID');
+    const appSecret = this.configService.get('META_APP_SECRET');
+    const redirectUri = this.configService.get('FACEBOOK_REDIRECT_URI') || 'http://localhost:3001/api/social/oauth/facebook/callback';
+
+    // Decode state
+    let userId: string;
+    try {
+      const stateObj = JSON.parse(Buffer.from(stateBase64, 'base64').toString('utf-8'));
+      userId = stateObj.userId;
+    } catch (e) {
+      throw new Error('Invalid state parameter');
+    }
+
+    if (!userId) {
+      throw new Error('User ID not found in state');
+    }
+
+    // 1. Exchange code for short-lived access token
+    const tokenUrl = `https://graph.facebook.com/v19.0/oauth/access_token?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${appSecret}&code=${code}`;
+    
+    const tokenRes = await axios.get(tokenUrl);
+    const shortLivedToken = tokenRes.data.access_token;
+
+    // 2. Exchange short-lived token for long-lived token
+    const longLivedUrl = `https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${shortLivedToken}`;
+    
+    const longLivedRes = await axios.get(longLivedUrl);
+    const longLivedToken = longLivedRes.data.access_token;
+
+    // 3. Save the token for the user
+    await this.prisma.socialAccount.upsert({
+      where: {
+        userId_platform: {
+          userId,
+          platform: 'META',
+        }
+      },
+      update: {
+        accessToken: longLivedToken,
+      },
+      create: {
+        userId,
+        platform: 'META',
+        accessToken: longLivedToken,
+      }
+    });
+
+    this.logger.log(`Successfully connected Meta account for user ${userId}`);
+  }
+
+  async getSocialAccounts(userId: string) {
+    const accounts = await this.prisma.socialAccount.findMany({
+      where: { userId },
+      select: { platform: true, createdAt: true, updatedAt: true }
+    });
+    return accounts;
+  }
+
+  async disconnectMeta(userId: string) {
+    await this.prisma.socialAccount.deleteMany({
+      where: { userId, platform: 'META' }
+    });
+    this.logger.log(`Disconnected Meta for user ${userId}`);
+    return { success: true };
   }
 }

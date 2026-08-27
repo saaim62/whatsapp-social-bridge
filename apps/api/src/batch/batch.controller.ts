@@ -6,54 +6,59 @@ import {
   Body,
   HttpException,
   HttpStatus,
+  UseGuards,
+  Request,
 } from '@nestjs/common';
 import { BatchService } from './batch.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
+@UseGuards(JwtAuthGuard)
 @Controller('api/batches')
 export class BatchController {
   constructor(private readonly batchService: BatchService) {}
 
   @Get()
-  async getAllBatches() {
-    return this.batchService.getBatches();
+  async getAllBatches(@Request() req: any) {
+    return this.batchService.getBatches(req.user.userId);
   }
 
   @Get(':id')
-  async getBatch(@Param('id') id: string) {
-    return this.batchService.getBatch(id);
+  async getBatch(@Request() req: any, @Param('id') id: string) {
+    return this.batchService.getBatch(id, req.user.userId);
   }
 
   @Post(':id/delete')
-  async deleteBatch(@Param('id') id: string) {
-    return this.batchService.deleteBatch(id);
+  async deleteBatch(@Request() req: any, @Param('id') id: string) {
+    return this.batchService.deleteBatch(id, req.user.userId);
   }
 
   @Post(':id/approve')
-  async approveBatch(@Param('id') id: string, @Body() body: any) {
-    return this.batchService.approveBatch(id, body);
+  async approveBatch(@Request() req: any, @Param('id') id: string, @Body() body: any) {
+    return this.batchService.approveBatch(id, body, req.user.userId);
   }
 
   @Post(':id/publish')
-  async publishBatch(@Param('id') id: string) {
-    return this.batchService.publishBatch(id);
+  async publishBatch(@Request() req: any, @Param('id') id: string) {
+    return this.batchService.publishBatch(id, req.user.userId);
   }
 
   @Post(':id/reject')
-  async rejectBatch(@Param('id') id: string) {
-    return this.batchService.rejectBatch(id);
+  async rejectBatch(@Request() req: any, @Param('id') id: string) {
+    return this.batchService.rejectBatch(id, req.user.userId);
   }
 
   @Post('media/:mediaId/delete')
-  async deleteMedia(@Param('mediaId') mediaId: string) {
-    return this.batchService.deleteMedia(mediaId);
+  async deleteMedia(@Request() req: any, @Param('mediaId') mediaId: string) {
+    return this.batchService.deleteMedia(mediaId, req.user.userId);
   }
 
   @Post('media/:mediaId/mask')
   async maskMedia(
+    @Request() req: any,
     @Param('mediaId') mediaId: string,
     @Body() body: { boxes: { left: number; top: number; width: number; height: number }[] },
   ) {
-    const result = await this.batchService.maskMediaLogo(mediaId, body.boxes);
+    const result = await this.batchService.maskMediaLogo(mediaId, body.boxes, req.user.userId);
     if (!result.success) {
       throw new HttpException(result.message, HttpStatus.BAD_REQUEST);
     }
@@ -61,16 +66,16 @@ export class BatchController {
   }
 
   @Post('media/:mediaId/revert')
-  async revertMedia(@Param('mediaId') mediaId: string) {
-    const result = await this.batchService.revertMediaLogo(mediaId);
+  async revertMedia(@Request() req: any, @Param('mediaId') mediaId: string) {
+    const result = await this.batchService.revertMediaLogo(mediaId, req.user.userId);
     if (!result.success) {
       throw new HttpException(result.message, HttpStatus.BAD_REQUEST);
     }
     return result;
   }
   @Post('media/:mediaId/stop-blur')
-  async stopMediaBlur(@Param('mediaId') mediaId: string) {
-    const result = await this.batchService.stopMediaBlur(mediaId);
+  async stopMediaBlur(@Request() req: any, @Param('mediaId') mediaId: string) {
+    const result = await this.batchService.stopMediaBlur(mediaId, req.user.userId);
     if (!result.success) {
       throw new HttpException(result.message || 'Failed to stop blur', HttpStatus.BAD_REQUEST);
     }

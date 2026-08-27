@@ -12,30 +12,31 @@ export class SourcesService {
     private whatsappService: WhatsappService,
   ) {}
 
-  async getSources() {
+  async getSources(userId: string) {
     return this.prisma.whatsappSource.findMany({
+      where: { userId },
       orderBy: { name: 'asc' },
     });
   }
 
-  async toggleSource(id: string, isEnabled: boolean) {
+  async toggleSource(id: string, isEnabled: boolean, userId: string) {
     return this.prisma.whatsappSource.update({
-      where: { id },
+      where: { id, userId },
       data: { isEnabled },
     });
   }
 
-  async deleteSource(id: string) {
+  async deleteSource(id: string, userId: string) {
     return this.prisma.whatsappSource.delete({
-      where: { id },
+      where: { id, userId },
     });
   }
 
-  async syncGroups() {
+  async syncGroups(userId: string) {
     try {
-      const client = this.whatsappService.getClient();
+      const client = this.whatsappService.getClient(userId);
       if (!client) {
-        throw new Error('WhatsApp client not ready');
+        throw new Error('WhatsApp client not ready for this user');
       }
 
       const groups = await client.groupFetchAllParticipating();
@@ -74,9 +75,10 @@ export class SourcesService {
         const displayName = `${groupMeta.subject || 'Unknown Group'} (${memberCount} members)`;
 
         await this.prisma.whatsappSource.upsert({
-          where: { jid },
+          where: { userId_jid: { userId, jid } },
           update: { name: displayName },
           create: {
+            userId,
             jid: groupMeta.id,
             name: displayName,
             type: 'GROUP',
@@ -90,27 +92,60 @@ export class SourcesService {
       if (activeGroupJids.length > 0) {
         await this.prisma.whatsappSource.deleteMany({
           where: {
+            userId,
             type: 'GROUP',
             jid: { notIn: activeGroupJids },
           }
         });
       }
 
-      this.logger.log(`Synced ${syncedCount} active WhatsApp groups to the database.`);
+      this.logger.log(`Synced ${syncedCount} active WhatsApp groups to the database for user ${userId}.`);
       return { success: true, count: syncedCount };
     } catch (err) {
-      this.logger.error('Failed to sync WhatsApp groups', err);
+      this.logger.error(`Failed to sync WhatsApp groups for user ${userId}`, err);
       return { success: false, message: 'Failed to sync groups from WhatsApp' };
     }
   }
 
+  async updateSourceName(id: string, name: string, userId: string) {
+    return this.prisma.whatsappSource.update({
+      where: { id, userId },
+      data: { name },
+    });
+  }
+
+  async syncContacts(userId: string, contacts: any[]) {
+    try {
+      let syncedCount = 0;
+      for (let i = 0; i < contacts.length; i += 100) {
+        const chunk = contacts.slice(i, i + 100);
+        await Promise.all(
+          chunk.map((c: any) => {
+            if (!c.id || !c.name) return;
+            return this.prisma.whatsappContact.upsert({
+              where: { userId_jid: { userId, jid: c.id } },
+              update: { name: c.name },
+              create: { userId, jid: c.id, name: c.name },
+            }).catch(err => {
+              // Ignore unique constraint or other minor errors during bulk sync
+            });
+          })
+        );
+        syncedCount += chunk.length;
+      }
+      this.logger.log(`Synced ${syncedCount} address book contacts for user ${userId}.`);
+    } catch (err) {
+      this.logger.error(`Failed to sync address book contacts for user ${userId}`, err);
+    }
+  }
+
   // Intercept method to automatically add unknown sources and check if they are enabled
-  async isSourceAllowed(jid: string, pushName?: string): Promise<boolean> {
+  async isSourceAllowed(jid: string, pushName: string | undefined, userId: string): Promise<boolean> {
     if (!jid) return false;
 
     // Check if it exists
     let source = await this.prisma.whatsappSource.findUnique({
-      where: { jid },
+      where: { userId_jid: { userId, jid } },
     });
 
     if (!source) {
@@ -120,17 +155,32 @@ export class SourcesService {
       else if (jid.endsWith('@newsletter')) type = 'CHANNEL';
       else if (jid.endsWith('@broadcast')) type = 'CHANNEL';
 
+      let resolvedName = pushName;
+      if (!resolvedName) {
+        // Fallback to address book contact if pushName is missing (e.g. LIDs)
+        const contact = await this.prisma.whatsappContact.findUnique({
+          where: { userId_jid: { userId, jid } }
+        });
+        if (contact && contact.name) {
+          resolvedName = contact.name;
+        } else {
+          resolvedName = jid.split('@')[0];
+        }
+      }
+
       source = await this.prisma.whatsappSource.create({
         data: {
+          userId,
           jid,
-          name: pushName || jid.split('@')[0],
+          name: resolvedName,
           type,
           isEnabled: false, // All new sources are disabled by default
         },
       });
-      this.logger.log(`Auto-added new source ${jid} (${source.name}) - Defaulting to blocked.`);
+      this.logger.log(`Auto-added new source ${jid} (${source.name}) for user ${userId} - Defaulting to blocked.`);
     }
 
     return source.isEnabled;
   }
 }
+

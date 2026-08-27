@@ -21,6 +21,7 @@ export class BatchService {
 
   // For MVP, simplistic in-memory lock/debounce
   private activeTimeouts: Map<string, NodeJS.Timeout> = new Map();
+  private processingLocks: Map<string, Promise<void>> = new Map();
 
   constructor(
     private prisma: PrismaService,
@@ -37,12 +38,33 @@ export class BatchService {
   }
 
   async handleMessage(message: any) {
+    const from = message.from;
+    const userId = message.userId;
+    if (!userId || !from) return;
+
+    const lockKey = `${userId}-${from}`;
+    const currentLock = this.processingLocks.get(lockKey) || Promise.resolve();
+
+    const nextLock = currentLock.then(async () => {
+      try {
+        await this._handleMessage(message);
+      } catch (err) {
+        this.logger.error(`Error processing message in lock chain for ${lockKey}`, err);
+      }
+    }).catch(() => {});
+
+    this.processingLocks.set(lockKey, nextLock);
+    await nextLock;
+  }
+
+  private async _handleMessage(message: any) {
     // 1. Extract info from message
     const messageId = message.id;
     const from = message.from; // Sender ID (conversation)
     const senderName = message.senderName || '';
     const timestamp = parseInt(message.timestamp, 10);
     const type = message.type; // 'text', 'image', etc.
+    const userId = message.userId;
 
     let textContent = '';
     let mediaId = null;
@@ -71,6 +93,7 @@ export class BatchService {
       where: {
         status: 'RECEIVED',
         senderId: from,
+        userId: userId,
       },
       include: { mediaAssets: { orderBy: { createdAt: 'asc' } } },
       orderBy: { createdAt: 'desc' },
@@ -118,10 +141,10 @@ export class BatchService {
           `State machine slicing batch ${activeBatch.id}. Queueing processing immediately.`,
         );
         await this.prisma.productBatch.update({
-          where: { id: activeBatch.id },
+          where: { id: activeBatch.id, userId },
           data: { status: 'PROCESSING' },
         });
-        await this.batchQueue.add('process-batch', { batchId: activeBatch.id });
+        await this.batchQueue.add('process-batch', { batchId: activeBatch.id, userId });
         if (this.activeTimeouts.has(activeBatch.id)) {
           clearTimeout(this.activeTimeouts.get(activeBatch.id));
           this.activeTimeouts.delete(activeBatch.id);
@@ -131,6 +154,7 @@ export class BatchService {
       try {
         activeBatch = await this.prisma.productBatch.create({
           data: {
+            userId: userId,
             whatsappMessageId: messageId,
             senderId: from,
             senderName: senderName,
@@ -198,10 +222,10 @@ export class BatchService {
           `Fallback window closed for ${activeBatch.id}. Queueing processing.`,
         );
         await this.prisma.productBatch.update({
-          where: { id: activeBatch.id },
+          where: { id: activeBatch.id, userId },
           data: { status: 'PROCESSING' },
         });
-        await this.batchQueue.add('process-batch', { batchId: activeBatch.id });
+        await this.batchQueue.add('process-batch', { batchId: activeBatch.id, userId });
       } catch (err) {
         this.logger.warn(`Could not update batch ${activeBatch.id} - it may have been deleted.`);
       } finally {
@@ -213,8 +237,9 @@ export class BatchService {
   }
 
   // Dashboard API
-  async getBatches() {
+  async getBatches(userId: string) {
     return this.prisma.productBatch.findMany({
+      where: { userId },
       include: {
         mediaAssets: true,
         generatedContent: true,
@@ -224,9 +249,9 @@ export class BatchService {
     });
   }
 
-  async getBatch(id: string) {
+  async getBatch(id: string, userId: string) {
     return this.prisma.productBatch.findUnique({
-      where: { id },
+      where: { id, userId },
       include: {
         mediaAssets: true,
         generatedContent: true,
@@ -235,12 +260,12 @@ export class BatchService {
     });
   }
 
-  async approveBatch(id: string, body?: any) {
+  async approveBatch(id: string, body: any, userId: string) {
     if (body) {
       const { instagramCaption, facebookCaption, storyText } = body;
 
       const batch = await this.prisma.productBatch.findUnique({
-        where: { id },
+        where: { id, userId },
         include: { generatedContent: true },
       });
 
@@ -259,29 +284,32 @@ export class BatchService {
     }
 
     await this.prisma.productBatch.update({
-      where: { id },
+      where: { id, userId },
       data: { status: 'APPROVED' },
     });
-    await this.batchQueue.add('publish-batch', { batchId: id });
+    await this.batchQueue.add('publish-batch', { batchId: id, userId });
     return { success: true };
   }
 
-  async publishBatch(id: string) {
-    await this.batchQueue.add('publish-batch', { batchId: id });
+  async publishBatch(id: string, userId: string) {
+    const batch = await this.prisma.productBatch.findUnique({ where: { id, userId }});
+    if (!batch) return { success: false, message: 'Batch not found' };
+    
+    await this.batchQueue.add('publish-batch', { batchId: id, userId });
     return { success: true };
   }
 
-  async rejectBatch(id: string) {
+  async rejectBatch(id: string, userId: string) {
     await this.prisma.productBatch.update({
-      where: { id },
+      where: { id, userId },
       data: { status: 'FAILED' },
     });
     return { success: true };
   }
 
-  async deleteBatch(id: string) {
+  async deleteBatch(id: string, userId: string) {
     const batch = await this.prisma.productBatch.findUnique({
-      where: { id },
+      where: { id, userId },
       include: { mediaAssets: true },
     });
 
@@ -308,11 +336,12 @@ export class BatchService {
     return { success: true };
   }
 
-  async deleteMedia(mediaId: string) {
+  async deleteMedia(mediaId: string, userId: string) {
     const media = await this.prisma.mediaAsset.findUnique({
       where: { id: mediaId },
+      include: { batch: true },
     });
-    if (!media) return { success: false, message: 'Media not found' };
+    if (!media || media.batch.userId !== userId) return { success: false, message: 'Media not found' };
 
     if (media.localPath) {
       const absolutePath = path.join(process.cwd(), media.localPath);
@@ -332,11 +361,13 @@ export class BatchService {
   async maskMediaLogo(
     mediaId: string,
     boxes: { left: number; top: number; width: number; height: number }[],
+    userId: string,
   ) {
     const media = await this.prisma.mediaAsset.findUnique({
       where: { id: mediaId },
+      include: { batch: true },
     });
-    if (!media || !media.localPath) {
+    if (!media || media.batch.userId !== userId || !media.localPath) {
       return { success: false, message: 'Media or local file not found' };
     }
 
@@ -393,11 +424,12 @@ export class BatchService {
     }
   }
 
-  async revertMediaLogo(mediaId: string) {
+  async revertMediaLogo(mediaId: string, userId: string) {
     const media = await this.prisma.mediaAsset.findUnique({
       where: { id: mediaId },
+      include: { batch: true },
     });
-    if (!media || !media.localPath) {
+    if (!media || media.batch.userId !== userId || !media.localPath) {
       return { success: false, message: 'Media or local file not found' };
     }
 
@@ -472,8 +504,16 @@ export class BatchService {
     }
   }
 
-  async stopMediaBlur(mediaId: string) {
+  async stopMediaBlur(mediaId: string, userId: string) {
     try {
+      const media = await this.prisma.mediaAsset.findUnique({
+        where: { id: mediaId },
+        include: { batch: true },
+      });
+      if (!media || media.batch.userId !== userId) {
+        return { success: false, message: 'Media not found' };
+      }
+
       // Try to remove by jobId if it's waiting
       const job = await this.imageBlurQueue.getJob(`blur-${mediaId}`);
       if (job) {

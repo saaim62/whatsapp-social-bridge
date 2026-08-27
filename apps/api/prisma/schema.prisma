@@ -7,9 +7,40 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id            String          @id @default(uuid())
+  email         String          @unique
+  passwordHash  String
+  name          String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  batches       ProductBatch[]
+  settings      Settings?
+  sources       WhatsappSource[]
+  socialAccounts SocialAccount[]
+  whatsappContacts WhatsappContact[]
+}
+
+model SocialAccount {
+  id                   String   @id @default(uuid())
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform             String
+  accessToken          String?
+  facebookPageId       String?
+  instagramUserId      String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@unique([userId, platform])
+}
+
 model ProductBatch {
   id               String            @id @default(uuid())
-  whatsappMessageId String?          @unique
+  userId           String
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  whatsappMessageId String?
   senderId         String?
   senderName       String?
   rawText          String?
@@ -20,13 +51,15 @@ model ProductBatch {
   publications     Publication[]
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
+
+  @@index([userId, status])
 }
 
 model MediaAsset {
   id             String       @id @default(uuid())
   batchId        String
   batch          ProductBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  whatsappMediaId String?     @unique
+  whatsappMediaId String?
   mimeType       String?
   localPath      String?
   originalUrl    String?
@@ -61,6 +94,8 @@ model Publication {
 
 model Settings {
   id                    String   @id @default(uuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   isSyncActive          Boolean  @default(true)
   historySyncDepthHours Int      @default(24) // 6, 24, 72, 168, 336, 720
   updatedAt             DateTime @updatedAt
@@ -68,10 +103,26 @@ model Settings {
 
 model WhatsappSource {
   id        String   @id @default(uuid())
-  jid       String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jid       String
   name      String
-  type      String   // GROUP, INDIVIDUAL, CHANNEL
+  type      String   @default("GROUP") // GROUP, CHANNEL, INDIVIDUAL
   isEnabled Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([userId, jid])
+}
+
+model WhatsappContact {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jid       String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, jid])
 }
