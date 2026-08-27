@@ -99,14 +99,38 @@ export class SourcesService {
         });
       }
 
+      // Sync all 1-to-1 contacts from the local cache into Sources so they appear in the UI
+      const contacts = await this.prisma.whatsappContact.findMany({
+        where: { userId }
+      });
+      
+      let individualCount = 0;
+      for (const contact of contacts) {
+        // Only add if it's a standard user (not status@broadcast or weird LIDs unless needed)
+        if (!contact.jid.endsWith('@s.whatsapp.net')) continue;
+        
+        await this.prisma.whatsappSource.upsert({
+          where: { userId_jid: { userId, jid: contact.jid } },
+          update: { name: contact.name }, // keep name updated
+          create: {
+            userId,
+            jid: contact.jid,
+            name: contact.name,
+            type: 'INDIVIDUAL',
+            isEnabled: false, // default off
+          }
+        });
+        individualCount++;
+      }
+
       // Also heal any missing individual contact names from the local contact cache
       await this.healSourceNames(userId);
 
-      this.logger.log(`Synced ${syncedCount} active WhatsApp groups to the database for user ${userId}.`);
-      return { success: true, count: syncedCount };
+      this.logger.log(`Synced ${syncedCount} active WhatsApp groups and ${individualCount} contacts to the database for user ${userId}.`);
+      return { success: true, count: syncedCount + individualCount };
     } catch (err) {
-      this.logger.error(`Failed to sync WhatsApp groups for user ${userId}`, err);
-      return { success: false, message: 'Failed to sync groups from WhatsApp' };
+      this.logger.error(`Failed to sync WhatsApp groups/contacts for user ${userId}`, err);
+      return { success: false, message: 'Failed to sync from WhatsApp' };
     }
   }
 
