@@ -183,10 +183,10 @@ export default function ProductDetailPage() {
   );
 
   const toggleSelectAll = () => {
-    if (selectedMediaIds.size === imageAssets.length) {
+    if (selectedMediaIds.size === batch.mediaAssets.length) {
       setSelectedMediaIds(new Set());
     } else {
-      setSelectedMediaIds(new Set(imageAssets.map((a: any) => a.id)));
+      setSelectedMediaIds(new Set(batch.mediaAssets.map((a: any) => a.id)));
     }
   };
 
@@ -426,12 +426,12 @@ export default function ProductDetailPage() {
                   </h2>
                 </div>
 
-                {imageAssets.length > 1 && (
+                {batch.mediaAssets?.length > 1 && (
                   <button
                     onClick={toggleSelectAll}
                     className="text-xs font-semibold text-brand-600 hover:text-brand-700 flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-brand-50 transition-colors"
                   >
-                    {selectedMediaIds.size === imageAssets.length ? (
+                    {selectedMediaIds.size === batch.mediaAssets.length ? (
                       <>
                         <CheckSquare className="w-3.5 h-3.5 text-brand-600" />
                         Deselect All
@@ -439,7 +439,7 @@ export default function ProductDetailPage() {
                     ) : (
                       <>
                         <Square className="w-3.5 h-3.5 text-slate-400" />
-                        Select All ({imageAssets.length})
+                        Select All ({batch.mediaAssets.length})
                       </>
                     )}
                   </button>
@@ -570,25 +570,22 @@ export default function ProductDetailPage() {
                           >
                             {/* Top Controls: Checkbox (Left) + Delete Button (Right) */}
                             <div className="flex items-center justify-between w-full">
-                              {isImage ? (
-                                <button
-                                  onClick={(e) => toggleSelectMedia(asset.id, e)}
-                                  className={`p-1.5 rounded-lg backdrop-blur-md shadow-sm transition-all ${
-                                    isSelected
-                                      ? "bg-brand-600 text-white"
-                                      : "bg-slate-900/60 text-white/80 hover:bg-slate-900/80 hover:text-white"
-                                  }`}
-                                  title={isSelected ? "Deselect" : "Select"}
-                                >
-                                  {isSelected ? (
-                                    <CheckSquare className="w-4 h-4" />
-                                  ) : (
-                                    <Square className="w-4 h-4" />
-                                  )}
-                                </button>
-                              ) : (
-                                <div />
-                              )}
+                              {/* Always show checkbox for selection */}
+                              <button
+                                onClick={(e) => toggleSelectMedia(asset.id, e)}
+                                className={`p-1.5 rounded-lg backdrop-blur-md shadow-sm transition-all ${
+                                  isSelected
+                                    ? "bg-brand-600 text-white"
+                                    : "bg-slate-900/60 text-white/80 hover:bg-slate-900/80 hover:text-white"
+                                }`}
+                                title={isSelected ? "Deselect" : "Select"}
+                              >
+                                {isSelected ? (
+                                  <CheckSquare className="w-4 h-4" />
+                                ) : (
+                                  <Square className="w-4 h-4" />
+                                )}
+                              </button>
 
                               <button
                                 onClick={(e) => handleSingleDelete(asset.id, e)}

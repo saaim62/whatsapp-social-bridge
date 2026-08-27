@@ -62,7 +62,7 @@ async def detect_text(file: UploadFile = File(...)):
         
         all_boxes = []
         
-        # Scan rotations
+        # Scan 4 rotations to ensure we catch text at any angle/orientation
         for angle_ccw in [0, 90, 180, 270]:
             if angle_ccw == 0:
                 rotated_img = image
@@ -73,7 +73,8 @@ async def detect_text(file: UploadFile = File(...)):
             
             with ocr_lock:
                 if backend == 'easy':
-                    results = reader.readtext(img_np)
+                    raw_results = reader.readtext(img_np, text_threshold=0.5, low_text=0.3, mag_ratio=1.5)
+                    results = raw_results
                 else:
                     res = reader.ocr(img_np)
                     results = []
@@ -99,8 +100,10 @@ async def detect_text(file: UploadFile = File(...)):
             for bbox, text, prob in results:
                 if not text or not text.strip():
                     continue
+                # bbox from EasyOCR/PaddleOCR is a 4-point polygon
                 poly = [[float(pt[0]), float(pt[1])] for pt in bbox]
                 unrotated_poly = _unrotate_polygon(poly, angle_ccw, orig_w, orig_h)
+                
                 all_boxes.append({
                     "polygon": unrotated_poly,
                     "text": text.strip(),

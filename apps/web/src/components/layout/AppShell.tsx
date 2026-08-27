@@ -172,11 +172,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           className="h-16 flex-shrink-0 flex items-center justify-between px-8 border-b border-slate-200/60 bg-white/50 backdrop-blur-xl"
         >
           <div className="flex items-center gap-3">
-            <h2 className="text-lg font-bold text-slate-900">{pageTitle}</h2>
+            <h2 className="text-lg font-bold text-slate-900 hidden sm:block">{pageTitle}</h2>
             <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-brand-50 text-brand-600 border border-brand-100">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               Live
             </span>
+          </div>
+
+          {/* Center: Logged in user email */}
+          <div className="flex-1 flex justify-center items-center px-4">
+            <div className="bg-slate-100/80 border border-slate-200/60 px-3 py-1.5 rounded-full flex items-center gap-2 max-w-[200px] sm:max-w-xs">
+              <div className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
+              <span className="text-xs font-semibold text-slate-600 truncate">
+                {session?.user?.email || 'Logged In'}
+              </span>
+            </div>
           </div>
           <div className="flex items-center gap-4">
             <p className="hidden lg:block text-xs text-slate-400 font-medium">
@@ -185,10 +195,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {/* Mobile Sign Out Button in Header */}
             <button
               onClick={() => signOut({ callbackUrl: "/login" })}
-              className="md:hidden flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 transition-colors"
+              className="md:hidden flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors border border-rose-100 font-semibold text-xs"
               title="Sign Out"
             >
-              <Zap className="w-4 h-4" /> {/* Or any other icon */}
+              Sign Out
             </button>
           </div>
         </motion.header>

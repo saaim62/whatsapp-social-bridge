@@ -67,8 +67,8 @@ export class BatchService {
     const userId = message.userId;
 
     let textContent = '';
-    let mediaId = null;
-    let mimeType = null;
+    let mediaId: string | null = null;
+    let mimeType: string | null = null;
     let localPath: string | null = null;
 
     if (type === 'text') {
@@ -186,18 +186,20 @@ export class BatchService {
       }
     }
 
-    // Add media if image
+    // Add media
     if (mediaId && activeBatch) {
+      const isVideo = mimeType?.startsWith('video/');
       const media = await this.prisma.mediaAsset.create({
         data: {
           batchId: activeBatch.id,
           whatsappMediaId: mediaId,
           mimeType: mimeType,
           localPath: localPath,
+          isProcessing: !isVideo,
         },
       });
 
-      if (localPath) {
+      if (localPath && !isVideo) {
         await this.imageBlurQueue.add(
           'blur-image',
           { mediaId: media.id, localPath: localPath },
@@ -397,6 +399,9 @@ export class BatchService {
     if (!fs.existsSync(absolutePath)) {
       return { success: false, message: 'File does not exist on disk' };
     }
+
+    // Stop auto-blur if it is in progress
+    await this.stopMediaBlur(mediaId, userId);
 
     try {
       let imageBuffer = fs.readFileSync(absolutePath);

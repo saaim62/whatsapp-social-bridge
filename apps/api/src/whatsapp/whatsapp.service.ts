@@ -257,7 +257,11 @@ export class WhatsappService implements OnModuleInit {
           
           if (msg.key.fromMe) continue; // Ignore messages sent by ourselves from processing
 
-          const msgTime = parseInt(msg.messageTimestamp) || 0;
+          const tsRaw = msg.messageTimestamp;
+          const msgTime = typeof tsRaw === 'number' 
+            ? tsRaw 
+            : (tsRaw?.low ? tsRaw.low : parseInt(tsRaw?.toString() || '0', 10));
+
           if (msgTime < cutoffSeconds) {
             droppedCount++;
             continue;
@@ -276,9 +280,11 @@ export class WhatsappService implements OnModuleInit {
           
           // Sort messages strictly by WhatsApp timestamp
           const sortedChatMessages = chatGroups[sender].sort(
-            (a: any, b: any) =>
-              (parseInt(a.messageTimestamp) || 0) -
-              (parseInt(b.messageTimestamp) || 0),
+            (a: any, b: any) => {
+              const tsA = typeof a.messageTimestamp === 'number' ? a.messageTimestamp : (a.messageTimestamp?.low || parseInt(a.messageTimestamp?.toString() || '0', 10));
+              const tsB = typeof b.messageTimestamp === 'number' ? b.messageTimestamp : (b.messageTimestamp?.low || parseInt(b.messageTimestamp?.toString() || '0', 10));
+              return tsA - tsB;
+            }
           );
 
           let currentBundle: any[] = [];
@@ -326,7 +332,8 @@ export class WhatsappService implements OnModuleInit {
             }
 
             let shouldStartNewBundle = false;
-            const ts = parseInt(msg.messageTimestamp) || 0;
+            const tsRaw = msg.messageTimestamp;
+            const ts = typeof tsRaw === 'number' ? tsRaw : (tsRaw?.low || parseInt(tsRaw?.toString() || '0', 10));
 
             if (
               currentBundle.length > 0 &&
@@ -504,7 +511,11 @@ export class WhatsappService implements OnModuleInit {
     if (!isMedia && !caption) return;
 
     let localPath: string | null = null;
-    let mimeType = '';
+    let mimeType =
+      imageMessage?.mimetype ||
+      videoMessage?.mimetype ||
+      documentMessage?.mimetype ||
+      (isImageDocument ? 'image/jpeg' : isVideoDocument ? 'video/mp4' : 'image/jpeg');
     const messageId = msg.key.id;
 
     if (isMedia) {
@@ -519,11 +530,6 @@ export class WhatsappService implements OnModuleInit {
           },
         );
 
-        mimeType =
-          imageMessage?.mimetype ||
-          videoMessage?.mimetype ||
-          documentMessage?.mimetype ||
-          'image/jpeg';
         const ext = mimeType.split('/')[1]?.split(';')[0] || 'jpeg'; // Strip out any charset etc
         const fileName = `${messageId}.${ext}`.replace(/[^a-zA-Z0-9.\-]/g, '_');
         const relPath = `api/uploads/${fileName}`;
