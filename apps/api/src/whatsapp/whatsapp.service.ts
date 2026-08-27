@@ -131,7 +131,7 @@ export class WhatsappService implements OnModuleInit {
         return;
       }
 
-      if (m.type === 'notify') {
+      if (m.type === 'notify' || m.type === 'append') {
         for (const msg of m.messages) {
           const senderId = msg.key.remoteJid;
           if (!senderId) continue;
@@ -144,6 +144,9 @@ export class WhatsappService implements OnModuleInit {
           if (msg.key.fromMe) continue;
           
           if (!isAllowed) continue;
+          
+          // Only process 'notify' messages as new incoming product drops
+          if (m.type !== 'notify') continue;
 
           const bufferKey = `${userId}_${senderId}`;
           if (!this.messageBuffer.has(bufferKey)) {
