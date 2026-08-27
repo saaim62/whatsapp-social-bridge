@@ -48,7 +48,7 @@ export class OcrService implements OnModuleDestroy {
           this.logger.log(`Attempting remote OCR at ${remoteUrl}...`);
           const response = await axios.post(`${remoteUrl}/detect-text`, formData, {
             headers: { ...formData.getHeaders() },
-            timeout: 3000,
+            timeout: 15000,
           });
           data = response.data;
           this.logger.log('Remote OCR succeeded.');
