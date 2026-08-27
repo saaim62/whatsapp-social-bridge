@@ -18,6 +18,7 @@ export class WhatsappService implements OnModuleInit {
   private bufferTimers: Map<string, NodeJS.Timeout> = new Map();
   private groupNameCache: Map<string, string> = new Map();
   private baileysModule: any;
+  private initializing: Set<string> = new Set();
 
   constructor(
     private readonly batchService: BatchService,
@@ -54,8 +55,23 @@ export class WhatsappService implements OnModuleInit {
   }
 
   async initializeWhatsApp(userId: string) {
-    const {
-      default: makeWASocket,
+    if (this.initializing.has(userId)) {
+      this.logger.warn(`Skipping concurrent initializeWhatsApp for ${userId}`);
+      return;
+    }
+    this.initializing.add(userId);
+
+    try {
+      const existingClient = this.clients.get(userId);
+      if (existingClient) {
+        try {
+          existingClient.ev.removeAllListeners();
+          existingClient.end(undefined);
+        } catch (e) {}
+      }
+
+      const {
+        default: makeWASocket,
       useMultiFileAuthState,
       DisconnectReason,
       fetchLatestWaWebVersion,
@@ -161,9 +177,6 @@ export class WhatsappService implements OnModuleInit {
           
           if (!isAllowed) continue;
           
-          // Only process 'notify' messages as new incoming product drops
-          if (m.type !== 'notify') continue;
-
           const bufferKey = `${userId}_${senderId}`;
           if (!this.messageBuffer.has(bufferKey)) {
             this.messageBuffer.set(bufferKey, []);
@@ -369,6 +382,9 @@ export class WhatsappService implements OnModuleInit {
     );
 
     this.logger.log('Initializing WhatsApp Web Bridge (Baileys)...');
+    } finally {
+      this.initializing.delete(userId);
+    }
   }
 
   private async flushMessageBuffer(userId: string, senderId: string) {
