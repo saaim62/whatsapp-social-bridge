@@ -30,7 +30,8 @@ const PAGE_TITLES: Record<string, string> = {
   "/settings": "Settings",
 };
 
-function getPageTitle(pathname: string): string {
+function getPageTitle(pathname: string | null): string {
+  if (!pathname) return "Dashboard";
   if (pathname.startsWith("/products/")) return "Product Review";
   return PAGE_TITLES[pathname] ?? "Dashboard";
 }
@@ -96,10 +97,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Navigation */}
         <nav className="relative flex-1 p-4 space-y-1">
           {NAV_ITEMS.map((item, i) => {
-            const isActive =
-              item.href === "/"
+            const isActive = pathname
+              ? item.href === "/"
                 ? pathname === "/"
-                : pathname.startsWith(item.href);
+                : pathname.startsWith(item.href)
+              : false;
             const Icon = item.icon;
 
             return (
@@ -211,10 +213,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Mobile Bottom Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-slate-200 flex items-center justify-around px-2 z-50 pb-safe">
         {NAV_ITEMS.map((item) => {
-          const isActive =
-            item.href === "/"
+          const isActive = pathname
+            ? item.href === "/"
               ? pathname === "/"
-              : pathname.startsWith(item.href);
+              : pathname.startsWith(item.href)
+            : false;
           const Icon = item.icon;
 
           return (

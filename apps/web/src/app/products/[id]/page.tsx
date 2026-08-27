@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft,
   Sparkles,
@@ -14,6 +14,10 @@ import {
   AlertCircle,
   Loader2,
   XCircle,
+  RotateCcw,
+  CheckSquare,
+  Square,
+  Layers,
 } from "lucide-react";
 import { API_URL, fetchWithAuth } from "@/lib/api";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -21,18 +25,28 @@ import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { ImageMaskModal } from "@/components/ui/ImageMaskModal";
 
 export default function ProductDetailPage() {
-  const { id } = useParams();
+  const params = useParams();
+  const id = params?.id as string;
   const router = useRouter();
   const [batch, setBatch] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [confirmDeleteMediaId, setConfirmDeleteMediaId] = useState<string | null>(null);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [overridePrice, setOverridePrice] = useState("");
   const [editedInstagram, setEditedInstagram] = useState("");
   const [editedFacebook, setEditedFacebook] = useState("");
   const [editedStory, setEditedStory] = useState("");
-  const [maskingMediaId, setMaskingMediaId] = useState<string | null>(null);
-  const [maskingMediaUrl, setMaskingMediaUrl] = useState<string | null>(null);
+  
+  // Modal & Selection state
+  const [isMaskModalOpen, setIsMaskModalOpen] = useState(false);
+  const [maskModalInitialIndex, setMaskModalInitialIndex] = useState(0);
+  const [selectedMediaIds, setSelectedMediaIds] = useState<Set<string>>(new Set());
+  const [mediaTimestamps, setMediaTimestamps] = useState<Record<string, number>>({});
+  const [revertingMediaId, setRevertingMediaId] = useState<string | null>(null);
+  const [isBulkReverting, setIsBulkReverting] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  
   const hasInitializedEdits = useRef(false);
 
   const applyPrice = (text: string) => {
@@ -40,39 +54,47 @@ export default function ProductDetailPage() {
     return text.replace(/\{\{PRICE\}\}/g, overridePrice || "");
   };
 
+  const fetchBatchData = useCallback(async () => {
+    try {
+      const res = await fetchWithAuth(`${API_URL}/api/batches/${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setBatch(data);
+        if (!hasInitializedEdits.current) {
+          if (data.generatedContent) {
+            setEditedInstagram(data.generatedContent.instagramCaption || "");
+            setEditedFacebook(data.generatedContent.facebookCaption || "");
+            setEditedStory(data.generatedContent.storyText || "");
+            hasInitializedEdits.current = true;
+          }
+          if (data.extractedData?.price) {
+            setOverridePrice(data.extractedData.price);
+          }
+        }
+        setLoading(false);
+        return data;
+      }
+    } catch (err) {
+      console.error("Failed to fetch batch data", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
   useEffect(() => {
     let interval: NodeJS.Timeout;
 
-    const fetchBatch = () => {
-      fetchWithAuth(`${API_URL}/api/batches/${id}`)
-        .then((res) => res.json())
-        .then((data) => {
-          setBatch(data);
-          if (!hasInitializedEdits.current) {
-            if (data.generatedContent) {
-              setEditedInstagram(data.generatedContent.instagramCaption || "");
-              setEditedFacebook(data.generatedContent.facebookCaption || "");
-              setEditedStory(data.generatedContent.storyText || "");
-              hasInitializedEdits.current = true;
-            }
-            if (data.extractedData?.price) {
-              setOverridePrice(data.extractedData.price);
-            }
-          }
-          setLoading(false);
-          if (data.status === "PUBLISHED" || data.status === "FAILED") {
-            clearInterval(interval);
-          }
-        });
-    };
+    fetchBatchData().then((data) => {
+      if (data && data.status !== "PUBLISHED" && data.status !== "FAILED") {
+        interval = setInterval(fetchBatchData, 3000);
+      }
+    });
 
-    fetchBatch();
-    interval = setInterval(fetchBatch, 3000);
     return () => clearInterval(interval);
-  }, [id]);
+  }, [fetchBatchData]);
 
   const approveAndPublish = async () => {
-    setBatch({ ...batch, status: "PUBLISHING" });
+    setBatch((prev: any) => ({ ...prev, status: "PUBLISHING" }));
     await fetchWithAuth(`${API_URL}/api/batches/${id}/approve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -82,6 +104,148 @@ export default function ProductDetailPage() {
         storyText: applyPrice(editedStory),
       }),
     });
+  };
+
+  const handleImageUpdated = (mediaId: string) => {
+    setMediaTimestamps((prev) => ({ ...prev, [mediaId]: Date.now() }));
+    fetchBatchData();
+  };
+
+  const handleSingleRevert = async (mediaId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setRevertingMediaId(mediaId);
+    try {
+      const res = await fetchWithAuth(`${API_URL}/api/batches/media/${mediaId}/revert`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        handleImageUpdated(mediaId);
+      } else {
+        const errorData = await res.json().catch(() => null);
+        alert(`Failed to revert: ${errorData?.message || res.statusText}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error reverting blur");
+    } finally {
+      setRevertingMediaId(null);
+    }
+  };
+
+  const handleSingleDelete = async (mediaId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (confirmDeleteMediaId !== mediaId) {
+      setConfirmDeleteMediaId(mediaId);
+      setTimeout(() => setConfirmDeleteMediaId(null), 3000);
+      return;
+    }
+
+    try {
+      await fetchWithAuth(`${API_URL}/api/batches/media/${mediaId}/delete`, { method: "POST" });
+      setBatch((prev: any) => ({
+        ...prev,
+        mediaAssets: prev.mediaAssets.filter((a: any) => a.id !== mediaId),
+      }));
+      setSelectedMediaIds((prev) => {
+        const next = new Set(prev);
+        next.delete(mediaId);
+        return next;
+      });
+      fetchBatchData();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setConfirmDeleteMediaId(null);
+    }
+  };
+
+  const toggleSelectMedia = (mediaId: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setSelectedMediaIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(mediaId)) {
+        next.delete(mediaId);
+      } else {
+        next.add(mediaId);
+      }
+      return next;
+    });
+  };
+
+  const imageAssets = (batch?.mediaAssets || []).filter(
+    (a: any) => !a.mimeType?.startsWith("video/")
+  );
+
+  const toggleSelectAll = () => {
+    if (selectedMediaIds.size === imageAssets.length) {
+      setSelectedMediaIds(new Set());
+    } else {
+      setSelectedMediaIds(new Set(imageAssets.map((a: any) => a.id)));
+    }
+  };
+
+  const handleBulkRevert = async () => {
+    if (selectedMediaIds.size === 0) return;
+    setIsBulkReverting(true);
+    const ids = Array.from(selectedMediaIds);
+    try {
+      await Promise.all(
+        ids.map((mediaId) =>
+          fetchWithAuth(`${API_URL}/api/batches/media/${mediaId}/revert`, { method: "POST" })
+        )
+      );
+      const now = Date.now();
+      setMediaTimestamps((prev) => {
+        const updated = { ...prev };
+        ids.forEach((id) => {
+          updated[id] = now;
+        });
+        return updated;
+      });
+      setSelectedMediaIds(new Set());
+      await fetchBatchData();
+    } catch (err) {
+      console.error("Bulk revert error", err);
+      alert("Failed to revert some images");
+    } finally {
+      setIsBulkReverting(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedMediaIds.size === 0) return;
+    if (!confirmBulkDelete) {
+      setConfirmBulkDelete(true);
+      setTimeout(() => setConfirmBulkDelete(false), 4000);
+      return;
+    }
+
+    setIsBulkDeleting(true);
+    const ids = Array.from(selectedMediaIds);
+    try {
+      await Promise.all(
+        ids.map((mediaId) =>
+          fetchWithAuth(`${API_URL}/api/batches/media/${mediaId}/delete`, { method: "POST" })
+        )
+      );
+      setBatch((prev: any) => ({
+        ...prev,
+        mediaAssets: prev.mediaAssets.filter((a: any) => !selectedMediaIds.has(a.id)),
+      }));
+      setSelectedMediaIds(new Set());
+      await fetchBatchData();
+    } catch (err) {
+      console.error("Bulk delete error", err);
+      alert("Failed to delete some images");
+    } finally {
+      setIsBulkDeleting(false);
+      setConfirmBulkDelete(false);
+    }
   };
 
   if (loading) return <LoadingSpinner label="Loading product..." />;
@@ -234,110 +398,237 @@ export default function ProductDetailPage() {
               </div>
             </motion.div>
 
-            {/* Media */}
+            {/* Media Section with Bulk Selection & Fast Actions */}
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
               className="glass-card overflow-hidden"
             >
-              <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
-                <ImageIcon className="w-4 h-4 text-blue-500" />
-                <h2 className="font-bold text-slate-800">
-                  Media ({batch.mediaAssets?.length || 0})
-                </h2>
+              {/* Media Section Header */}
+              <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4 text-blue-500" />
+                  <h2 className="font-bold text-slate-800">
+                    Media ({batch.mediaAssets?.length || 0})
+                  </h2>
+                </div>
+
+                {imageAssets.length > 1 && (
+                  <button
+                    onClick={toggleSelectAll}
+                    className="text-xs font-semibold text-brand-600 hover:text-brand-700 flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-brand-50 transition-colors"
+                  >
+                    {selectedMediaIds.size === imageAssets.length ? (
+                      <>
+                        <CheckSquare className="w-3.5 h-3.5 text-brand-600" />
+                        Deselect All
+                      </>
+                    ) : (
+                      <>
+                        <Square className="w-3.5 h-3.5 text-slate-400" />
+                        Select All ({imageAssets.length})
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
-              <div className="p-6">
+
+              {/* Bulk Actions Floating/Pinned Bar */}
+              <AnimatePresence>
+                {selectedMediaIds.size > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="bg-brand-50 border-b border-brand-100 px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-2"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-brand-700 bg-brand-100 px-2 py-0.5 rounded-full">
+                        {selectedMediaIds.size} Selected
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 ml-auto">
+                      <button
+                        onClick={handleBulkRevert}
+                        disabled={isBulkReverting}
+                        className="px-2.5 py-1 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg shadow-sm flex items-center gap-1.5 transition-all disabled:opacity-50"
+                        title="Remove Auto Blur on selected images"
+                      >
+                        <RotateCcw className="w-3 h-3 text-rose-500" />
+                        {isBulkReverting ? "Reverting..." : "Remove Blur"}
+                      </button>
+
+                      <button
+                        onClick={handleBulkDelete}
+                        disabled={isBulkDeleting}
+                        className={`px-2.5 py-1 text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-all ${
+                          confirmBulkDelete
+                            ? "bg-rose-700 text-white hover:bg-rose-800"
+                            : "bg-rose-600 text-white hover:bg-rose-700"
+                        } disabled:opacity-50`}
+                        title="Delete selected images"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        {isBulkDeleting
+                          ? "Deleting..."
+                          : confirmBulkDelete
+                          ? "Confirm Delete?"
+                          : "Delete"}
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div className="p-4 sm:p-6">
                 {batch.mediaAssets?.length > 0 ? (
                   <div className="grid grid-cols-2 gap-3">
-                    {batch.mediaAssets.map((asset: any) => (
-                      <div
-                        key={asset.id}
-                        className="relative group rounded-xl overflow-hidden border border-slate-200 aspect-square"
-                      >
-                        {asset.mimeType?.startsWith("video/") ? (
-                          <video
-                            src={`${API_URL}/${asset.localPath}`}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                            muted
-                            loop
-                            autoPlay
-                            playsInline
-                          />
-                        ) : (
-                          <img
-                            src={`${API_URL}/${asset.localPath}?t=${Date.now()}`}
-                            alt=""
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                          />
-                        )}
-                        
-                        {asset.isProcessing && (
-                          <div className="absolute inset-0 bg-white/70 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center">
-                            <Loader2 className="w-8 h-8 text-brand-600 animate-spin mb-2" />
-                            <span className="text-xs font-bold text-brand-700 tracking-wider">PROCESSING AI...</span>
-                            <button
-                              onClick={async (e) => {
-                                e.preventDefault();
-                                try {
-                                  await fetchWithAuth(`${API_URL}/api/batches/media/${asset.id}/stop-blur`, { method: "POST" });
-                                  window.location.reload();
-                                } catch (err) {
-                                  console.error("Failed to stop blur", err);
-                                }
-                              }}
-                              className="mt-3 flex items-center gap-1 px-3 py-1.5 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-full text-[10px] font-bold tracking-wide transition-colors"
-                            >
-                              <XCircle className="w-3.5 h-3.5" />
-                              STOP
-                            </button>
-                          </div>
-                        )}
-                        
-                        <div className={`absolute inset-0 bg-gradient-to-t from-slate-900/80 via-transparent to-slate-900/40 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity flex flex-col items-end justify-between p-2 ${asset.isProcessing ? 'hidden' : ''}`}>
-                          <button
-                            onClick={async (e) => {
-                              e.preventDefault();
-                              if (confirmDeleteMediaId !== asset.id) {
-                                setConfirmDeleteMediaId(asset.id);
-                                setTimeout(() => setConfirmDeleteMediaId(null), 3000);
-                                return;
-                              }
-                              
-                              try {
-                                await fetchWithAuth(`${API_URL}/api/batches/media/${asset.id}/delete`, { method: "POST" });
-                                window.location.reload();
-                              } catch (err) {
-                                console.error(err);
-                                setConfirmDeleteMediaId(null);
-                              }
-                            }}
-                            className={`p-1.5 rounded-lg shadow-sm transition-all flex items-center gap-1 backdrop-blur-md ${
-                              confirmDeleteMediaId === asset.id 
-                                ? "bg-rose-700 text-white hover:bg-rose-800" 
-                                : "bg-rose-600/90 text-white hover:bg-rose-600"
-                            }`}
-                            title={confirmDeleteMediaId === asset.id ? "Click again to confirm" : "Delete Image"}
-                          >
-                            {confirmDeleteMediaId === asset.id && <span className="text-[10px] font-bold pl-1">Confirm</span>}
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                          
-                          {!asset.mimeType?.startsWith("video/") && (
-                            <button
-                              onClick={(e) => {
-                                e.preventDefault();
-                                setMaskingMediaId(asset.id);
-                                setMaskingMediaUrl(`${API_URL}/${asset.localPath}`);
-                              }}
-                              className="w-full py-2 lg:py-1.5 rounded-lg bg-slate-800/90 backdrop-blur-md hover:bg-slate-800 text-white text-sm lg:text-xs font-semibold shadow-sm transition-all border border-white/10"
-                            >
-                              Mask Logo
-                            </button>
+                    {batch.mediaAssets.map((asset: any) => {
+                      const isImage = !asset.mimeType?.startsWith("video/");
+                      const imageIndex = isImage
+                        ? imageAssets.findIndex((a: any) => a.id === asset.id)
+                        : -1;
+                      const isSelected = selectedMediaIds.has(asset.id);
+                      const timestamp = mediaTimestamps[asset.id] || 0;
+                      const mediaSrc = `${API_URL}/${asset.localPath}${
+                        timestamp ? `?t=${timestamp}` : ""
+                      }`;
+
+                      return (
+                        <div
+                          key={asset.id}
+                          className={`relative group rounded-xl overflow-hidden border aspect-square transition-all ${
+                            isSelected
+                              ? "border-brand-500 ring-2 ring-brand-500/30"
+                              : "border-slate-200"
+                          }`}
+                        >
+                          {asset.mimeType?.startsWith("video/") ? (
+                            <video
+                              src={mediaSrc}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                              muted
+                              loop
+                              autoPlay
+                              playsInline
+                            />
+                          ) : (
+                            <img
+                              src={mediaSrc}
+                              alt=""
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                            />
                           )}
+
+                          {/* AI Processing Overlay */}
+                          {asset.isProcessing && (
+                            <div className="absolute inset-0 bg-white/70 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center">
+                              <Loader2 className="w-8 h-8 text-brand-600 animate-spin mb-2" />
+                              <span className="text-xs font-bold text-brand-700 tracking-wider">
+                                PROCESSING AI...
+                              </span>
+                              <button
+                                onClick={async (e) => {
+                                  e.preventDefault();
+                                  try {
+                                    await fetchWithAuth(
+                                      `${API_URL}/api/batches/media/${asset.id}/stop-blur`,
+                                      { method: "POST" }
+                                    );
+                                    fetchBatchData();
+                                  } catch (err) {
+                                    console.error("Failed to stop blur", err);
+                                  }
+                                }}
+                                className="mt-3 flex items-center gap-1 px-3 py-1.5 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-full text-[10px] font-bold tracking-wide transition-colors"
+                              >
+                                <XCircle className="w-3.5 h-3.5" />
+                                STOP
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Interactive Card Overlay */}
+                          <div
+                            className={`absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/20 to-slate-900/60 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2 ${
+                              asset.isProcessing ? "hidden" : ""
+                            }`}
+                          >
+                            {/* Top Controls: Checkbox (Left) + Delete Button (Right) */}
+                            <div className="flex items-center justify-between w-full">
+                              {isImage ? (
+                                <button
+                                  onClick={(e) => toggleSelectMedia(asset.id, e)}
+                                  className={`p-1.5 rounded-lg backdrop-blur-md shadow-sm transition-all ${
+                                    isSelected
+                                      ? "bg-brand-600 text-white"
+                                      : "bg-slate-900/60 text-white/80 hover:bg-slate-900/80 hover:text-white"
+                                  }`}
+                                  title={isSelected ? "Deselect" : "Select"}
+                                >
+                                  {isSelected ? (
+                                    <CheckSquare className="w-4 h-4" />
+                                  ) : (
+                                    <Square className="w-4 h-4" />
+                                  )}
+                                </button>
+                              ) : (
+                                <div />
+                              )}
+
+                              <button
+                                onClick={(e) => handleSingleDelete(asset.id, e)}
+                                className={`p-1.5 rounded-lg shadow-sm transition-all flex items-center gap-1 backdrop-blur-md ${
+                                  confirmDeleteMediaId === asset.id
+                                    ? "bg-rose-700 text-white hover:bg-rose-800"
+                                    : "bg-rose-600/90 text-white hover:bg-rose-600"
+                                }`}
+                                title={
+                                  confirmDeleteMediaId === asset.id
+                                    ? "Click again to confirm"
+                                    : "Delete Media"
+                                }
+                              >
+                                {confirmDeleteMediaId === asset.id && (
+                                  <span className="text-[10px] font-bold pl-1">Confirm</span>
+                                )}
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+
+                            {/* Bottom Controls: Mask Logo & Quick Remove Blur */}
+                            {isImage && (
+                              <div className="flex flex-col gap-1.5 w-full">
+                                <div className="flex gap-1.5">
+                                  <button
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      setMaskModalInitialIndex(imageIndex >= 0 ? imageIndex : 0);
+                                      setIsMaskModalOpen(true);
+                                    }}
+                                    className="flex-1 py-1.5 px-2 rounded-lg bg-slate-800/95 backdrop-blur-md hover:bg-slate-800 text-white text-xs font-semibold shadow-sm transition-all border border-white/10 text-center"
+                                  >
+                                    Mask Logo
+                                  </button>
+
+                                  <button
+                                    onClick={(e) => handleSingleRevert(asset.id, e)}
+                                    disabled={revertingMediaId === asset.id}
+                                    className="py-1.5 px-2.5 rounded-lg bg-rose-600/90 hover:bg-rose-600 backdrop-blur-md text-white text-xs font-semibold shadow-sm transition-all border border-white/10 flex items-center justify-center gap-1 disabled:opacity-50"
+                                    title="Quickly Remove Auto Blur / Restore Original"
+                                  >
+                                    <RotateCcw className={`w-3 h-3 ${revertingMediaId === asset.id ? "animate-spin" : ""}`} />
+                                    <span className="hidden sm:inline">Remove Blur</span>
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-sm text-slate-400 text-center py-6">
@@ -413,18 +704,13 @@ export default function ProductDetailPage() {
         </div>
       </div>
 
+      {/* Multi-Image Mask Modal with Slider and Instant In-Place Updates */}
       <ImageMaskModal
-        isOpen={!!maskingMediaId}
-        mediaId={maskingMediaId || ""}
-        mediaUrl={maskingMediaUrl || ""}
-        onClose={() => {
-          setMaskingMediaId(null);
-          setMaskingMediaUrl(null);
-        }}
-        onSuccess={() => {
-          // Add a timestamp to force the browser to reload the image
-          window.location.reload();
-        }}
+        isOpen={isMaskModalOpen}
+        mediaList={imageAssets}
+        initialIndex={maskModalInitialIndex}
+        onClose={() => setIsMaskModalOpen(false)}
+        onImageUpdated={handleImageUpdated}
       />
     </div>
   );
