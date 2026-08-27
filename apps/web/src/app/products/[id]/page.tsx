@@ -104,25 +104,27 @@ export default function ProductDetailPage() {
   const isEditable = batch.status === "READY" || batch.status === "FAILED";
 
   return (
-    <div className="-m-6 sm:-m-8">
+    <div className="-m-4 sm:-m-8">
       {/* Sticky header */}
-      <div className="sticky top-0 z-20 bg-white/70 backdrop-blur-xl border-b border-slate-200/60 px-6 sm:px-8 py-4">
-        <div className="flex items-center justify-between max-w-7xl mx-auto">
-          <div className="flex items-center gap-4">
+      <div className="sticky top-0 z-20 bg-white/70 backdrop-blur-xl border-b border-slate-200/60 px-4 sm:px-8 py-3 sm:py-4">
+        <div className="flex items-center justify-between max-w-7xl mx-auto gap-2">
+          <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
             <button
               onClick={() => router.push("/products")}
-              className="p-2 -ml-2 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all"
+              className="p-1.5 sm:p-2 -ml-2 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all flex-shrink-0"
             >
-              <ChevronLeft className="w-5 h-5" />
+              <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-xl font-extrabold text-slate-900">
+            <div className="min-w-0">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                <h1 className="text-base sm:text-xl font-extrabold text-slate-900 truncate">
                   {batch.extractedData?.product_name || "Product Review"}
                 </h1>
-                <StatusBadge status={batch.status} />
+                <div className="hidden sm:block">
+                  <StatusBadge status={batch.status} />
+                </div>
               </div>
-              <p className="text-sm text-slate-500 mt-0.5">
+              <p className="text-xs sm:text-sm text-slate-500 mt-0.5 truncate">
                 From {batch.senderName || "WhatsApp"}
               </p>
             </div>
@@ -130,15 +132,20 @@ export default function ProductDetailPage() {
           <button
             onClick={approveAndPublish}
             disabled={!isEditable}
-            className="btn-gradient"
+            className="btn-gradient px-3 py-2 sm:px-4 text-[11px] sm:text-sm whitespace-nowrap flex-shrink-0"
           >
-            <Save className="w-4 h-4" />
-            Approve & Publish
+            <Save className="w-3 h-3 sm:w-4 sm:h-4 hidden sm:block" />
+            <span className="hidden sm:inline">Approve & Publish</span>
+            <span className="sm:hidden">Publish</span>
           </button>
+        </div>
+        {/* Mobile Status Badge under header */}
+        <div className="sm:hidden mt-2 flex items-center justify-between">
+          <StatusBadge status={batch.status} />
         </div>
       </div>
 
-      <div className="px-6 sm:px-8 py-8 max-w-7xl mx-auto">
+      <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-7xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left column */}
           <div className="lg:col-span-5 space-y-6">

@@ -61,12 +61,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="h-screen flex overflow-hidden">
-      {/* Sidebar */}
+      {/* Sidebar (Desktop) */}
       <motion.aside
         initial={{ x: -20, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className="w-[260px] flex-shrink-0 flex flex-col relative overflow-hidden"
+        className="hidden md:flex w-[260px] flex-shrink-0 flex-col relative overflow-hidden"
         style={{ background: "var(--color-sidebar)" }}
       >
         {/* Ambient glow */}
@@ -176,13 +176,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               Live
             </span>
           </div>
-          <p className="hidden md:block text-xs text-slate-400 font-medium">
-            {BRAND.tagline}
-          </p>
+          <div className="flex items-center gap-4">
+            <p className="hidden lg:block text-xs text-slate-400 font-medium">
+              {BRAND.tagline}
+            </p>
+            {/* Mobile Sign Out Button in Header */}
+            <button
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              className="md:hidden flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 transition-colors"
+              title="Sign Out"
+            >
+              <Zap className="w-4 h-4" /> {/* Or any other icon */}
+            </button>
+          </div>
         </motion.header>
 
         {/* Content */}
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto pb-16 md:pb-0">
           <AnimatePresence mode="wait">
             <motion.div
               key={pathname}
@@ -190,13 +200,37 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-              className="p-6 sm:p-8 max-w-7xl"
+              className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto w-full"
             >
               {children}
             </motion.div>
           </AnimatePresence>
         </main>
       </div>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-slate-200 flex items-center justify-around px-2 z-50 pb-safe">
+        {NAV_ITEMS.map((item) => {
+          const isActive =
+            item.href === "/"
+              ? pathname === "/"
+              : pathname.startsWith(item.href);
+          const Icon = item.icon;
+
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex flex-col items-center justify-center w-16 h-full gap-1 transition-colors ${
+                isActive ? "text-brand-600" : "text-slate-400 hover:text-slate-600"
+              }`}
+            >
+              <Icon className={`w-5 h-5 ${isActive ? "fill-brand-50/50" : ""}`} />
+              <span className="text-[10px] font-medium">{item.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
     </div>
   );
 }

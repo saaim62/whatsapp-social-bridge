@@ -126,7 +126,7 @@ export default function DashboardPage() {
         transition={{ delay: 0.4, duration: 0.5 }}
         className="glass-card overflow-hidden"
       >
-        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+        <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-slate-100 flex items-center justify-between">
           <h3 className="text-lg font-bold text-slate-900">Recent Products</h3>
           <Link
             href="/products"
@@ -157,9 +157,10 @@ export default function DashboardPage() {
               >
                 <Link
                   href={`/products/${batch.id}`}
-                  className="flex items-center gap-4 px-6 py-4 hover:bg-brand-50/30 transition-colors duration-200 group"
+                  className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 px-4 sm:px-6 py-4 hover:bg-brand-50/30 transition-colors duration-200 group"
                 >
-                  <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 flex-shrink-0">
+                  <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                    <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 flex-shrink-0">
                     {batch.mediaAssets?.[0]?.localPath ? (
                       <img
                         src={`${API_URL}/${batch.mediaAssets[0].localPath}`}
@@ -183,7 +184,10 @@ export default function DashboardPage() {
                       {formatDistanceToNow(new Date(batch.createdAt))} ago
                     </p>
                   </div>
-                  <StatusBadge status={batch.status} />
+                  </div>
+                  <div className="sm:flex-shrink-0">
+                    <StatusBadge status={batch.status} />
+                  </div>
                 </Link>
               </motion.li>
             ))}

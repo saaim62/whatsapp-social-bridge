@@ -149,13 +149,13 @@ export default function SettingsPage() {
         <h2 className="text-xl font-bold text-slate-900 pt-4">Data Sources</h2>
 
         {/* Connections: WhatsApp */}
-        <div className="glass-card p-6 border-l-4 border-l-[#25D366]">
+        <div className="glass-card p-4 sm:p-6 border-l-4 border-l-[#25D366]">
           <div className="flex items-start gap-4">
             <div className="w-10 h-10 rounded-xl bg-[#25D366]/20 flex items-center justify-center flex-shrink-0">
               <Radio className="w-5 h-5 text-[#25D366]" />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0">
                 <div>
                   <h3 className="font-bold text-slate-900">WhatsApp Connection</h3>
                   <p className="text-sm text-slate-500 mt-1 max-w-md">
@@ -189,13 +189,13 @@ export default function SettingsPage() {
         </div>
 
         {/* Connections: Facebook / Meta */}
-        <div className="glass-card p-6 border-l-4 border-l-[#1877F2]">
+        <div className="glass-card p-4 sm:p-6 border-l-4 border-l-[#1877F2]">
           <div className="flex items-start gap-4">
             <div className="w-10 h-10 rounded-xl bg-[#1877F2]/20 flex items-center justify-center flex-shrink-0">
               <Share2 className="w-5 h-5 text-[#1877F2]" />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0">
                 <div>
                   <h3 className="font-bold text-slate-900">Meta (Facebook & Instagram)</h3>
                   <p className="text-sm text-slate-500 mt-1 max-w-md">
@@ -212,8 +212,8 @@ export default function SettingsPage() {
                     </button>
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-3 items-end">
-                    <button onClick={handleConnectMeta} className="px-4 py-2 bg-[#1877F2] hover:bg-[#166FE5] text-white text-sm font-semibold rounded-lg flex items-center gap-2 transition-colors shadow-md shadow-[#1877F2]/30">
+                  <div className="flex flex-col gap-3 sm:items-end">
+                    <button onClick={handleConnectMeta} className="w-full sm:w-auto justify-center px-4 py-2 bg-[#1877F2] hover:bg-[#166FE5] text-white text-sm font-semibold rounded-lg flex items-center gap-2 transition-colors shadow-md shadow-[#1877F2]/30">
                       <LinkIcon className="w-4 h-4" /> Connect Meta
                     </button>
                   </div>
@@ -241,13 +241,13 @@ export default function SettingsPage() {
         <h2 className="text-xl font-bold text-slate-900 pt-6">Synchronization Settings</h2>
 
         {/* Live Sync */}
-        <div className="glass-card p-6">
+        <div className="glass-card p-4 sm:p-6">
           <div className="flex items-start gap-4">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#25D366] to-[#128C7E] flex items-center justify-center shadow-lg shadow-emerald-500/20 flex-shrink-0">
               <Radio className="w-5 h-5 text-white" />
             </div>
             <div className="flex-1">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0">
                 <div>
                   <h3 className="font-bold text-slate-900">Live Auto-Sync</h3>
                   <p className="text-sm text-slate-500 mt-1 max-w-md">
@@ -292,7 +292,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Historical Sync */}
-        <div className="glass-card p-6">
+        <div className="glass-card p-4 sm:p-6">
           <div className="flex items-start gap-4">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center shadow-lg shadow-violet-500/20 flex-shrink-0">
               <History className="w-5 h-5 text-white" />

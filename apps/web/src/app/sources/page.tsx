@@ -122,10 +122,10 @@ export default function SourcesPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-100">
         <div>
-          <h2 className="text-xl font-bold text-slate-900">Allowed Sources</h2>
-          <p className="text-sm text-slate-500 mt-1">
+          <h2 className="text-lg sm:text-xl font-bold text-slate-900">Allowed Sources</h2>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
             Toggle which groups or channels are allowed to forward products to the bridge.
             Messages from disabled sources will be completely ignored.
           </p>
@@ -134,7 +134,7 @@ export default function SourcesPage() {
         <button
           onClick={syncGroups}
           disabled={syncing}
-          className="btn-gradient flex items-center gap-2 px-5 py-2.5 shadow-sm disabled:opacity-50"
+          className="btn-gradient flex items-center justify-center gap-2 px-5 py-2.5 shadow-sm disabled:opacity-50 w-full sm:w-auto"
         >
           {syncing ? (
             <Loader2 className="w-4 h-4 animate-spin" />

@@ -103,7 +103,101 @@ export default function ProductsPage() {
         transition={{ delay: 0.2, duration: 0.5 }}
         className="glass-card overflow-hidden"
       >
-        <div className="overflow-x-auto">
+        {/* MOBILE CARD VIEW */}
+        <div className="md:hidden flex flex-col divide-y divide-slate-100">
+          {batches.map((batch, i) => (
+            <motion.div
+              key={batch.id}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.1 + i * 0.03 }}
+              className="p-4 sm:p-5 flex flex-col gap-4"
+            >
+              <div className="flex gap-4">
+                {/* Media Thumbnail */}
+                <div className="w-20 h-20 rounded-xl overflow-hidden border border-slate-200/80 shadow-sm bg-slate-50 relative flex-shrink-0">
+                  {batch.mediaAssets?.some((m: any) => m.isProcessing) && (
+                    <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center">
+                      <Loader2 className="w-5 h-5 text-brand-600 animate-spin" />
+                    </div>
+                  )}
+                  {batch.mediaAssets?.[0]?.localPath ? (
+                    batch.mediaAssets[0].mimeType?.startsWith("video/") ? (
+                      <video
+                        src={`${API_URL}/${batch.mediaAssets[0].localPath}`}
+                        className="w-full h-full object-cover"
+                        muted loop autoPlay playsInline
+                      />
+                    ) : (
+                      <img
+                        src={`${API_URL}/${batch.mediaAssets[0].localPath}?t=${Date.now()}`}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    )
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <ImageIcon className="w-6 h-6 text-slate-300" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Product Info */}
+                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                  <p className="font-bold text-slate-900 line-clamp-1">
+                    {batch.extractedData?.product_name || "Processing..."}
+                  </p>
+                  <p className="text-sm text-slate-500 mt-0.5 mb-2">
+                    {batch.extractedData?.price || "—"}
+                  </p>
+                  <div>
+                    <StatusBadge status={batch.status} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Metadata */}
+              <div className="flex items-center justify-between text-[11px] font-medium text-slate-500 bg-slate-50 px-3 py-2 rounded-lg">
+                <span className="truncate pr-2">
+                  From: {batch.senderName || batch.senderId?.split("@")[0] || "Unknown"}
+                </span>
+                <span className="whitespace-nowrap">
+                  {formatDistanceToNow(new Date(batch.createdAt))} ago
+                </span>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  onClick={() => deleteBatch(batch.id)}
+                  className={`flex-1 py-2.5 px-3 rounded-lg text-sm font-bold transition-colors ${
+                    confirmDeleteId === batch.id
+                      ? "bg-red-500 text-white"
+                      : "bg-red-50 text-red-600 hover:bg-red-100"
+                  }`}
+                >
+                  {confirmDeleteId === batch.id ? "Confirm" : "Delete"}
+                </button>
+                <Link
+                  href={`/products/${batch.id}`}
+                  className="flex-[2] btn-gradient text-center py-2.5 px-3 text-sm font-bold rounded-lg shadow-sm"
+                >
+                  Review Product
+                </Link>
+              </div>
+            </motion.div>
+          ))}
+          {batches.length === 0 && (
+            <div className="p-12 text-center">
+              <Layers className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+              <p className="font-medium text-slate-600">No products yet</p>
+              <p className="text-xs text-slate-400 mt-1">Send a WhatsApp message.</p>
+            </div>
+          )}
+        </div>
+
+        {/* DESKTOP TABLE VIEW */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="min-w-full">
             <thead>
               <tr className="border-b border-slate-100">
@@ -160,7 +254,7 @@ export default function ProductsPage() {
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <p className="font-bold text-slate-900">
+                    <p className="font-bold text-slate-900 line-clamp-1">
                       {batch.extractedData?.product_name || "Processing..."}
                     </p>
                     <p className="text-sm text-slate-500 mt-0.5">
