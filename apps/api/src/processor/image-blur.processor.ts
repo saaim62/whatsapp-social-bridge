@@ -34,7 +34,11 @@ export class ImageBlurProcessor extends WorkerHost {
   }
 
   private async detectAndBlurLogo(mediaId: string, localPath: string) {
-    const absolutePath = path.join(process.cwd(), localPath);
+    let actualLocalPath = localPath;
+    if (actualLocalPath.startsWith('api/')) {
+      actualLocalPath = actualLocalPath.substring(4); // Remove 'api/' prefix for filesystem path
+    }
+    const absolutePath = path.join(process.cwd(), actualLocalPath);
 
     if (!fs.existsSync(absolutePath)) {
       this.logger.warn(`Media file not found at ${absolutePath}`);

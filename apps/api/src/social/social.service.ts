@@ -212,7 +212,7 @@ export class SocialService {
       const isVideoMap: Record<string, boolean> = {};
 
       for (const asset of carouselAssets) {
-        let absolutePath = path.join(process.cwd(), asset.localPath);
+        let absolutePath = path.join(process.cwd(), asset.localPath.replace(/^api\//, ''));
         if (fs.existsSync(absolutePath)) {
           const isVideo = asset.mimeType?.startsWith('video/') || false;
 
@@ -320,7 +320,7 @@ export class SocialService {
       if (photos.length > 1) {
         const mediaFbids: string[] = [];
         for (const asset of photos) {
-          const absolutePath = path.join(process.cwd(), asset.localPath);
+          const absolutePath = path.join(process.cwd(), asset.localPath.replace(/^api\//, ''));
           if (fs.existsSync(absolutePath)) {
             const formData = new FormData();
             formData.append('source', fs.createReadStream(absolutePath));
@@ -357,7 +357,7 @@ export class SocialService {
           `Successfully published photo album to Facebook: ${finalFeedResId}`,
         );
       } else if (photos.length === 1) {
-        const absolutePath = path.join(process.cwd(), photos[0].localPath);
+        const absolutePath = path.join(process.cwd(), photos[0].localPath.replace(/^api\//, ''));
         if (fs.existsSync(absolutePath)) {
           const formData = new FormData();
           formData.append('message', caption);
@@ -382,7 +382,7 @@ export class SocialService {
 
       // 2. Publish all videos sequentially as individual posts
       for (const asset of videos) {
-        let absolutePath = path.join(process.cwd(), asset.localPath);
+        let absolutePath = path.join(process.cwd(), asset.localPath.replace(/^api\//, ''));
         if (fs.existsSync(absolutePath)) {
           absolutePath = await this.compressVideo(absolutePath);
 

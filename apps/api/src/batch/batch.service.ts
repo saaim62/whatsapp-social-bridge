@@ -320,7 +320,7 @@ export class BatchService {
     // Delete physical files
     for (const media of batch.mediaAssets) {
       if (media.localPath) {
-        const absolutePath = path.join(process.cwd(), media.localPath);
+        const absolutePath = path.join(process.cwd(), media.localPath.replace(/^api\//, ''));
         if (fs.existsSync(absolutePath)) {
           try {
             fs.unlinkSync(absolutePath);
@@ -343,8 +343,9 @@ export class BatchService {
     });
     if (!media || media.batch.userId !== userId) return { success: false, message: 'Media not found' };
 
+    // 3. Delete physical file
     if (media.localPath) {
-      const absolutePath = path.join(process.cwd(), media.localPath);
+      const absolutePath = path.join(process.cwd(), media.localPath.replace(/^api\//, ''));
       if (fs.existsSync(absolutePath)) {
         try {
           fs.unlinkSync(absolutePath);
@@ -371,7 +372,7 @@ export class BatchService {
       return { success: false, message: 'Media or local file not found' };
     }
 
-    const absolutePath = path.join(process.cwd(), media.localPath);
+    const absolutePath = path.join(process.cwd(), media.localPath.replace(/^api\//, ''));
     if (!fs.existsSync(absolutePath)) {
       return { success: false, message: 'File does not exist on disk' };
     }
@@ -433,7 +434,7 @@ export class BatchService {
       return { success: false, message: 'Media or local file not found' };
     }
 
-    const absolutePath = path.join(process.cwd(), media.localPath);
+    const absolutePath = path.join(process.cwd(), media.localPath.replace(/^api\//, ''));
     const ext = path.extname(absolutePath);
     const originalPath = absolutePath.replace(ext, `_original${ext}`);
     

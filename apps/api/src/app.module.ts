@@ -20,10 +20,16 @@ import { AuthModule } from './auth/auth.module';
       isGlobal: true,
       envFilePath: '.env', // root .env or apps/api/.env
     }),
-    ServeStaticModule.forRoot({
-      rootPath: join(process.cwd(), 'uploads'),
-      serveRoot: '/api/uploads',
-    }),
+    ServeStaticModule.forRoot(
+      {
+        rootPath: join(process.cwd(), 'uploads'),
+        serveRoot: '/api/uploads',
+      },
+      {
+        rootPath: join(process.cwd(), 'uploads'),
+        serveRoot: '/uploads', // For backward compatibility with old localPath records
+      }
+    ),
     BullModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
