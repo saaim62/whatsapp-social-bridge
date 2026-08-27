@@ -40,9 +40,29 @@ export class OcrService implements OnModuleDestroy {
       const formData = new FormData();
       formData.append('file', originalBuffer, { filename: 'image.jpg' });
 
-      const { data } = await axios.post('http://127.0.0.1:8000/detect-text', formData, {
-        headers: { ...formData.getHeaders() },
-      });
+      const remoteUrl = process.env.REMOTE_OCR_SERVER_URL;
+      let data: any = null;
+
+      if (remoteUrl) {
+        try {
+          this.logger.log(`Attempting remote OCR at ${remoteUrl}...`);
+          const response = await axios.post(`${remoteUrl}/detect-text`, formData, {
+            headers: { ...formData.getHeaders() },
+            timeout: 3000,
+          });
+          data = response.data;
+          this.logger.log('Remote OCR succeeded.');
+        } catch (err: any) {
+          this.logger.warn(`Remote OCR failed or timed out (${err.message}). Falling back to local server...`);
+        }
+      }
+
+      if (!data) {
+        const response = await axios.post('http://127.0.0.1:8000/detect-text', formData, {
+          headers: { ...formData.getHeaders() },
+        });
+        data = response.data;
+      }
 
       const found: DetectedLogo[] = [];
 
