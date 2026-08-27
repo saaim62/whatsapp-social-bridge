@@ -18,7 +18,7 @@ if is_mac:
     try:
         from paddleocr import PaddleOCR
         print("[OCR Server] Running on macOS. Initializing PaddleOCR...")
-        reader = PaddleOCR(use_angle_cls=True, lang='en', use_gpu=False, show_log=False)
+        reader = PaddleOCR(use_textline_orientation=True, lang='en', show_log=False)
         backend = 'paddle'
         print("[OCR Server] PaddleOCR initialized successfully!")
     except ImportError:
