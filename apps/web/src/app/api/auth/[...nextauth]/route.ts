@@ -13,7 +13,7 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password) return null;
         try {
-          const res = await axios.post('http://localhost:3001/api/auth/login', {
+          const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001'}/api/auth/login`, {
             email: credentials.email,
             password: credentials.password,
           });
