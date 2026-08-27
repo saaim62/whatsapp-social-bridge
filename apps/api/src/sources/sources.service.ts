@@ -154,12 +154,13 @@ export class SourcesService {
         const chunk = contacts.slice(i, i + 100);
         await Promise.all(
           chunk.map(async (c: any) => {
-            if (!c.id || !c.name) return;
+            const contactName = c.name || c.verifiedName || c.notify;
+            if (!c.id || !contactName) return;
             try {
               await this.prisma.whatsappContact.upsert({
                 where: { userId_jid: { userId, jid: c.id } },
-                update: { name: c.name },
-                create: { userId, jid: c.id, name: c.name },
+                update: { name: contactName },
+                create: { userId, jid: c.id, name: contactName },
               });
 
               // Also auto-heal any existing WhatsappSource that has a raw number name
@@ -170,7 +171,7 @@ export class SourcesService {
               if (source && (source.name === source.jid.split('@')[0] || !source.name || source.name === 'Unknown')) {
                 await this.prisma.whatsappSource.update({
                   where: { id: source.id },
-                  data: { name: c.name }
+                  data: { name: contactName }
                 });
               }
             } catch (err) {
@@ -215,16 +216,28 @@ export class SourcesService {
         }
       }
 
-      source = await this.prisma.whatsappSource.create({
-        data: {
-          userId,
-          jid,
-          name: resolvedName,
-          type,
-          isEnabled: false, // All new sources are disabled by default
-        },
-      });
-      this.logger.log(`Auto-added new source ${jid} (${source.name}) for user ${userId} - Defaulting to blocked.`);
+      try {
+        source = await this.prisma.whatsappSource.create({
+          data: {
+            userId,
+            jid,
+            name: resolvedName,
+            type,
+            isEnabled: false, // All new sources are disabled by default
+          },
+        });
+        this.logger.log(`Auto-added new source ${jid} (${source.name}) for user ${userId} - Defaulting to blocked.`);
+      } catch (error: any) {
+        if (error.code === 'P2002') {
+          // A concurrent request already created the source. Fetch it.
+          source = await this.prisma.whatsappSource.findUnique({
+            where: { userId_jid: { userId, jid } },
+          });
+          if (!source) return false; // Should never happen unless deleted concurrently
+        } else {
+          throw error;
+        }
+      }
     } else {
       // Auto-heal existing source if we now have a pushName but it was previously a raw number
       if (pushName && (source.name === source.jid.split('@')[0] || !source.name || source.name === 'Unknown')) {

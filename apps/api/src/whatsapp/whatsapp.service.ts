@@ -89,12 +89,23 @@ export class WhatsappService implements OnModuleInit {
       }
 
       if (connection === 'close') {
-        const shouldReconnect =
-          lastDisconnect?.error?.output?.statusCode !==
-          DisconnectReason.loggedOut;
-        this.logger.warn(`WhatsApp disconnected for user ${userId}. Reconnecting: ${shouldReconnect}`);
+        const boomError = lastDisconnect?.error as any;
+        const statusCode = boomError?.output?.statusCode;
+        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+        
+        this.logger.warn(`WhatsApp disconnected for user ${userId}. Reason: ${statusCode}. Reconnecting: ${shouldReconnect}`);
         this.clientsReady.set(userId, false);
+        
         if (shouldReconnect) {
+          this.initializeWhatsApp(userId);
+        } else {
+          // If logged out (401), we MUST clear the session data so the user can scan a new QR code!
+          this.logger.warn(`Session for ${userId} was logged out or invalid. Clearing session data.`);
+          const authFolder = `./sessions/user_${userId}_auth`;
+          if (fs.existsSync(authFolder)) {
+            fs.rmSync(authFolder, { recursive: true, force: true });
+          }
+          // Now re-initialize to trigger a fresh QR code generation
           this.initializeWhatsApp(userId);
         }
       } else if (connection === 'open') {
@@ -121,7 +132,8 @@ export class WhatsappService implements OnModuleInit {
           const senderId = msg.key.remoteJid;
           if (!senderId) continue;
           
-          const isAllowed = await this.sourcesService.isSourceAllowed(senderId, msg.pushName, userId);
+          const pushName = msg.key.fromMe ? undefined : msg.pushName;
+          const isAllowed = await this.sourcesService.isSourceAllowed(senderId, pushName, userId);
           if (!isAllowed) continue;
 
           const bufferKey = `${userId}_${senderId}`;
@@ -454,8 +466,9 @@ export class WhatsappService implements OnModuleInit {
           'image/jpeg';
         const ext = mimeType.split('/')[1]?.split(';')[0] || 'jpeg'; // Strip out any charset etc
         const fileName = `${messageId}.${ext}`.replace(/[^a-zA-Z0-9.\-]/g, '_');
-        const relPath = `uploads/${fileName}`;
-        const absolutePath = path.join(process.cwd(), relPath);
+        const relPath = `api/uploads/${fileName}`;
+        // Store physical files in 'uploads' without the api prefix in the filesystem
+        const absolutePath = path.join(process.cwd(), 'uploads', fileName);
 
         const uploadsDir = path.dirname(absolutePath);
         if (!fs.existsSync(uploadsDir)) {

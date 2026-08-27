@@ -22,7 +22,7 @@ import { AuthModule } from './auth/auth.module';
     }),
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'uploads'),
-      serveRoot: '/uploads',
+      serveRoot: '/api/uploads',
     }),
     BullModule.forRootAsync({
       imports: [ConfigModule],

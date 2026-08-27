@@ -476,8 +476,8 @@ export class BatchService {
       // 2. Download Binary
       const ext = mimeType.split('/')[1] || 'jpeg';
       const fileName = `${mediaId}.${ext}`;
-      const localPath = `uploads/${fileName}`;
-      const absolutePath = path.join(process.cwd(), localPath);
+      const localPath = `api/uploads/${fileName}`;
+      const absolutePath = path.join(process.cwd(), 'uploads', fileName);
 
       this.logger.log(`Downloading media binary from: ${mediaUrl}`);
       const downloadRes = await axios.get(mediaUrl, {
