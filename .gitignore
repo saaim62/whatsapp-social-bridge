@@ -1,0 +1,14 @@
+node_modules
+.env
+.DS_Store
+dist
+.next
+*.log
+coverage
+build
+.eslintcache
+
+# Backend generated files
+apps/api/sessions/
+apps/api/uploads/
+apps/api/venv/
