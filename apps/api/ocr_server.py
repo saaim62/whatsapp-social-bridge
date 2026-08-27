@@ -29,9 +29,13 @@ app = FastAPI()
 # We will manually handle angle rotation below instead.
 ocr_instance = PaddleOCR(
     use_angle_cls=False,
+    use_textline_orientation=False,  # Replaces use_angle_cls in newer PaddleOCR
     use_doc_orientation_classify=False,
     use_doc_unwarping=False,
-    det_limit_side_len=960,
+    text_det_limit_side_len=960,     # Replaces det_limit_side_len
+    use_gpu=False,
+    use_tensorrt=False,
+    enable_mkldnn=False,
     lang='en'
 )
 
@@ -102,6 +106,9 @@ def _parse_paddle_result(result, angle_ccw, orig_w, orig_h):
             
     return detected_boxes
 
+import threading
+ocr_lock = threading.Lock()
+
 @app.post("/detect-text")
 async def detect_text(file: UploadFile = File(...)):
     try:
@@ -119,7 +126,9 @@ async def detect_text(file: UploadFile = File(...)):
                 rotated_img = image.rotate(angle_ccw, expand=True)
                 
             img_array = np.array(rotated_img)
-            result = ocr_instance.ocr(img_array)
+            
+            with ocr_lock:
+                result = ocr_instance.ocr(img_array)
             
             boxes = _parse_paddle_result(result, angle_ccw, orig_w, orig_h)
             all_boxes.extend(boxes)

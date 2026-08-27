@@ -123,6 +123,8 @@ export class WhatsappService implements OnModuleInit {
     });
 
     client.ev.on('messages.upsert', async (m: any) => {
+      this.logger.log(`RAW messages.upsert EVENT TYPE: ${m.type}, count: ${m.messages?.length || 0}`);
+      
       const settings = await this.settingsService.getSettings(userId);
       if (!settings.isSyncActive) {
         this.logger.log(
