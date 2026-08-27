@@ -75,7 +75,7 @@ async def detect_text(file: UploadFile = File(...)):
                 if backend == 'easy':
                     results = reader.readtext(img_np)
                 else:
-                    res = reader.ocr(img_np, cls=True)
+                    res = reader.ocr(img_np)
                     results = []
                     if res and res[0]:
                         for line in res[0]:
