@@ -58,6 +58,7 @@ export class WhatsappService implements OnModuleInit {
       default: makeWASocket,
       useMultiFileAuthState,
       DisconnectReason,
+      fetchLatestWaWebVersion,
     } = await this.loadBaileys();
     
     // Store session files securely in separate folders per user
@@ -66,8 +67,11 @@ export class WhatsappService implements OnModuleInit {
       fs.mkdirSync('./sessions');
     }
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+    const { version, isLatest } = await fetchLatestWaWebVersion();
+    this.logger.log(`Using WhatsApp Web version v${version.join('.')}, isLatest: ${isLatest}`);
 
     const client = makeWASocket({
+      version,
       auth: state,
       printQRInTerminal: false,
     });
