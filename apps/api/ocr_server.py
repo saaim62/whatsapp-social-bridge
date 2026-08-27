@@ -1,7 +1,8 @@
 import os
+import platform
+import argparse
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
-import easyocr
 import numpy as np
 from PIL import Image
 import io
@@ -10,10 +11,25 @@ import threading
 
 app = FastAPI()
 
-# PyTorch / EasyOCR is rock-solid on ARM64 / Linux and will not segfault.
-print("[OCR Server] Initializing EasyOCR Reader (English)...")
-reader = easyocr.Reader(['en'], gpu=False)
-print("[OCR Server] EasyOCR Reader initialized successfully!")
+is_mac = platform.system() == 'Darwin'
+backend = 'easy'
+
+if is_mac:
+    try:
+        from paddleocr import PaddleOCR
+        print("[OCR Server] Running on macOS. Initializing PaddleOCR...")
+        reader = PaddleOCR(use_angle_cls=True, lang='en', use_gpu=False, show_log=False)
+        backend = 'paddle'
+        print("[OCR Server] PaddleOCR initialized successfully!")
+    except ImportError:
+        import easyocr
+        print("[OCR Server] PaddleOCR not installed on Mac. Falling back to EasyOCR...")
+        reader = easyocr.Reader(['en'], gpu=False)
+else:
+    import easyocr
+    print("[OCR Server] Running on Linux (ARM64). Initializing EasyOCR...")
+    reader = easyocr.Reader(['en'], gpu=False)
+    print("[OCR Server] EasyOCR initialized successfully!")
 
 ocr_lock = threading.Lock()
 
@@ -46,7 +62,7 @@ async def detect_text(file: UploadFile = File(...)):
         
         all_boxes = []
         
-        # Scan 4 rotations (0, 90, 180, 270) so text at any orientation (0, 45, 90, 120, etc.) is detected
+        # Scan rotations
         for angle_ccw in [0, 90, 180, 270]:
             if angle_ccw == 0:
                 rotated_img = image
@@ -56,9 +72,17 @@ async def detect_text(file: UploadFile = File(...)):
             img_np = np.array(rotated_img)
             
             with ocr_lock:
-                # EasyOCR returns list of (bbox, text, prob)
-                # bbox is [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
-                results = reader.readtext(img_np)
+                if backend == 'easy':
+                    results = reader.readtext(img_np)
+                else:
+                    res = reader.ocr(img_np, cls=True)
+                    results = []
+                    if res and res[0]:
+                        for line in res[0]:
+                            bbox = line[0]
+                            text = line[1][0]
+                            prob = line[1][1]
+                            results.append((bbox, text, prob))
             
             for bbox, text, prob in results:
                 if not text or not text.strip():
@@ -69,7 +93,7 @@ async def detect_text(file: UploadFile = File(...)):
                     "polygon": unrotated_poly,
                     "text": text.strip(),
                     "confidence": float(prob),
-                    "pass": f"easyocr_{angle_ccw}"
+                    "pass": f"{backend}_{angle_ccw}"
                 })
         
         deduped = _dedupe_boxes(all_boxes)
@@ -105,4 +129,9 @@ def _get_center(polygon):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8000)))
+    args = parser.parse_args()
+    
+    print(f"[OCR Server] Starting on port {args.port}")
+    uvicorn.run(app, host="127.0.0.1", port=args.port)
