@@ -31,7 +31,6 @@ ocr_instance = PaddleOCR(
     use_angle_cls=False,
     use_doc_orientation_classify=False,
     use_doc_unwarping=False,
-    use_textline_orientation=False,
     det_limit_side_len=960,
     lang='en'
 )
