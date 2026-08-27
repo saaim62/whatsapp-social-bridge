@@ -136,8 +136,18 @@ export class WhatsappService implements OnModuleInit {
           const senderId = msg.key.remoteJid;
           if (!senderId) continue;
           
-          // Register the source even if it's from us (so we catch people we message)
-          const pushName = msg.key.fromMe ? undefined : msg.pushName;
+          let pushName = msg.key.fromMe ? undefined : msg.pushName;
+          
+          // Auto-resolve WhatsApp Channel (newsletter) names
+          if (senderId.endsWith('@newsletter') && !pushName) {
+            try {
+              const meta = await client.newsletterMetadata('jid', senderId);
+              if (meta && meta.name) pushName = meta.name;
+            } catch (err) {
+              this.logger.warn(`Could not fetch channel metadata for ${senderId}`);
+            }
+          }
+          
           const isAllowed = await this.sourcesService.isSourceAllowed(senderId, pushName, userId);
           
           // Ignore messages sent by ourselves from being processed as product drops
@@ -206,7 +216,18 @@ export class WhatsappService implements OnModuleInit {
           // Register EVERY person/group we've ever chatted with in history, regardless of how old the message is
           const sender = msg.key.remoteJid;
           if (sender && !chatGroups[sender]) {
-            const pushName = msg.key.fromMe ? undefined : msg.pushName;
+            let pushName = msg.key.fromMe ? undefined : msg.pushName;
+            
+            // Auto-resolve WhatsApp Channel (newsletter) names
+            if (sender.endsWith('@newsletter') && !pushName) {
+              try {
+                const meta = await client.newsletterMetadata('jid', sender);
+                if (meta && meta.name) pushName = meta.name;
+              } catch (err) {
+                this.logger.warn(`Could not fetch channel metadata for ${sender}`);
+              }
+            }
+            
             const isAllowed = await this.sourcesService.isSourceAllowed(sender, pushName, userId);
             if (!isAllowed) {
               chatGroups[sender] = null; // Mark as disabled
