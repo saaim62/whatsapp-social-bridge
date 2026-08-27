@@ -1,3 +1,10 @@
+import os
+os.environ["FLAGS_use_mkldnn"] = "0"
+os.environ["FLAGS_use_xdnn"] = "0"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
 from paddleocr import PaddleOCR
@@ -23,12 +30,11 @@ requests.Session.request = new_request
 
 app = FastAPI()
 
-# Two OCR instances for maximum detection coverage:
-# 1. With doc orientation detection — catches rotated/angled text  
-# 2. Without doc orientation — catches normally-oriented text that 
-#    the orientation detector might miss by incorrectly rotating the image
+# Two OCR instances for maximum detection coverage without doc unwarping (which segfaults on ARM64)
 ocr_with_orient = PaddleOCR(
     use_angle_cls=True,
+    use_doc_orientation_classify=True,
+    use_doc_unwarping=False,
     det_limit_side_len=960,
     lang='en'
 )
