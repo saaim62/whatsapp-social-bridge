@@ -102,6 +102,8 @@ def _parse_paddle_result(result, angle_ccw, orig_w, orig_h):
 import threading
 ocr_lock = threading.Lock()
 
+import tempfile
+
 @app.post("/detect-text")
 async def detect_text(file: UploadFile = File(...)):
     try:
@@ -118,13 +120,20 @@ async def detect_text(file: UploadFile = File(...)):
             else:
                 rotated_img = image.rotate(angle_ccw, expand=True)
                 
-            img_array = np.array(rotated_img)
+            # Save to temporary file to avoid Pybind11 numpy memory segfaults on ARM64
+            with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp_file:
+                rotated_img.save(tmp_file, format='JPEG')
+                tmp_path = tmp_file.name
             
-            with ocr_lock:
-                result = ocr_instance.ocr(img_array)
-            
-            boxes = _parse_paddle_result(result, angle_ccw, orig_w, orig_h)
-            all_boxes.extend(boxes)
+            try:
+                with ocr_lock:
+                    result = ocr_instance.predict(tmp_path)
+                
+                boxes = _parse_paddle_result(result, angle_ccw, orig_w, orig_h)
+                all_boxes.extend(boxes)
+            finally:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
         
         deduped = _dedupe_boxes(all_boxes)
         print(f"[OCR] Returning {len(deduped)} detections (from {len(all_boxes)} raw)")
