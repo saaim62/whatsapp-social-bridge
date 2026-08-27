@@ -74,10 +74,15 @@ export class ImageBlurProcessor extends WorkerHost {
           
           if (box.polygon) {
             const padding = 25;
-            const left = Math.max(0, box.left - padding);
-            const top = Math.max(0, box.top - padding);
-            const width = Math.min(metadata.width! - left, box.width + padding * 2);
-            const height = Math.min(metadata.height! - top, box.height + padding * 2);
+            const targetLeft = box.left - padding;
+            const targetTop = box.top - padding;
+            const targetWidth = box.width + padding * 2;
+            const targetHeight = box.height + padding * 2;
+
+            const left = Math.max(0, Math.min(metadata.width! - 1, Math.round(targetLeft)));
+            const top = Math.max(0, Math.min(metadata.height! - 1, Math.round(targetTop)));
+            const width = Math.max(1, Math.min(metadata.width! - left, Math.round(targetWidth)));
+            const height = Math.max(1, Math.min(metadata.height! - top, Math.round(targetHeight)));
 
             const localizedSvgPoints = box.polygon.map((p: any) => `${p[0] - left},${p[1] - top}`).join(' ');
             const maskSvg = `<svg width="${width}" height="${height}"><polygon points="${localizedSvgPoints}" fill="white" /></svg>`;
@@ -101,10 +106,15 @@ export class ImageBlurProcessor extends WorkerHost {
               .toBuffer();
           } else {
              const padding = 25;
-             const left = Math.max(0, box.left - padding);
-             const top = Math.max(0, box.top - padding);
-             const width = Math.min(metadata.width! - left, box.width + padding * 2);
-             const height = Math.min(metadata.height! - top, box.height + padding * 2);
+             const targetLeft = box.left - padding;
+             const targetTop = box.top - padding;
+             const targetWidth = box.width + padding * 2;
+             const targetHeight = box.height + padding * 2;
+
+             const left = Math.max(0, Math.min(metadata.width! - 1, Math.round(targetLeft)));
+             const top = Math.max(0, Math.min(metadata.height! - 1, Math.round(targetTop)));
+             const width = Math.max(1, Math.min(metadata.width! - left, Math.round(targetWidth)));
+             const height = Math.max(1, Math.min(metadata.height! - top, Math.round(targetHeight)));
 
              const blurredRegion = await sharp(imageBuffer)
               .extract({ left, top, width, height })
