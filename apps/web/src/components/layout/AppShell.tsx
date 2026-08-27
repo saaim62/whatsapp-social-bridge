@@ -189,9 +189,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <p className="hidden lg:block text-xs text-slate-400 font-medium">
-              {BRAND.tagline}
-            </p>
+            <div className="hidden lg:flex items-center bg-gradient-to-r from-indigo-50 to-purple-50 px-3 py-1.5 rounded-full border border-indigo-100/50 shadow-sm">
+              <span className="text-xs font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">
+                {BRAND.tagline}
+              </span>
+            </div>
             {/* Mobile Sign Out Button in Header */}
             <button
               onClick={() => signOut({ callbackUrl: "/login" })}
