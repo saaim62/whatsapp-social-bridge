@@ -28,10 +28,7 @@ app = FastAPI()
 # Enabling them causes a core dump (SIGSEGV) deep in the C++ execution engine on ARM64.
 # We will manually handle angle rotation below instead.
 ocr_instance = PaddleOCR(
-    use_textline_orientation=False,  # Replaces use_angle_cls in newer PaddleOCR
-    use_doc_orientation_classify=False,
-    use_doc_unwarping=False,
-    text_det_limit_side_len=960,     # Replaces det_limit_side_len
+    ocr_version='PP-OCRv4',
     lang='en'
 )
 
