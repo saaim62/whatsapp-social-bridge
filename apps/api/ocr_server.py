@@ -1,38 +1,21 @@
 import os
-os.environ["FLAGS_use_mkldnn"] = "0"
-os.environ["FLAGS_use_xdnn"] = "0"
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
-from paddleocr import PaddleOCR
+import easyocr
 import numpy as np
 from PIL import Image
 import io
 import traceback
-import ssl
-import urllib3
-
-# Disable SSL verification to fix macOS Baidu OSS download issues if any
-ssl._create_default_https_context = ssl._create_unverified_context
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-import requests
-requests.packages.urllib3.disable_warnings()
+import threading
 
 app = FastAPI()
 
-# VERY IMPORTANT FOR ARM64 (Oracle Cloud):
-# We MUST set use_angle_cls=False and use_doc_unwarping=False. 
-# Enabling them causes a core dump (SIGSEGV) deep in the C++ execution engine on ARM64.
-# We will manually handle angle rotation below instead.
-ocr_instance = PaddleOCR(
-    ocr_version='PP-OCRv4',
-    lang='en',
-    use_angle_cls=False,
-    use_doc_unwarping=False
-)
+# PyTorch / EasyOCR is rock-solid on ARM64 / Linux and will not segfault.
+print("[OCR Server] Initializing EasyOCR Reader (English)...")
+reader = easyocr.Reader(['en'], gpu=False)
+print("[OCR Server] EasyOCR Reader initialized successfully!")
+
+ocr_lock = threading.Lock()
 
 def _unrotate_polygon(poly, angle_ccw, orig_w, orig_h):
     if angle_ccw == 0:
@@ -54,58 +37,6 @@ def _unrotate_polygon(poly, angle_ccw, orig_w, orig_h):
         unrotated.append([x, y])
     return unrotated
 
-def _parse_paddle_result(result, angle_ccw, orig_w, orig_h):
-    detected_boxes = []
-    if not result or not isinstance(result, list):
-        return detected_boxes
-        
-    res_obj = result[0]
-    if res_obj is None:
-        return detected_boxes
-        
-    # Handle PaddleX structure (v2.7/v3)
-    if hasattr(res_obj, 'get') and res_obj.get('rec_texts') is not None:
-        texts = res_obj.get('rec_texts', [])
-        scores = res_obj.get('rec_scores', [])
-        polys = res_obj.get('dt_polys', []) or res_obj.get('rec_polys', [])
-        
-        for i in range(len(texts)):
-            poly = polys[i]
-            unrotated_poly = _unrotate_polygon(poly, angle_ccw, orig_w, orig_h)
-            detected_boxes.append({
-                "polygon": unrotated_poly,
-                "text": texts[i],
-                "confidence": float(scores[i]),
-                "pass": f"paddle_{angle_ccw}"
-            })
-    else:
-        # Fallback for standard list-of-lists PaddleOCR format
-        for line in res_obj:
-            if not line or len(line) < 2:
-                continue
-            box = line[0]  
-            text_tuple = line[1]
-            if len(text_tuple) < 2:
-                continue
-                
-            text = text_tuple[0]
-            confidence = float(text_tuple[1])
-            unrotated_poly = _unrotate_polygon(box, angle_ccw, orig_w, orig_h)
-            
-            detected_boxes.append({
-                "polygon": unrotated_poly,
-                "text": text,
-                "confidence": confidence,
-                "pass": f"paddle_{angle_ccw}"
-            })
-            
-    return detected_boxes
-
-import threading
-ocr_lock = threading.Lock()
-
-import tempfile
-
 @app.post("/detect-text")
 async def detect_text(file: UploadFile = File(...)):
     try:
@@ -115,27 +46,31 @@ async def detect_text(file: UploadFile = File(...)):
         
         all_boxes = []
         
-        # Manually scan 4 rotations so we don't need use_angle_cls (which crashes on ARM64)
+        # Scan 4 rotations (0, 90, 180, 270) so text at any orientation (0, 45, 90, 120, etc.) is detected
         for angle_ccw in [0, 90, 180, 270]:
             if angle_ccw == 0:
                 rotated_img = image
             else:
                 rotated_img = image.rotate(angle_ccw, expand=True)
                 
-            # Save to temporary file to avoid Pybind11 numpy memory segfaults on ARM64
-            with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp_file:
-                rotated_img.save(tmp_file, format='JPEG')
-                tmp_path = tmp_file.name
+            img_np = np.array(rotated_img)
             
-            try:
-                with ocr_lock:
-                    result = ocr_instance.predict(tmp_path)
-                
-                boxes = _parse_paddle_result(result, angle_ccw, orig_w, orig_h)
-                all_boxes.extend(boxes)
-            finally:
-                if os.path.exists(tmp_path):
-                    os.remove(tmp_path)
+            with ocr_lock:
+                # EasyOCR returns list of (bbox, text, prob)
+                # bbox is [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
+                results = reader.readtext(img_np)
+            
+            for bbox, text, prob in results:
+                if not text or not text.strip():
+                    continue
+                poly = [[float(pt[0]), float(pt[1])] for pt in bbox]
+                unrotated_poly = _unrotate_polygon(poly, angle_ccw, orig_w, orig_h)
+                all_boxes.append({
+                    "polygon": unrotated_poly,
+                    "text": text.strip(),
+                    "confidence": float(prob),
+                    "pass": f"easyocr_{angle_ccw}"
+                })
         
         deduped = _dedupe_boxes(all_boxes)
         print(f"[OCR] Returning {len(deduped)} detections (from {len(all_boxes)} raw)")
