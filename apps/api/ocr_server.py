@@ -190,7 +190,8 @@ async def detect_text(file: UploadFile = File(...)):
                 new_h = int(orig_h * scale_factor)
                 scan_image = image.resize((new_w, new_h), Image.LANCZOS)
 
-            for angle_ccw in [0, 90, 180, 270]:
+            # To save time on slow ARM CPUs, only check 0 and 90 degrees (fallback mode)
+            for angle_ccw in [0, 90]:
                 if angle_ccw == 0:
                     rotated_img = scan_image
                 else:

@@ -61,13 +61,20 @@ export class OcrService implements OnModuleDestroy {
       }
 
       if (!data) {
-        const response = await axios.post('http://127.0.0.1:8000/detect-text', formData, {
-          headers: { 
-            ...formData.getHeaders(),
-            'Connection': 'close'
-          },
-        });
-        data = response.data;
+        try {
+          this.logger.log(`Attempting local fallback OCR at http://127.0.0.1:8000...`);
+          const response = await axios.post('http://127.0.0.1:8000/detect-text', formData, {
+            headers: { 
+              ...formData.getHeaders(),
+              'Connection': 'close'
+            },
+            timeout: 120000, // 2 minutes timeout for slow CPU inference
+          });
+          data = response.data;
+          this.logger.log('Local fallback OCR succeeded.');
+        } catch (err: any) {
+          this.logger.error(`Local fallback OCR failed: ${err.message}`);
+        }
       }
 
       const found: DetectedLogo[] = [];
