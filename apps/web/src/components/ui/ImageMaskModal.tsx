@@ -397,7 +397,7 @@ export function ImageMaskModal({
               <button
                 onClick={handleSave}
                 disabled={boxes.length === 0 || isSaving}
-                className="btn-gradient px-4 sm:px-6 py-2 text-xs sm:text-sm whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                className="bg-brand-600 text-white font-bold rounded-xl hover:bg-brand-700 px-4 sm:px-6 py-2 text-xs sm:text-sm whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
                 {isSaving ? (
                   "Applying Blur..."

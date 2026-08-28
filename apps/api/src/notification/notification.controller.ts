@@ -18,7 +18,8 @@ export class NotificationController {
       req.user.userId,
       body.title,
       body.message,
-      body.type
+      body.type,
+      body.link
     );
   }
 

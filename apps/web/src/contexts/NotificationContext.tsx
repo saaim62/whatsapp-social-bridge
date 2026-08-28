@@ -53,12 +53,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const unreadCount = dbNotifications.filter((n) => !n.isRead).length;
 
-  const pushNotificationToDb = async (title: string, message: string, type: string) => {
+  const pushNotificationToDb = async (title: string, message: string, type: string, link?: string) => {
     try {
       await fetchWithAuth(`${API_URL}/api/notifications`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, message, type }),
+        body: JSON.stringify({ title, message, type, link }),
       });
       fetchDbNotifications(); // refresh immediately
     } catch (err) {}
@@ -133,7 +133,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
                 title: "New Product Received",
                 message: `From ${currentBatch.senderName || currentBatch.senderId || 'WhatsApp'}`
               });
-              pushNotificationToDb("New Product Received", `From ${currentBatch.senderName || currentBatch.senderId || 'WhatsApp'}`, "info");
+              pushNotificationToDb("New Product Received", `From ${currentBatch.senderName || currentBatch.senderId || 'WhatsApp'}`, "info", `/products/${currentBatch.id}`);
             } else if (prevBatch.status !== currentBatch.status) {
               // Status changed!
               const productName = currentBatch.extractedData?.product_name || "Product";
@@ -148,7 +148,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
                   title: "Products are ready to be published",
                   message: "You have products awaiting manual review and publishing.",
                 });
-                pushNotificationToDb("Product Ready", `${productName} has been processed.`, "success");
+                pushNotificationToDb("Product Ready", `${productName} has been processed.`, "success", `/products/${currentBatch.id}`);
               } else if (currentBatch.status === "PUBLISHED" || currentBatch.status === "PARTIALLY_PUBLISHED") {
                 addToast({
                   type: "success",
@@ -160,14 +160,14 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
                   title: "Publishing Successful",
                   message: `${productName} was just published to your social channels.`,
                 });
-                pushNotificationToDb("Product Published", `${productName} has been published.`, "success");
+                pushNotificationToDb("Product Published", `${productName} has been published.`, "success", `/products/${currentBatch.id}`);
               } else if (currentBatch.status === "FAILED") {
                 addToast({
                   type: "error",
                   title: "Processing Failed",
                   message: `${productName} failed to process or publish.`
                 });
-                pushNotificationToDb("Processing Failed", `${productName} failed to process.`, "error");
+                pushNotificationToDb("Processing Failed", `${productName} failed to process.`, "error", `/products/${currentBatch.id}`);
               }
             }
           });

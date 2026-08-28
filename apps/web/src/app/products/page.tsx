@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { formatDistanceToNow } from "date-fns";
 import { Layers, Clock3, CheckCircle2, ImageIcon, Trash2, Loader2, AlertCircle, Search, Filter } from "lucide-react";
@@ -11,6 +12,7 @@ import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { useNotifications } from "@/contexts/NotificationContext";
 
 export default function ProductsPage() {
+  const router = useRouter();
   const { batches, setBatches, loadingBatches: loading } = useNotifications();
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
@@ -224,9 +226,10 @@ export default function ProductsPage() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.1 + i * 0.03 }}
-                  className={`group transition-colors ${selectedIds.has(batch.id) ? 'bg-electric-cyan/5' : 'hover:bg-white/[0.02]'}`}
+                  onClick={() => router.push(`/products/${batch.id}`)}
+                  className={`group transition-colors cursor-pointer ${selectedIds.has(batch.id) ? 'bg-electric-cyan/5' : 'hover:bg-white/[0.02]'}`}
                 >
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={selectedIds.has(batch.id)}
@@ -285,7 +288,10 @@ export default function ProductsPage() {
                       
                       <div className="flex items-center gap-2 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
-                          onClick={() => deleteBatch(batch.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteBatch(batch.id);
+                          }}
                           className={`p-1.5 transition-all flex items-center rounded border ${
                             confirmDeleteId === batch.id
                               ? "bg-red-500 text-white border-red-500"
@@ -297,6 +303,7 @@ export default function ProductsPage() {
                         </button>
                         <Link
                           href={`/products/${batch.id}`}
+                          onClick={(e) => e.stopPropagation()}
                           className="btn-glass px-3 py-1.5 text-xs text-electric-cyan border-electric-cyan/30 hover:border-electric-cyan hover:bg-electric-cyan/10"
                         >
                           Inspect

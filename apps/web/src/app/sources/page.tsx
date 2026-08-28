@@ -5,11 +5,66 @@ import { API_URL, fetchWithAuth } from "@/lib/api";
 import { Search, RefreshCw, Radio, Users, User, Power, Loader2, Trash2, Pencil, Check, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
+/**
+ * Formats a raw WhatsApp JID into a human-friendly subtitle string.
+ */
+function formatJid(jid: string): string {
+  if (!jid) return "";
+  if (jid.endsWith("@s.whatsapp.net")) {
+    const num = jid.replace("@s.whatsapp.net", "");
+    return `+${num}`;
+  }
+  if (jid.endsWith("@g.us")) {
+    const id = jid.replace("@g.us", "");
+    // Truncate long group IDs
+    return id.length > 20 ? `${id.substring(0, 16)}...` : id;
+  }
+  if (jid.endsWith("@newsletter")) {
+    const id = jid.replace("@newsletter", "");
+    return id.length > 20 ? `${id.substring(0, 16)}...` : id;
+  }
+  if (jid.endsWith("@lid")) {
+    return `WhatsApp ID`;
+  }
+  return jid;
+}
+
+/**
+ * Check if a source name is a properly formatted human name vs raw number.
+ */
+function hasProperName(name: string, jid: string): boolean {
+  if (!name) return false;
+  if (name === 'Unknown') return false;
+  const localPart = jid.split('@')[0];
+  if (name === localPart || name === jid) return false;
+  if (/[∙•·]{2,}/.test(name)) return false; // Masked WhatsApp number
+  const trimmed = name.trim();
+  // Pure digits or digits with symbols like + () -
+  if (/^[+\d\s\-().]+$/.test(trimmed) && trimmed.replace(/\D/g, '').length >= 6) return false;
+  return true;
+}
+
+/**
+ * Returns the type badge label and color for a source type.
+ */
+function getTypeBadge(type: string): { label: string; className: string } {
+  switch (type) {
+    case "GROUP":
+      return { label: "Group", className: "bg-brand-500/10 text-brand-400 border-brand-500/20" };
+    case "CHANNEL":
+      return { label: "Channel", className: "bg-violet-500/10 text-violet-400 border-violet-500/20" };
+    case "INDIVIDUAL":
+    default:
+      return { label: "Contact", className: "bg-blue-500/10 text-blue-400 border-blue-500/20" };
+  }
+}
+
 export default function SourcesPage() {
   const [sources, setSources] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterType, setFilterType] = useState<"ALL" | "CONTACTS_NAMED" | "GROUPS" | "CHANNELS" | "NUMBERS">("ALL");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -146,10 +201,49 @@ export default function SourcesPage() {
     }
   };
 
-  const filteredSources = sources.filter((s) =>
-    s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    s.jid.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredSources = sources.filter((s) => {
+    // text search
+    if (searchQuery) {
+      if (!s.name.toLowerCase().includes(searchQuery.toLowerCase()) && 
+          !s.jid.toLowerCase().includes(searchQuery.toLowerCase())) {
+        return false;
+      }
+    }
+    
+    // Type filter
+    if (filterType === "GROUPS" && s.type !== "GROUP") return false;
+    if (filterType === "CHANNELS" && s.type !== "CHANNEL") return false;
+    if (filterType === "CONTACTS_NAMED") {
+      if (s.type !== "INDIVIDUAL") return false;
+      if (!hasProperName(s.name, s.jid)) return false;
+    }
+    if (filterType === "NUMBERS") {
+      if (s.type !== "INDIVIDUAL") return false;
+      if (hasProperName(s.name, s.jid)) return false;
+    }
+    
+    return true;
+  }).sort((a, b) => {
+    // Sorting order:
+    // 1. Contacts with proper names
+    // 2. Groups
+    // 3. Channels
+    // 4. Numbers (unnamed contacts)
+    const aNamed = a.type === "INDIVIDUAL" && hasProperName(a.name, a.jid);
+    const bNamed = b.type === "INDIVIDUAL" && hasProperName(b.name, b.jid);
+    
+    if (aNamed && !bNamed) return -1;
+    if (!aNamed && bNamed) return 1;
+    
+    if (a.type === "GROUP" && b.type !== "GROUP") return -1;
+    if (a.type !== "GROUP" && b.type === "GROUP") return 1;
+    
+    if (a.type === "CHANNEL" && b.type !== "CHANNEL") return -1;
+    if (a.type !== "CHANNEL" && b.type === "CHANNEL") return 1;
+    
+    // Within the same category, sort alphabetically by name
+    return (a.name || "").localeCompare(b.name || "");
+  });
 
   const getIcon = (type: string) => {
     switch (type) {
@@ -178,8 +272,8 @@ export default function SourcesPage() {
             Active Data Sources
           </h2>
           <p className="text-sm text-slate-400 mt-2 max-w-xl">
-            Configure which node clusters are authorized to transmit payload streams into the bridge.
-            Disconnected nodes will have their packets dropped at the firewall.
+            Toggle which WhatsApp contacts, groups, and channels are allowed to send products into the bridge.
+            Disabled sources will have their messages ignored.
           </p>
         </div>
         
@@ -193,20 +287,41 @@ export default function SourcesPage() {
           ) : (
             <RefreshCw className="w-4 h-4" />
           )}
-          {syncing ? "Synchronizing Nodes..." : "Sync Device Nodes"}
+          {syncing ? "Syncing..." : "Sync Contacts & Groups"}
         </button>
       </div>
 
       {/* Main Board */}
       <div className="glass-card overflow-hidden flex flex-col min-h-[500px]">
         
+        {/* Filters */}
+        <div className="px-4 py-3 border-b border-graphite-border bg-graphite-darker/50 flex flex-wrap gap-2">
+          {["ALL", "CONTACTS_NAMED", "GROUPS", "CHANNELS", "NUMBERS"].map((type) => (
+            <button
+              key={type}
+              onClick={() => setFilterType(type as any)}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all ${
+                filterType === type
+                  ? "bg-electric-cyan/20 text-electric-cyan border-electric-cyan/50 shadow-[0_0_10px_rgba(0,255,255,0.1)]"
+                  : "bg-graphite border-graphite-border text-slate-400 hover:text-white hover:border-slate-600"
+              }`}
+            >
+              {type === "ALL" && "All"}
+              {type === "CONTACTS_NAMED" && "Contacts (Named)"}
+              {type === "GROUPS" && "Groups"}
+              {type === "CHANNELS" && "Channels"}
+              {type === "NUMBERS" && "Numbers Only"}
+            </button>
+          ))}
+        </div>
+
         {/* Toolbar */}
         <div className="p-4 border-b border-graphite-border bg-graphite/40 flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="relative w-full max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <input
               type="text"
-              placeholder="Query by Node ID or Alias..."
+              placeholder="Search by name or phone number..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-4 py-2.5 bg-graphite-darker/50 border border-graphite-border rounded-xl text-sm text-white focus:outline-none focus:border-electric-cyan transition-all placeholder-slate-500"
@@ -220,7 +335,7 @@ export default function SourcesPage() {
                 onChange={handleSelectAll}
                 className="w-4 h-4 text-electric-cyan rounded border-slate-600 bg-graphite-darker checked:bg-electric-cyan focus:ring-electric-cyan"
               />
-              Select All Nodes
+              Select All
             </label>
             <AnimatePresence>
               {selectedIds.size > 0 && (
@@ -233,14 +348,14 @@ export default function SourcesPage() {
                   className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/30 hover:border-red-500 rounded-lg text-sm font-bold transition-all disabled:opacity-50"
                 >
                   {isDeletingBulk ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                  Purge ({selectedIds.size})
+                  Delete ({selectedIds.size})
                 </motion.button>
               )}
             </AnimatePresence>
           </div>
         </div>
 
-        {/* Node Grid */}
+        {/* Source Grid */}
         <div className="flex-1 overflow-auto p-4 sm:p-6 bg-graphite-darker/30">
           {filteredSources.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-slate-500">
@@ -248,117 +363,132 @@ export default function SourcesPage() {
                 <div className="absolute inset-0 bg-electric-cyan/5 blur-xl" />
                 <Power className="w-8 h-8 text-slate-600 relative z-10" />
               </div>
-              <p className="font-heading font-bold text-white text-lg mb-2">No Active Nodes</p>
+              <p className="font-heading font-bold text-white text-lg mb-2">No Sources Found</p>
               <p className="text-sm text-center max-w-sm text-slate-400">
-                Execute a node sync or connect a primary device to populate the matrix.
+                Click &quot;Sync Contacts &amp; Groups&quot; to load your WhatsApp contacts and groups.
               </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <AnimatePresence>
-                {filteredSources.map((source) => (
-                  <motion.div
-                    key={source.id}
-                    layout
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    className={`flex items-center justify-between p-4 rounded-xl border backdrop-blur-md transition-all duration-300 ${
-                      source.isEnabled 
-                        ? 'bg-electric-cyan/5 border-electric-cyan/30 shadow-[0_0_15px_rgba(0,255,255,0.05)]' 
-                        : 'bg-graphite/40 border-graphite-border opacity-70 hover:opacity-100'
-                    }`}
-                  >
-                    <div className="flex items-center gap-4 overflow-hidden">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(source.id)}
-                        onChange={() => toggleSelection(source.id)}
-                        className="w-4 h-4 text-electric-cyan rounded border-slate-600 bg-graphite-darker checked:bg-electric-cyan focus:ring-electric-cyan ml-1 cursor-pointer"
-                      />
-                      
-                      {/* Node Icon */}
-                      <div className={`p-3 rounded-xl border relative overflow-hidden transition-colors duration-500 ${
+                {filteredSources.map((source) => {
+                  const badge = getTypeBadge(source.type);
+                  const friendlyJid = formatJid(source.jid);
+                  return (
+                    <motion.div
+                      key={source.id}
+                      layout
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      className={`flex items-center justify-between p-4 rounded-xl border backdrop-blur-md transition-all duration-300 ${
                         source.isEnabled 
-                          ? 'bg-graphite border-electric-cyan/30' 
-                          : 'bg-graphite-darker border-graphite-border'
-                      }`}>
-                        {source.isEnabled && (
-                           <div className="absolute inset-0 bg-electric-cyan/10 blur-md" />
-                        )}
-                        <div className="relative z-10">
-                          {getIcon(source.type)}
+                          ? 'bg-electric-cyan/5 border-electric-cyan/30 shadow-[0_0_15px_rgba(0,255,255,0.05)]' 
+                          : 'bg-graphite/40 border-graphite-border opacity-70 hover:opacity-100'
+                      }`}
+                    >
+                      <div className="flex items-center gap-4 overflow-hidden">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(source.id)}
+                          onChange={() => toggleSelection(source.id)}
+                          className="w-4 h-4 text-electric-cyan rounded border-slate-600 bg-graphite-darker checked:bg-electric-cyan focus:ring-electric-cyan ml-1 cursor-pointer"
+                        />
+                        
+                        {/* Icon */}
+                        <div className={`p-3 rounded-xl border relative overflow-hidden transition-colors duration-500 ${
+                          source.isEnabled 
+                            ? 'bg-graphite border-electric-cyan/30' 
+                            : 'bg-graphite-darker border-graphite-border'
+                        }`}>
+                          {source.isEnabled && (
+                             <div className="absolute inset-0 bg-electric-cyan/10 blur-md" />
+                          )}
+                          <div className="relative z-10">
+                            {getIcon(source.type)}
+                          </div>
+                        </div>
+                        
+                        <div className="min-w-0 flex-1">
+                          {editingId === source.id ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={editName}
+                                onChange={(e) => setEditName(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && saveSourceName(source.id)}
+                                className="px-2 py-1 text-sm font-bold text-white bg-graphite-darker border border-electric-cyan rounded focus:outline-none w-full"
+                                autoFocus
+                              />
+                              <button onClick={() => saveSourceName(source.id)} className="p-1.5 text-electric-emerald bg-electric-emerald/10 hover:bg-electric-emerald/20 border border-electric-emerald/20 rounded-md transition-colors">
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                              <button onClick={() => setEditingId(null)} className="p-1.5 text-slate-400 bg-graphite hover:text-white border border-graphite-border rounded-md transition-colors">
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 group/name">
+                              <p className={`font-bold truncate transition-colors ${
+                                 source.isEnabled ? 'text-white' : 'text-slate-300'
+                              }`}>
+                                {source.name}
+                              </p>
+                              {/* Type badge */}
+                              <span className={`hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold border shrink-0 ${badge.className}`}>
+                                {badge.label}
+                              </span>
+                              <button
+                                onClick={() => {
+                                  setEditingId(source.id);
+                                  setEditName(source.name);
+                                }}
+                                className="p-1 text-slate-500 opacity-0 group-hover/name:opacity-100 hover:text-white transition-all rounded"
+                                title="Rename"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                          {/* Friendly JID subtitle */}
+                          <p className="text-xs font-medium text-slate-400 truncate mt-1 font-mono flex items-center gap-1.5">
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${source.isEnabled ? 'bg-electric-cyan shadow-[0_0_5px_#00E5FF]' : 'bg-slate-600'}`} />
+                            {friendlyJid}
+                          </p>
                         </div>
                       </div>
                       
-                      <div className="min-w-0 flex-1">
-                        {editingId === source.id ? (
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              value={editName}
-                              onChange={(e) => setEditName(e.target.value)}
-                              onKeyDown={(e) => e.key === 'Enter' && saveSourceName(source.id)}
-                              className="px-2 py-1 text-sm font-bold text-white bg-graphite-darker border border-electric-cyan rounded focus:outline-none w-full"
-                              autoFocus
-                            />
-                            <button onClick={() => saveSourceName(source.id)} className="p-1.5 text-electric-emerald bg-electric-emerald/10 hover:bg-electric-emerald/20 border border-electric-emerald/20 rounded-md transition-colors">
-                              <Check className="w-3.5 h-3.5" />
-                            </button>
-                            <button onClick={() => setEditingId(null)} className="p-1.5 text-slate-400 bg-graphite hover:text-white border border-graphite-border rounded-md transition-colors">
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2 group/name cursor-pointer" onClick={() => {
-                            setEditingId(source.id);
-                            setEditName(source.name);
-                          }}>
-                            <p className={`font-bold truncate transition-colors ${
-                               source.isEnabled ? 'text-white' : 'text-slate-300'
-                            }`}>
-                              {source.name}
-                            </p>
-                            <Pencil className="w-3.5 h-3.5 text-slate-500 opacity-0 group-hover/name:opacity-100 transition-opacity" />
-                          </div>
-                        )}
-                        <p className="text-xs font-medium text-slate-400 truncate mt-1 font-mono flex items-center gap-1.5">
-                          <span className={`w-1.5 h-1.5 rounded-full ${source.isEnabled ? 'bg-electric-cyan shadow-[0_0_5px_#00E5FF]' : 'bg-slate-600'}`} />
-                          {source.jid}
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-4">
-                      <button
-                        onClick={() => deleteSource(source.id)}
-                        className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors border border-transparent hover:border-red-500/30"
-                        title="Purge Node"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                      
-                      {/* Hardware Toggle */}
-                      <button
-                        onClick={() => toggleSource(source.id, source.isEnabled)}
-                        className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors duration-300 shadow-inner outline-none ${
-                          source.isEnabled 
-                            ? 'bg-electric-cyan/20 border border-electric-cyan/50' 
-                            : 'bg-graphite-darker border border-graphite-border'
-                        }`}
-                      >
-                        <span className="sr-only">Toggle Node Power</span>
-                        <span
-                          className={`inline-block h-6 w-6 transform rounded-full transition-transform duration-300 shadow-md ${
+                      <div className="flex items-center gap-3 shrink-0 ml-2">
+                        <button
+                          onClick={() => deleteSource(source.id)}
+                          className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors border border-transparent hover:border-red-500/30"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                        
+                        {/* Toggle */}
+                        <button
+                          onClick={() => toggleSource(source.id, source.isEnabled)}
+                          className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors duration-300 shadow-inner outline-none ${
                             source.isEnabled 
-                              ? 'translate-x-7 bg-electric-cyan shadow-[0_0_10px_#00E5FF]' 
-                              : 'translate-x-1 bg-slate-500'
+                              ? 'bg-electric-cyan/20 border border-electric-cyan/50' 
+                              : 'bg-graphite-darker border border-graphite-border'
                           }`}
-                        />
-                      </button>
-                    </div>
-                  </motion.div>
-                ))}
+                        >
+                          <span className="sr-only">Toggle source</span>
+                          <span
+                            className={`inline-block h-6 w-6 transform rounded-full transition-transform duration-300 shadow-md ${
+                              source.isEnabled 
+                                ? 'translate-x-7 bg-electric-cyan shadow-[0_0_10px_#00E5FF]' 
+                                : 'translate-x-1 bg-slate-500'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </motion.div>
+                  );
+                })}
               </AnimatePresence>
             </div>
           )}

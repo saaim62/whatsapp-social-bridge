@@ -142,9 +142,90 @@ export class WhatsappService implements OnModuleInit {
       }
     });
 
+    client.ev.on('contacts.update', async (contacts: any[]) => {
+      this.logger.log(`Received contacts update for ${contacts.length} contacts.`);
+      if (contacts && contacts.length > 0) {
+        await this.sourcesService.syncContacts(userId, contacts);
+      }
+    });
+
+    client.ev.on('chats.upsert', async (chats: any[]) => {
+      this.logger.log(`Received chats upsert for ${chats.length} chats.`);
+      const chatContacts = chats.map((c: any) => ({
+        id: c.id,
+        name: c.name || c.verifiedName || c.pushName || c.notify
+      })).filter((c: any) => c.name);
+      if (chatContacts.length > 0) {
+        await this.sourcesService.syncContacts(userId, chatContacts);
+      }
+    });
+
+    client.ev.on('chats.update', async (chats: any[]) => {
+      const chatContacts = chats.map((c: any) => ({
+        id: c.id,
+        name: c.name || c.verifiedName || c.pushName || c.notify
+      })).filter((c: any) => c.name);
+      if (chatContacts.length > 0) {
+        await this.sourcesService.syncContacts(userId, chatContacts);
+      }
+    });
+
+    client.ev.on('messaging-history.set', (history: any) => {
+      const contacts = history.contacts || [];
+      const chats = history.chats || [];
+      const messages = history.messages || [];
+      this.logger.log(`Received messaging history set with ${contacts.length} contacts, ${chats.length} chats, ${messages.length} messages.`);
+      
+      const uniqueContacts = new Map<string, any>();
+      
+      // 1. Prioritize official contacts
+      for (const c of contacts) {
+        if (c.id && (c.name || c.verifiedName || c.pushName || c.notify)) {
+          uniqueContacts.set(c.id, c);
+        }
+      }
+      
+      // 2. Fallback to chat names
+      for (const c of chats) {
+        const name = c.name || c.verifiedName || c.pushName || c.notify;
+        if (name && c.id && !uniqueContacts.has(c.id)) {
+          uniqueContacts.set(c.id, { id: c.id, name });
+        }
+      }
+      
+      // 3. Fallback to message pushNames
+      for (const m of messages) {
+        const jid = m.key?.remoteJid;
+        if (jid && m.pushName && !uniqueContacts.has(jid)) {
+          uniqueContacts.set(jid, { id: jid, name: m.pushName });
+        }
+      }
+      
+      const allContacts = Array.from(uniqueContacts.values());
+      if (allContacts.length > 0) {
+        // Run asynchronously so we don't block Baileys event loop / ACK
+        this.sourcesService.syncContacts(userId, allContacts)
+          .then(async () => {
+             await this.prisma.notification.create({
+               data: {
+                 userId,
+                 title: 'Contacts Synced',
+                 message: `Successfully synchronized ${allContacts.length} contacts from WhatsApp.`,
+                 type: 'success',
+                 link: '/sources'
+               }
+             });
+          })
+          .catch(err => this.logger.error(`Failed async syncContacts for user ${userId}`, err));
+      }
+    });
+
     client.ev.on('messages.upsert', async (m: any) => {
       this.logger.log(`RAW messages.upsert EVENT TYPE: ${m.type}, count: ${m.messages?.length || 0}`);
       
+      const debugLog = `[${new Date().toISOString()}] UP EVENT: ${m.type} for ${userId}, count: ${m.messages?.length || 0}\n`;
+      require('fs').appendFileSync(require('path').join(process.cwd(), 'debug-messages.log'), debugLog);
+
       const settings = await this.settingsService.getSettings(userId);
       if (!settings.isSyncActive) {
         this.logger.log(
@@ -172,6 +253,8 @@ export class WhatsappService implements OnModuleInit {
           
           const isAllowed = await this.sourcesService.isSourceAllowed(senderId, pushName, userId);
           
+          require('fs').appendFileSync(require('path').join(process.cwd(), 'debug-messages.log'), `[DEBUG] fromMe: ${msg.key.fromMe}, isAllowed: ${isAllowed}, senderId: ${senderId}\n`);
+
           // Ignore messages sent by ourselves from being processed as product drops
           if (msg.key.fromMe) continue;
           
@@ -400,6 +483,8 @@ export class WhatsappService implements OnModuleInit {
     this.messageBuffer.set(bufferKey, []);
     this.bufferTimers.delete(bufferKey);
 
+    require('fs').appendFileSync(require('path').join(process.cwd(), 'debug-messages.log'), `[DEBUG FLUSH] bufferKey: ${bufferKey}, messages: ${messages.length}\n`);
+
     if (messages.length === 0) return;
 
     this.logger.log(
@@ -502,6 +587,11 @@ export class WhatsappService implements OnModuleInit {
     );
 
     // DEBUG: Dump raw message structure for non-media messages to find text
+    const debugLog = `[${new Date().toISOString()}] from: ${senderName} (${jid})
+    msgKeys: [${msgKeys.join(', ')}], isMedia: ${isMedia}, captionLen: ${caption.length}
+    RAW: ${JSON.stringify(messageContent)}\n\n`;
+    fs.appendFileSync(path.join(process.cwd(), 'debug-messages.log'), debugLog);
+    
     if (!isMedia) {
       this.logger.log(
         `  -> RAW TEXT MSG: ${JSON.stringify(messageContent).substring(0, 500)}`,
