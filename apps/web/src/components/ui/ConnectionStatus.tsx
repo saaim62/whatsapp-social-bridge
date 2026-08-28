@@ -64,21 +64,21 @@ export function ConnectionStatusWidget({ variant = 'sidebar' }: { variant?: 'sid
 
   if (variant === 'header') {
     return (
-      <Link href="/settings" className="hidden md:flex items-center gap-3 bg-white/50 border border-slate-200/60 px-3 py-1.5 rounded-full hover:bg-slate-50 transition-colors">
-        <div className="flex items-center gap-1.5 border-r border-slate-200 pr-3">
-          <Smartphone className={`w-4 h-4 ${connections.whatsapp.isConnected ? 'text-emerald-500' : 'text-slate-400'}`} />
+      <Link href="/settings" className="hidden md:flex items-center gap-3 bg-graphite-darker/80 backdrop-blur-md border border-graphite-border px-4 py-1.5 rounded-full hover:bg-graphite hover:border-electric-cyan/30 transition-all shadow-sm">
+        <div className="flex items-center gap-2 border-r border-graphite-border pr-3">
+          <Smartphone className={`w-4 h-4 ${connections.whatsapp.isConnected ? 'text-electric-emerald drop-shadow-[0_0_5px_#00FFA3]' : 'text-slate-500'}`} />
           <div className="flex flex-col">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">WhatsApp</span>
-            <span className={`text-[10px] font-semibold leading-none ${connections.whatsapp.isConnected ? 'text-emerald-600' : 'text-slate-500'}`}>
+            <span className="text-[9px] font-bold uppercase tracking-widest text-slate-500">WhatsApp</span>
+            <span className={`text-[10px] font-mono font-bold leading-none ${connections.whatsapp.isConnected ? 'text-electric-emerald' : 'text-slate-400'}`}>
               {connections.whatsapp.isConnected ? connections.whatsapp.number || 'Connected' : 'Disconnected'}
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-1.5">
-          <Share2 className={`w-4 h-4 ${connections.meta.isConnected ? 'text-blue-500' : 'text-slate-400'}`} />
+        <div className="flex items-center gap-2 pl-1">
+          <Share2 className={`w-4 h-4 ${connections.meta.isConnected ? 'text-brand-400 drop-shadow-[0_0_5px_#818cf8]' : 'text-slate-500'}`} />
           <div className="flex flex-col">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Meta</span>
-            <span className={`text-[10px] font-semibold leading-none ${connections.meta.isConnected ? 'text-blue-600' : 'text-slate-500'}`}>
+            <span className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Meta</span>
+            <span className={`text-[10px] font-mono font-bold leading-none ${connections.meta.isConnected ? 'text-brand-400' : 'text-slate-400'}`}>
               {connections.meta.isConnected ? connections.meta.pageId || 'Connected' : 'Disconnected'}
             </span>
           </div>
@@ -91,19 +91,19 @@ export function ConnectionStatusWidget({ variant = 'sidebar' }: { variant?: 'sid
   return (
     <Link
       href="/settings"
-      className="flex md:hidden items-center justify-between w-full p-3 bg-slate-50 border-y border-slate-200"
+      className="flex md:hidden items-center justify-between w-full p-4 bg-graphite-darker/50 border-y border-graphite-border hover:bg-graphite transition-colors"
     >
       <div className="flex items-center gap-4">
-        <div className="flex items-center gap-1.5">
-          <div className={`w-2 h-2 rounded-full ${connections.whatsapp.isConnected ? 'bg-emerald-500' : 'bg-red-400'}`} />
-          <Smartphone className="w-4 h-4 text-slate-600" />
+        <div className="flex items-center gap-2">
+          <div className={`w-2 h-2 rounded-full ${connections.whatsapp.isConnected ? 'bg-electric-emerald shadow-[0_0_5px_#00FFA3]' : 'bg-red-500'}`} />
+          <Smartphone className={`w-4 h-4 ${connections.whatsapp.isConnected ? 'text-electric-emerald' : 'text-slate-500'}`} />
         </div>
-        <div className="flex items-center gap-1.5 border-l border-slate-300 pl-4">
-          <div className={`w-2 h-2 rounded-full ${connections.meta.isConnected ? 'bg-blue-500' : 'bg-red-400'}`} />
-          <Share2 className="w-4 h-4 text-slate-600" />
+        <div className="flex items-center gap-2 border-l border-graphite-border pl-4">
+          <div className={`w-2 h-2 rounded-full ${connections.meta.isConnected ? 'bg-brand-400 shadow-[0_0_5px_#818cf8]' : 'bg-red-500'}`} />
+          <Share2 className={`w-4 h-4 ${connections.meta.isConnected ? 'text-brand-400' : 'text-slate-500'}`} />
         </div>
       </div>
-      <span className="text-xs font-semibold text-brand-600">Manage</span>
+      <span className="text-xs font-bold uppercase tracking-wider text-electric-cyan">Manage</span>
     </Link>
   );
 }
