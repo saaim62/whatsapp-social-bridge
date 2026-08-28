@@ -161,83 +161,100 @@ export default function SourcesPage() {
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="w-8 h-8 text-brand-500 animate-spin" />
+      <div className="flex h-full min-h-[500px] items-center justify-center">
+        <Loader2 className="w-8 h-8 text-electric-cyan animate-spin" />
       </div>
     );
   }
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-100">
+      
+      {/* Header Panel */}
+      <div className="glass-card p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 border-b-2 border-b-electric-cyan/20">
         <div>
-          <h2 className="text-lg sm:text-xl font-bold text-slate-900">Allowed Sources</h2>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Toggle which groups or channels are allowed to forward products to the bridge.
-            Messages from disabled sources will be completely ignored.
+          <h2 className="text-2xl font-heading font-bold text-white flex items-center gap-3">
+            <Power className="w-6 h-6 text-electric-cyan" />
+            Active Data Sources
+          </h2>
+          <p className="text-sm text-slate-400 mt-2 max-w-xl">
+            Configure which node clusters are authorized to transmit payload streams into the bridge.
+            Disconnected nodes will have their packets dropped at the firewall.
           </p>
         </div>
         
         <button
           onClick={syncGroups}
           disabled={syncing}
-          className="btn-gradient flex items-center justify-center gap-2 px-5 py-2.5 shadow-sm disabled:opacity-50 w-full sm:w-auto"
+          className="btn-glow flex items-center justify-center gap-2 px-6 py-3 w-full sm:w-auto"
         >
           {syncing ? (
             <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
             <RefreshCw className="w-4 h-4" />
           )}
-          {syncing ? "Syncing..." : "Sync Contacts & Groups"}
+          {syncing ? "Synchronizing Nodes..." : "Sync Device Nodes"}
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col min-h-[500px]">
-        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-center gap-4">
+      {/* Main Board */}
+      <div className="glass-card overflow-hidden flex flex-col min-h-[500px]">
+        
+        {/* Toolbar */}
+        <div className="p-4 border-b border-graphite-border bg-graphite/40 flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="relative w-full max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <input
               type="text"
-              placeholder="Search by name or number..."
+              placeholder="Query by Node ID or Alias..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
+              className="w-full pl-9 pr-4 py-2.5 bg-graphite-darker/50 border border-graphite-border rounded-xl text-sm text-white focus:outline-none focus:border-electric-cyan transition-all placeholder-slate-500"
             />
           </div>
           <div className="flex items-center gap-4 w-full sm:w-auto">
-            <label className="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer">
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-400 cursor-pointer hover:text-white transition-colors">
               <input
                 type="checkbox"
                 checked={filteredSources.length > 0 && selectedIds.size === filteredSources.length}
                 onChange={handleSelectAll}
-                className="w-4 h-4 text-brand-500 rounded border-slate-300 focus:ring-brand-500"
+                className="w-4 h-4 text-electric-cyan rounded border-slate-600 bg-graphite-darker checked:bg-electric-cyan focus:ring-electric-cyan"
               />
-              Select All
+              Select All Nodes
             </label>
-            {selectedIds.size > 0 && (
-              <button
-                onClick={handleBulkDelete}
-                disabled={isDeletingBulk}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-              >
-                {isDeletingBulk ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                Delete ({selectedIds.size})
-              </button>
-            )}
+            <AnimatePresence>
+              {selectedIds.size > 0 && (
+                <motion.button
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  onClick={handleBulkDelete}
+                  disabled={isDeletingBulk}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/30 hover:border-red-500 rounded-lg text-sm font-bold transition-all disabled:opacity-50"
+                >
+                  {isDeletingBulk ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  Purge ({selectedIds.size})
+                </motion.button>
+              )}
+            </AnimatePresence>
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto p-2">
+        {/* Node Grid */}
+        <div className="flex-1 overflow-auto p-4 sm:p-6 bg-graphite-darker/30">
           {filteredSources.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-slate-400">
-              <Users className="w-12 h-12 mb-3 opacity-20" />
-              <p className="font-medium">No sources found.</p>
-              <p className="text-sm mt-1 text-center max-w-sm">
-                Try clicking "Sync WhatsApp Groups" to pull your active groups, or receive a message from a new group to auto-register it.
+            <div className="flex flex-col items-center justify-center h-64 text-slate-500">
+              <div className="w-20 h-20 mb-4 rounded-3xl bg-graphite border border-graphite-border flex items-center justify-center shadow-2xl relative overflow-hidden">
+                <div className="absolute inset-0 bg-electric-cyan/5 blur-xl" />
+                <Power className="w-8 h-8 text-slate-600 relative z-10" />
+              </div>
+              <p className="font-heading font-bold text-white text-lg mb-2">No Active Nodes</p>
+              <p className="text-sm text-center max-w-sm text-slate-400">
+                Execute a node sync or connect a primary device to populate the matrix.
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <AnimatePresence>
                 {filteredSources.map((source) => (
                   <motion.div
@@ -246,10 +263,10 @@ export default function SourcesPage() {
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
-                    className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
+                    className={`flex items-center justify-between p-4 rounded-xl border backdrop-blur-md transition-all duration-300 ${
                       source.isEnabled 
-                        ? 'bg-brand-50/30 border-brand-100 shadow-sm' 
-                        : 'bg-white border-slate-100 opacity-70 hover:opacity-100'
+                        ? 'bg-electric-cyan/5 border-electric-cyan/30 shadow-[0_0_15px_rgba(0,255,255,0.05)]' 
+                        : 'bg-graphite/40 border-graphite-border opacity-70 hover:opacity-100'
                     }`}
                   >
                     <div className="flex items-center gap-4 overflow-hidden">
@@ -257,13 +274,23 @@ export default function SourcesPage() {
                         type="checkbox"
                         checked={selectedIds.has(source.id)}
                         onChange={() => toggleSelection(source.id)}
-                        className="w-4 h-4 text-brand-500 rounded border-slate-300 focus:ring-brand-500 ml-2"
+                        className="w-4 h-4 text-electric-cyan rounded border-slate-600 bg-graphite-darker checked:bg-electric-cyan focus:ring-electric-cyan ml-1 cursor-pointer"
                       />
-                      <div className={`p-2.5 rounded-xl ${
-                        source.isEnabled ? 'bg-white shadow-sm' : 'bg-slate-50'
+                      
+                      {/* Node Icon */}
+                      <div className={`p-3 rounded-xl border relative overflow-hidden transition-colors duration-500 ${
+                        source.isEnabled 
+                          ? 'bg-graphite border-electric-cyan/30' 
+                          : 'bg-graphite-darker border-graphite-border'
                       }`}>
-                        {getIcon(source.type)}
+                        {source.isEnabled && (
+                           <div className="absolute inset-0 bg-electric-cyan/10 blur-md" />
+                        )}
+                        <div className="relative z-10">
+                          {getIcon(source.type)}
+                        </div>
                       </div>
+                      
                       <div className="min-w-0 flex-1">
                         {editingId === source.id ? (
                           <div className="flex items-center gap-2">
@@ -272,14 +299,14 @@ export default function SourcesPage() {
                               value={editName}
                               onChange={(e) => setEditName(e.target.value)}
                               onKeyDown={(e) => e.key === 'Enter' && saveSourceName(source.id)}
-                              className="px-2 py-1 text-sm font-bold text-slate-900 bg-white border border-brand-300 rounded focus:outline-none focus:ring-2 focus:ring-brand-500/20 w-full"
+                              className="px-2 py-1 text-sm font-bold text-white bg-graphite-darker border border-electric-cyan rounded focus:outline-none w-full"
                               autoFocus
                             />
-                            <button onClick={() => saveSourceName(source.id)} className="p-1 text-green-600 hover:bg-green-50 rounded">
-                              <Check className="w-4 h-4" />
+                            <button onClick={() => saveSourceName(source.id)} className="p-1.5 text-electric-emerald bg-electric-emerald/10 hover:bg-electric-emerald/20 border border-electric-emerald/20 rounded-md transition-colors">
+                              <Check className="w-3.5 h-3.5" />
                             </button>
-                            <button onClick={() => setEditingId(null)} className="p-1 text-slate-400 hover:bg-slate-50 rounded">
-                              <X className="w-4 h-4" />
+                            <button onClick={() => setEditingId(null)} className="p-1.5 text-slate-400 bg-graphite hover:text-white border border-graphite-border rounded-md transition-colors">
+                              <X className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         ) : (
@@ -287,36 +314,45 @@ export default function SourcesPage() {
                             setEditingId(source.id);
                             setEditName(source.name);
                           }}>
-                            <p className="font-bold text-slate-900 truncate">
+                            <p className={`font-bold truncate transition-colors ${
+                               source.isEnabled ? 'text-white' : 'text-slate-300'
+                            }`}>
                               {source.name}
                             </p>
-                            <Pencil className="w-3.5 h-3.5 text-slate-300 opacity-0 group-hover/name:opacity-100 transition-opacity" />
+                            <Pencil className="w-3.5 h-3.5 text-slate-500 opacity-0 group-hover/name:opacity-100 transition-opacity" />
                           </div>
                         )}
-                        <p className="text-xs font-medium text-slate-500 truncate mt-0.5 font-mono">
+                        <p className="text-xs font-medium text-slate-400 truncate mt-1 font-mono flex items-center gap-1.5">
+                          <span className={`w-1.5 h-1.5 rounded-full ${source.isEnabled ? 'bg-electric-cyan shadow-[0_0_5px_#00E5FF]' : 'bg-slate-600'}`} />
                           {source.jid}
                         </p>
                       </div>
                     </div>
                     
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-4">
                       <button
                         onClick={() => deleteSource(source.id)}
-                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Delete Source"
+                        className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors border border-transparent hover:border-red-500/30"
+                        title="Purge Node"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
+                      
+                      {/* Hardware Toggle */}
                       <button
                         onClick={() => toggleSource(source.id, source.isEnabled)}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 ${
-                          source.isEnabled ? 'bg-brand-500' : 'bg-slate-200'
+                        className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors duration-300 shadow-inner outline-none ${
+                          source.isEnabled 
+                            ? 'bg-electric-cyan/20 border border-electric-cyan/50' 
+                            : 'bg-graphite-darker border border-graphite-border'
                         }`}
                       >
-                        <span className="sr-only">Toggle Source</span>
+                        <span className="sr-only">Toggle Node Power</span>
                         <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${
-                            source.isEnabled ? 'translate-x-6' : 'translate-x-1'
+                          className={`inline-block h-6 w-6 transform rounded-full transition-transform duration-300 shadow-md ${
+                            source.isEnabled 
+                              ? 'translate-x-7 bg-electric-cyan shadow-[0_0_10px_#00E5FF]' 
+                              : 'translate-x-1 bg-slate-500'
                           }`}
                         />
                       </button>

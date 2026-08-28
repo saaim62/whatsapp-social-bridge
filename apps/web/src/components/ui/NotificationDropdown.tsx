@@ -25,11 +25,11 @@ export function NotificationDropdown() {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 rounded-full hover:bg-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+        className="relative p-2.5 rounded-xl bg-graphite border border-graphite-border hover:border-electric-cyan/50 hover:bg-electric-cyan/5 transition-all focus:outline-none shadow-[0_0_15px_rgba(0,0,0,0.5)] group"
       >
-        <Bell className="w-5 h-5 text-slate-600" />
+        <Bell className="w-5 h-5 text-slate-400 group-hover:text-electric-cyan transition-colors" />
         {unreadCount > 0 && (
-          <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center ring-2 ring-white">
+          <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-[0_0_10px_rgba(239,68,68,0.6)] border border-obsidian">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
@@ -38,44 +38,48 @@ export function NotificationDropdown() {
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            initial={{ opacity: 0, y: 15, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.95 }}
-            transition={{ duration: 0.2 }}
-            className="absolute right-0 mt-2 w-80 sm:w-96 bg-white/90 backdrop-blur-xl border border-slate-200 shadow-2xl rounded-2xl overflow-hidden z-[100]"
+            exit={{ opacity: 0, y: 15, scale: 0.95 }}
+            transition={{ duration: 0.2, type: 'spring', stiffness: 300, damping: 25 }}
+            className="absolute right-0 mt-3 w-80 sm:w-96 glass-panel border border-graphite-border shadow-[0_10px_50px_rgba(0,0,0,0.8)] rounded-2xl overflow-hidden z-[100]"
           >
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-              <h3 className="font-bold text-slate-900">Notifications</h3>
+            <div className="p-4 border-b border-graphite-border flex items-center justify-between bg-graphite/80 backdrop-blur-md">
+              <h3 className="font-heading font-bold text-white uppercase tracking-wider text-sm flex items-center gap-2">
+                <Bell className="w-4 h-4 text-electric-cyan" />
+                System Alerts
+              </h3>
               {unreadCount > 0 && (
                 <button
                   onClick={() => markAllAsRead()}
-                  className="text-xs font-semibold text-brand-600 hover:text-brand-700 flex items-center gap-1"
+                  className="text-xs font-semibold text-electric-emerald hover:text-white flex items-center gap-1 transition-colors"
                 >
                   <Check className="w-3 h-3" />
-                  Mark all as read
+                  Ack All
                 </button>
               )}
             </div>
 
-            <div className="max-h-[400px] overflow-y-auto p-2 space-y-1">
+            <div className="max-h-[400px] overflow-y-auto p-2 space-y-1 custom-scrollbar bg-obsidian/90">
               {dbNotifications.length === 0 ? (
-                <div className="p-6 text-center text-slate-500 flex flex-col items-center justify-center">
-                  <Bell className="w-8 h-8 mb-2 opacity-20" />
-                  <p className="text-sm">You have no notifications yet.</p>
+                <div className="p-8 text-center text-slate-500 flex flex-col items-center justify-center">
+                  <Bell className="w-10 h-10 mb-3 opacity-20 text-electric-cyan" />
+                  <p className="text-sm font-medium tracking-wider uppercase">Telemetry Nominal</p>
+                  <p className="text-xs text-slate-600 mt-1">No alerts detected.</p>
                 </div>
               ) : (
                 dbNotifications.map((notification) => {
                   const content = (
                     <>
                       <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                        className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 border ${
                           notification.type === "success"
-                            ? "bg-emerald-100 text-emerald-600"
+                            ? "bg-electric-emerald/10 border-electric-emerald/30 text-electric-emerald shadow-[0_0_10px_rgba(0,255,102,0.1)]"
                             : notification.type === "error"
-                            ? "bg-red-100 text-red-600"
+                            ? "bg-red-500/10 border-red-500/30 text-red-500 shadow-[0_0_10px_rgba(239,68,68,0.1)]"
                             : notification.type === "warning"
-                            ? "bg-amber-100 text-amber-600"
-                            : "bg-brand-100 text-brand-600"
+                            ? "bg-orange-500/10 border-orange-500/30 text-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.1)]"
+                            : "bg-electric-cyan/10 border-electric-cyan/30 text-electric-cyan shadow-[0_0_10px_rgba(0,240,255,0.1)]"
                         }`}
                       >
                         {notification.type === "success" ? (
@@ -89,16 +93,16 @@ export function NotificationDropdown() {
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className={`text-sm ${notification.isRead ? "text-slate-700" : "font-semibold text-slate-900"}`}>
+                        <p className={`text-sm ${notification.isRead ? "text-slate-400" : "font-bold text-white group-hover:text-electric-cyan transition-colors"}`}>
                           {notification.title}
                         </p>
                         {notification.message && (
-                          <p className="text-xs text-slate-500 mt-0.5 line-clamp-2 leading-relaxed">
+                          <p className={`text-xs mt-1 line-clamp-2 leading-relaxed ${notification.isRead ? "text-slate-500" : "text-slate-300"}`}>
                             {notification.message}
                           </p>
                         )}
-                        <p className="text-[10px] text-slate-400 mt-1.5 font-medium">
-                          {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
+                        <p className="text-[10px] text-slate-500 mt-2 font-mono uppercase tracking-wider">
+                          T-{formatDistanceToNow(new Date(notification.createdAt))}
                         </p>
                       </div>
                       {!notification.isRead && (
@@ -108,15 +112,17 @@ export function NotificationDropdown() {
                             e.stopPropagation();
                             markAsRead(notification.id);
                           }}
-                          className="flex-shrink-0 self-center w-2 h-2 rounded-full bg-brand-500 hover:scale-150 transition-transform"
-                          title="Mark as read"
+                          className="flex-shrink-0 self-center w-2.5 h-2.5 rounded-full bg-electric-cyan shadow-[0_0_8px_rgba(0,240,255,0.8)] hover:scale-150 transition-transform"
+                          title="Acknowledge alert"
                         />
                       )}
                     </>
                   );
 
-                  const wrapperClasses = `p-3 rounded-xl flex gap-3 transition-colors ${
-                    notification.isRead ? "opacity-70 hover:bg-slate-50" : "bg-brand-50/30 hover:bg-brand-50/50"
+                  const wrapperClasses = `p-3 rounded-xl flex gap-3 transition-colors border group ${
+                    notification.isRead 
+                      ? "border-transparent opacity-60 hover:bg-graphite" 
+                      : "border-graphite-border bg-graphite/40 hover:bg-graphite hover:border-electric-cyan/30"
                   }`;
 
                   return notification.link ? (
@@ -140,13 +146,13 @@ export function NotificationDropdown() {
               )}
             </div>
 
-            <div className="p-2 border-t border-slate-100 bg-slate-50/50">
+            <div className="p-3 border-t border-graphite-border bg-graphite/80 backdrop-blur-md">
               <a
                 href="/notifications"
                 onClick={() => setIsOpen(false)}
-                className="w-full py-2 text-sm font-semibold text-slate-600 hover:text-brand-600 transition-colors flex items-center justify-center rounded-lg hover:bg-slate-100"
+                className="w-full py-2.5 text-xs font-bold uppercase tracking-widest text-slate-400 hover:text-white transition-colors flex items-center justify-center rounded-xl hover:bg-white/5 border border-transparent hover:border-white/10"
               >
-                View all notifications
+                Access Alert History
               </a>
             </div>
           </motion.div>

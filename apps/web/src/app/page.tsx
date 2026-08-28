@@ -5,18 +5,19 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { formatDistanceToNow } from "date-fns";
 import {
-  Inbox,
-  Sparkles,
-  Send,
-  AlertTriangle,
+  Zap,
   ArrowRight,
-  ImageIcon,
+  Database,
+  Globe,
+  Camera,
+  Share2,
+  MessageCircle,
+  Activity,
+  AlertCircle
 } from "lucide-react";
 import { API_URL, fetchWithAuth } from "@/lib/api";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { StatCard } from "@/components/ui/StatCard";
-import { StatusBadge } from "@/components/ui/StatusBadge";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 
 export default function DashboardPage() {
   const [batches, setBatches] = useState<any[]>([]);
@@ -32,172 +33,192 @@ export default function DashboardPage() {
       .catch(() => setLoading(false));
   }, []);
 
-  if (loading) return <LoadingSpinner label="Loading dashboard..." />;
+  if (loading) return <LoadingSpinner label="Initializing systems..." />;
 
-  const total = batches.length;
-  const processed = batches.filter(
-    (b) => !["RECEIVED", "PROCESSING"].includes(b.status),
-  ).length;
-  const published = batches.filter((b) =>
-    ["PUBLISHED", "PARTIALLY_PUBLISHED"].includes(b.status),
-  ).length;
-  const failed = batches.filter((b) => b.status === "FAILED").length;
-  const recent = batches.slice(0, 6);
+  const recent = batches.slice(0, 5);
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: { staggerChildren: 0.1 }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
+  };
 
   return (
-    <div>
-      <PageHeader
-        title="Overview"
-        description="Real-time metrics for your WhatsApp-to-social automation pipeline."
-      />
-
-      <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-xl mb-6 flex items-start gap-3">
-        <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5 text-yellow-600" />
-        <div>
-          <h4 className="font-bold text-sm">Storage Notice</h4>
-          <p className="text-sm mt-0.5 text-yellow-700">To save storage, all products are automatically removed 14 days after they are created.</p>
+    <motion.div 
+      variants={containerVariants}
+      initial="hidden"
+      animate="show"
+      className="max-w-6xl mx-auto space-y-8"
+    >
+      
+      {/* System Status HUD */}
+      <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="glass-card p-6 flex flex-col justify-between relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-electric-cyan-dim rounded-full blur-[50px] group-hover:bg-electric-cyan/20 transition-colors" />
+          <div className="flex items-center justify-between mb-8 relative z-10">
+            <span className="text-sm font-semibold tracking-widest text-slate-400 uppercase">Total Volume</span>
+            <Activity className="w-5 h-5 text-electric-cyan" />
+          </div>
+          <div className="relative z-10">
+            <div className="text-5xl font-heading font-bold text-white">{batches.length}</div>
+            <div className="text-sm text-electric-cyan mt-2 font-medium">Nodes Processed</div>
+          </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-10">
-        <StatCard
-          title="Received"
-          value={total}
-          icon={Inbox}
-          gradient="bg-brand-500"
-          iconBg="bg-gradient-to-br from-brand-500 to-brand-600"
-          delay={0}
-        />
-        <StatCard
-          title="Processed"
-          value={processed}
-          icon={Sparkles}
-          gradient="bg-violet-500"
-          iconBg="bg-gradient-to-br from-violet-500 to-violet-600"
-          delay={0.08}
-        />
-        <StatCard
-          title="Published"
-          value={published}
-          icon={Send}
-          gradient="bg-emerald-500"
-          iconBg="bg-gradient-to-br from-emerald-500 to-emerald-600"
-          delay={0.16}
-        />
-        <StatCard
-          title="Failed"
-          value={failed}
-          icon={AlertTriangle}
-          gradient="bg-rose-500"
-          iconBg="bg-gradient-to-br from-rose-500 to-rose-600"
-          delay={0.24}
-        />
-      </div>
+        <div className="glass-card p-6 flex flex-col justify-between relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-electric-emerald-dim rounded-full blur-[50px] group-hover:bg-electric-emerald/20 transition-colors" />
+          <div className="flex items-center justify-between mb-8 relative z-10">
+            <span className="text-sm font-semibold tracking-widest text-slate-400 uppercase">Live Output</span>
+            <Globe className="w-5 h-5 text-electric-emerald" />
+          </div>
+          <div className="relative z-10">
+            <div className="text-5xl font-heading font-bold text-white">
+              {batches.filter(b => ["PUBLISHED", "PARTIALLY_PUBLISHED"].includes(b.status)).length}
+            </div>
+            <div className="text-sm text-electric-emerald mt-2 font-medium">Active on Network</div>
+          </div>
+        </div>
 
-      {/* Pipeline visual */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3, duration: 0.5 }}
-        className="glass-card p-6 mb-10"
-      >
-        <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4">
-          Pipeline Flow
-        </h3>
-        <div className="flex items-center justify-between gap-2 overflow-x-auto pb-2">
+        <div className="glass-card p-6 flex flex-col justify-between relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-electric-magenta-dim rounded-full blur-[50px] group-hover:bg-electric-magenta/20 transition-colors" />
+          <div className="flex items-center justify-between mb-8 relative z-10">
+            <span className="text-sm font-semibold tracking-widest text-slate-400 uppercase">Anomalies</span>
+            <AlertCircle className="w-5 h-5 text-electric-magenta" />
+          </div>
+          <div className="relative z-10">
+            <div className="text-5xl font-heading font-bold text-white">
+              {batches.filter(b => b.status === "FAILED").length}
+            </div>
+            <div className="text-sm text-electric-magenta mt-2 font-medium">Failed Transmissions</div>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Interactive Automation Visualizer */}
+      <motion.div variants={itemVariants} className="glass-panel rounded-3xl p-8 relative overflow-hidden">
+        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none" />
+        
+        <div className="flex items-center justify-between mb-10 relative z-10">
+          <div>
+            <h2 className="text-2xl font-heading font-bold text-white">Live Data Stream</h2>
+            <p className="text-slate-400 text-sm mt-1">Monitoring active commerce pipelines across all nodes</p>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-electric-cyan-dim border border-electric-cyan/30 text-electric-cyan text-xs font-bold tracking-widest uppercase">
+            <span className="w-2 h-2 rounded-full bg-electric-cyan animate-pulse-cyan" />
+            Active
+          </div>
+        </div>
+
+        <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-4 py-8">
           {[
-            { label: "WhatsApp", color: "from-[#25D366] to-[#128C7E]" },
-            { label: "AI Extract", color: "from-brand-500 to-violet-500" },
-            { label: "Review", color: "from-amber-400 to-orange-500" },
-            { label: "Publish", color: "from-pink-500 to-rose-500" },
-          ].map((step, i) => (
-            <div key={step.label} className="flex items-center gap-2 flex-1 min-w-[100px]">
-              <div
-                className={`flex-1 h-2 rounded-full bg-gradient-to-r ${step.color} opacity-80`}
-                style={{ animationDelay: `${i * 0.2}s` }}
-              />
-              <span className="text-[10px] font-bold text-slate-500 whitespace-nowrap">
-                {step.label}
-              </span>
-              {i < 3 && (
-                <ArrowRight className="w-3 h-3 text-slate-300 flex-shrink-0" />
+            { id: "whatsapp", label: "WhatsApp", icon: MessageCircle, color: "text-[#25D366]", bg: "bg-[#25D366]/10", border: "border-[#25D366]/30" },
+            { id: "db", label: "Commerce Hub", icon: Database, color: "text-brand-400", bg: "bg-brand-500/10", border: "border-brand-500/30" },
+            { id: "web", label: "Web Storefront", icon: Globe, color: "text-electric-cyan", bg: "bg-electric-cyan-dim", border: "border-electric-cyan/30" },
+            { id: "social", label: "Meta Network", icon: Camera, color: "text-electric-magenta", bg: "bg-electric-magenta-dim", border: "border-electric-magenta/30" },
+          ].map((node, i, arr) => (
+            <div key={node.id} className="flex items-center gap-4 w-full md:w-auto">
+              <motion.div 
+                whileHover={{ scale: 1.05 }}
+                className={`flex flex-col items-center justify-center p-6 w-32 h-32 rounded-2xl border ${node.border} ${node.bg} backdrop-blur-md relative`}
+              >
+                {/* Active node pulse */}
+                <div className={`absolute inset-0 rounded-2xl border-2 border-white/0 ${i === 1 ? 'animate-pulse-cyan' : ''}`} />
+                <node.icon className={`w-8 h-8 mb-3 ${node.color}`} />
+                <span className="text-xs font-bold text-white text-center uppercase tracking-wider">{node.label}</span>
+              </motion.div>
+
+              {i < arr.length - 1 && (
+                <div className="hidden md:flex flex-1 min-w-[60px] h-0.5 bg-graphite-border relative overflow-hidden">
+                  <motion.div
+                    className="absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-electric-cyan to-transparent"
+                    animate={{ x: ["-100%", "300%"] }}
+                    transition={{ repeat: Infinity, duration: 1.5, ease: "linear", delay: i * 0.2 }}
+                  />
+                </div>
+              )}
+              {i < arr.length - 1 && (
+                <div className="md:hidden flex h-10 w-0.5 bg-graphite-border my-2 relative overflow-hidden">
+                  <motion.div
+                    className="absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-transparent via-electric-cyan to-transparent"
+                    animate={{ y: ["-100%", "300%"] }}
+                    transition={{ repeat: Infinity, duration: 1.5, ease: "linear", delay: i * 0.2 }}
+                  />
+                </div>
               )}
             </div>
           ))}
         </div>
       </motion.div>
 
-      {/* Recent products */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4, duration: 0.5 }}
-        className="glass-card overflow-hidden"
-      >
-        <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="text-lg font-bold text-slate-900">Recent Products</h3>
-          <Link
-            href="/products"
-            className="text-sm font-semibold text-brand-600 hover:text-brand-700 flex items-center gap-1 transition-colors"
-          >
-            View all <ArrowRight className="w-4 h-4" />
+      {/* Recent Activity Matrix */}
+      <motion.div variants={itemVariants} className="glass-card">
+        <div className="px-6 py-6 border-b border-graphite-border flex justify-between items-center bg-graphite/40">
+          <h2 className="text-xl font-heading font-bold text-white">Recent Ingestions</h2>
+          <Link href="/products" className="text-sm font-semibold text-electric-cyan hover:text-white transition-colors flex items-center gap-2">
+            View Matrix <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
 
         {recent.length === 0 ? (
-          <div className="px-6 py-16 text-center">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-slate-100 flex items-center justify-center">
-              <Inbox className="w-8 h-8 text-slate-300" />
+          <div className="p-16 text-center">
+            <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-graphite border border-graphite-border flex items-center justify-center shadow-lg shadow-black/50">
+              <Database className="w-8 h-8 text-slate-500" />
             </div>
-            <p className="text-slate-600 font-medium">No products yet</p>
-            <p className="text-sm text-slate-400 mt-1">
-              Link WhatsApp to start receiving product drops.
-            </p>
+            <p className="text-lg text-white font-heading font-bold mb-2">No Data Streams Active</p>
+            <p className="text-slate-400">Connect a WhatsApp source to begin data ingestion.</p>
           </div>
         ) : (
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-graphite-border">
             {recent.map((batch: any, i: number) => (
               <motion.li
                 key={batch.id}
-                initial={{ opacity: 0, x: -12 }}
+                initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.45 + i * 0.05 }}
+                transition={{ delay: 0.5 + i * 0.1 }}
+                className="group"
               >
                 <Link
                   href={`/products/${batch.id}`}
-                  className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 px-4 sm:px-6 py-4 hover:bg-brand-50/30 transition-colors duration-200 group"
+                  className="flex flex-col sm:flex-row sm:items-center gap-4 px-6 py-5 hover:bg-white/[0.02] transition-all duration-300 relative overflow-hidden"
                 >
-                  <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
-                    <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 flex-shrink-0">
+                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-electric-cyan opacity-0 group-hover:opacity-100 transition-opacity" />
+                  
+                  <div className="w-14 h-14 rounded-xl bg-graphite border border-graphite-border overflow-hidden shrink-0 relative">
                     {batch.mediaAssets?.[0]?.localPath ? (
                       <img
                         src={`${API_URL}/${batch.mediaAssets[0].localPath}`}
                         alt=""
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
-                        <ImageIcon className="w-5 h-5 text-slate-300" />
+                        <Zap className="w-5 h-5 text-slate-500" />
                       </div>
                     )}
+                    <div className="absolute inset-0 ring-1 ring-inset ring-white/10 rounded-xl" />
                   </div>
+                  
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-slate-900 truncate group-hover:text-brand-600 transition-colors">
-                      {batch.extractedData?.product_name ||
-                        `Product from ${batch.senderName || "WhatsApp"}`}
+                    <p className="font-heading text-lg font-bold text-slate-200 group-hover:text-electric-cyan transition-colors truncate">
+                      {batch.extractedData?.product_name || `Stream Node [${batch.id.split('-')[0]}]`}
                     </p>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      {batch.senderName || "Direct"} ·{" "}
-                      {batch.mediaAssets?.length || 0} media ·{" "}
-                      {formatDistanceToNow(new Date(batch.createdAt))} ago
-                      <span className="text-yellow-700 font-bold ml-2 bg-yellow-100 px-1.5 py-0.5 rounded-md">
-                        Expires in {Math.max(0, 14 - Math.floor((new Date().getTime() - new Date(batch.createdAt).getTime()) / (1000 * 60 * 60 * 24)))} days
-                      </span>
-                    </p>
+                    <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-400 font-mono">
+                      <span className="flex items-center gap-1.5"><Zap className="w-3 h-3 text-brand-400" /> {batch.mediaAssets?.length || 0} Assets</span>
+                      <span className="w-1 h-1 rounded-full bg-slate-700" />
+                      <span>{formatDistanceToNow(new Date(batch.createdAt))} ago</span>
+                    </div>
                   </div>
-                  </div>
-                  <div className="sm:flex-shrink-0">
-                    <StatusBadge status={batch.status} />
+                  
+                  <div className="shrink-0 flex items-center gap-4">
+                     <StatusBadge status={batch.status} />
+                     <ArrowRight className="w-5 h-5 text-slate-600 group-hover:text-white transition-colors group-hover:translate-x-1 duration-300" />
                   </div>
                 </Link>
               </motion.li>
@@ -205,6 +226,6 @@ export default function DashboardPage() {
           </ul>
         )}
       </motion.div>
-    </div>
+    </motion.div>
   );
 }

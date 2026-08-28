@@ -12,6 +12,7 @@ import {
   useSensor,
   useSensors,
   DragEndEvent,
+  MeasuringStrategy,
 } from '@dnd-kit/core';
 import {
   arrayMove,
@@ -343,14 +344,14 @@ export default function ProductDetailPage() {
 
   if (!batch) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px]">
-        <AlertCircle className="w-16 h-16 text-slate-200 mb-4" />
-        <h2 className="text-xl font-bold text-slate-700">Product Not Found</h2>
+      <div className="flex flex-col items-center justify-center min-h-[400px] bg-graphite/40 rounded-2xl border border-graphite-border">
+        <AlertCircle className="w-16 h-16 text-slate-500 mb-4" />
+        <h2 className="text-xl font-heading font-bold text-white">Node Not Found</h2>
         <button
           onClick={() => router.push("/products")}
-          className="mt-4 btn-ghost"
+          className="mt-4 btn-glass border-electric-cyan/30 text-electric-cyan hover:border-electric-cyan hover:bg-electric-cyan/10"
         >
-          Back to Products
+          Return to Matrix
         </button>
       </div>
     );
@@ -359,243 +360,154 @@ export default function ProductDetailPage() {
   const isEditable = batch.status === "READY" || batch.status === "FAILED";
 
   return (
-    <div className="-m-4 sm:-m-8">
-      {/* Sticky header */}
-      <div className="sticky top-0 z-20 bg-white/70 backdrop-blur-xl border-b border-slate-200/60 px-4 sm:px-8 py-3 sm:py-4">
-        <div className="flex items-center justify-between max-w-7xl mx-auto gap-2">
-          <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
-            <button
-              onClick={() => router.push("/products")}
-              className="p-1.5 sm:p-2 -ml-2 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all flex-shrink-0"
-            >
-              <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
-            </button>
-            <div className="min-w-0">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
-                <h1 className="text-base sm:text-xl font-extrabold text-slate-900 truncate">
-                  {batch.extractedData?.product_name || "Product Review"}
-                </h1>
-                <div className="hidden sm:block">
-                  <StatusBadge status={batch.status} />
-                </div>
-              </div>
-              <p className="text-xs sm:text-sm text-slate-500 mt-0.5 truncate flex items-center gap-2">
-                From {batch.senderName || "WhatsApp"}
-                <span className="text-yellow-700 font-bold bg-yellow-100 px-1.5 py-0.5 rounded-md text-[10px] sm:text-xs">
-                  Expires in {Math.max(0, 14 - Math.floor((new Date().getTime() - new Date(batch.createdAt).getTime()) / (1000 * 60 * 60 * 24)))} days
-                </span>
-              </p>
-            </div>
+    <div className="-mx-4 md:-mx-10 min-h-screen bg-graphite flex flex-col relative overflow-hidden">
+      {/* Decorative ambient background */}
+      <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-electric-cyan/5 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-electric-magenta/5 rounded-full blur-[120px] pointer-events-none" />
+
+      {/* Top Action Bar (HUD Style) */}
+      <div className="sticky top-0 z-30 bg-graphite-darker/80 backdrop-blur-xl border-b border-graphite-border px-4 sm:px-8 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-4 flex-1 min-w-0">
+          <button
+            onClick={() => router.push("/products")}
+            className="w-10 h-10 rounded-xl bg-graphite border border-graphite-border flex items-center justify-center text-slate-400 hover:text-white hover:border-slate-500 transition-all flex-shrink-0 shadow-sm"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          
+          <div className="flex-1 min-w-0">
+             <div className="flex items-center gap-3">
+               <h1 className="text-lg sm:text-xl font-heading font-bold text-white truncate">
+                 {batch.extractedData?.product_name || "Unidentified Asset"}
+               </h1>
+               <div className="hidden sm:block">
+                 <StatusBadge status={batch.status} />
+               </div>
+             </div>
+             <div className="flex items-center gap-2 mt-1 text-xs text-slate-400 font-mono">
+               <span>Source: <span className="text-slate-300">{batch.senderName || "WhatsApp"}</span></span>
+               <span className="text-graphite-border px-1">•</span>
+               <span className="text-amber-500">T-{Math.max(0, 14 - Math.floor((new Date().getTime() - new Date(batch.createdAt).getTime()) / (1000 * 60 * 60 * 24)))} days to auto-purge</span>
+             </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <div className="sm:hidden block">
+             <StatusBadge status={batch.status} />
           </div>
           <button
             onClick={approveAndPublish}
             disabled={!isEditable}
-            className="btn-gradient px-3 py-2 sm:px-4 text-[11px] sm:text-sm whitespace-nowrap flex-shrink-0"
+            className="btn-glow flex items-center gap-2 disabled:opacity-50"
           >
-            <Save className="w-3 h-3 sm:w-4 sm:h-4 hidden sm:block" />
-            <span className="hidden sm:inline">Approve & Publish</span>
-            <span className="sm:hidden">Publish</span>
+            <Save className="w-4 h-4 hidden sm:block" />
+            <span className="hidden sm:inline font-bold tracking-wide text-sm">Commit & Execute</span>
+            <span className="sm:hidden font-bold">Commit</span>
           </button>
-        </div>
-        {/* Mobile Status Badge under header */}
-        <div className="sm:hidden mt-2 flex items-center justify-between">
-          <StatusBadge status={batch.status} />
         </div>
       </div>
 
-      <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-7xl mx-auto">
-        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-xl mb-6 flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5 text-yellow-600" />
-          <div>
-            <h4 className="font-bold text-sm">Storage Notice</h4>
-            <p className="text-sm mt-0.5 text-yellow-700">To save storage, this product will be automatically removed 14 days after creation.</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left column */}
-          <div className="lg:col-span-5 space-y-6">
-            {/* Pricing */}
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className="glass-card overflow-hidden"
-            >
-              <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2 bg-gradient-to-r from-brand-50/50 to-violet-50/30">
-                <Tag className="w-4 h-4 text-brand-500" />
-                <h2 className="font-bold text-slate-800">Pricing & Details</h2>
-              </div>
-              <div className="p-6 space-y-4">
-                <div>
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                    Product Name
-                  </label>
-                  <p className="text-lg font-bold text-slate-900 mt-1">
-                    {batch.extractedData?.product_name || "N/A"}
-                  </p>
-                </div>
-                <div className="p-4 rounded-xl bg-gradient-to-br from-brand-50 to-violet-50 border border-brand-100/50">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-brand-600">
-                    Override Price
-                  </label>
-                  <input
-                    type="text"
-                    value={overridePrice}
-                    onChange={(e) => setOverridePrice(e.target.value)}
-                    placeholder="e.g. Rs. 4,500"
-                    className="input-field mt-2 !bg-white"
-                  />
-                  <p className="text-xs text-brand-500/70 mt-2">
-                    Injected live into captions on the right
-                  </p>
-                </div>
-              </div>
-            </motion.div>
-
-            {/* Features */}
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.15 }}
-              className="glass-card overflow-hidden"
-            >
-              <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-amber-500" />
-                <h2 className="font-bold text-slate-800">AI Extracted Features</h2>
-              </div>
-              <div className="p-6">
-                {batch.extractedData?.features?.length > 0 ? (
-                  <ul className="space-y-2.5">
-                    {batch.extractedData.features.map(
-                      (feat: string, i: number) => (
-                        <motion.li
-                          key={i}
-                          initial={{ opacity: 0, x: -8 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: 0.2 + i * 0.05 }}
-                          className="flex items-start gap-2 text-sm text-slate-700"
-                        >
-                          <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
-                          <span className="font-medium">{feat}</span>
-                        </motion.li>
-                      ),
-                    )}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-slate-400 italic">
-                    No features extracted yet.
-                  </p>
-                )}
-                {batch.rawText && (
-                  <div className="mt-6 pt-6 border-t border-slate-100">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                      Raw Message
-                    </label>
-                    <pre className="mt-2 text-xs text-slate-500 bg-slate-50 p-3 rounded-xl font-mono whitespace-pre-wrap">
-                      {batch.rawText}
-                    </pre>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-
-            {/* Media Section with Bulk Selection & Fast Actions */}
+      <div className="flex-1 px-4 sm:px-8 py-6 sm:py-8 max-w-[1600px] w-full mx-auto relative z-10">
+        
+        {/* Studio Grid Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 h-full">
+          
+          {/* Left Column: Asset Gallery & Studio */}
+          <div className="lg:col-span-7 flex flex-col gap-6">
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="glass-card overflow-hidden"
+              className="glass-card flex-1 flex flex-col min-h-[500px]"
             >
-              {/* Media Section Header */}
-              <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              {/* Media Studio Header */}
+              <div className="px-6 py-4 border-b border-graphite-border bg-graphite/40 flex items-center justify-between backdrop-blur-sm sticky top-0 z-20">
                 <div className="flex items-center gap-2">
-                  <ImageIcon className="w-4 h-4 text-blue-500" />
-                  <h2 className="font-bold text-slate-800">
-                    Media ({batch.mediaAssets?.length || 0})
+                  <ImageIcon className="w-5 h-5 text-electric-cyan" />
+                  <h2 className="font-heading font-bold text-white uppercase tracking-wider text-sm">
+                    Visual Assets <span className="text-slate-500 ml-1">({batch.mediaAssets?.length || 0})</span>
                   </h2>
                 </div>
 
                 {batch.mediaAssets?.length > 1 && (
                   <button
                     onClick={toggleSelectAll}
-                    className="text-xs font-semibold text-brand-600 hover:text-brand-700 flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-brand-50 transition-colors"
+                    className="text-xs font-semibold text-electric-cyan hover:text-white flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-electric-cyan/10 hover:bg-electric-cyan/20 border border-electric-cyan/20 transition-all"
                   >
                     {selectedMediaIds.size === batch.mediaAssets.length ? (
                       <>
-                        <CheckSquare className="w-3.5 h-3.5 text-brand-600" />
+                        <CheckSquare className="w-3.5 h-3.5" />
                         Deselect All
                       </>
                     ) : (
                       <>
-                        <Square className="w-3.5 h-3.5 text-slate-400" />
-                        Select All ({batch.mediaAssets.length})
+                        <Square className="w-3.5 h-3.5" />
+                        Select All
                       </>
                     )}
                   </button>
                 )}
               </div>
 
-              {/* Bulk Actions Floating/Pinned Bar */}
+              {/* Bulk Actions Floating Bar */}
               <AnimatePresence>
                 {selectedMediaIds.size > 0 && (
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
                     exit={{ opacity: 0, height: 0 }}
-                    className="bg-brand-50 border-b border-brand-100 px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-2"
+                    className="bg-electric-cyan-dim border-b border-electric-cyan/20 px-6 py-3 flex flex-wrap items-center justify-between gap-4 sticky top-[60px] z-20 backdrop-blur-xl"
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-brand-700 bg-brand-100 px-2 py-0.5 rounded-full">
-                        {selectedMediaIds.size} Selected
-                      </span>
+                    <div className="text-xs font-bold text-electric-cyan uppercase tracking-wider">
+                      {selectedMediaIds.size} Assets Selected
                     </div>
 
-                    <div className="flex items-center gap-2 ml-auto">
+                    <div className="flex items-center gap-3 ml-auto">
                       <button
                         onClick={handleBulkRevert}
                         disabled={isBulkReverting}
-                        className="px-2.5 py-1 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg shadow-sm flex items-center gap-1.5 transition-all disabled:opacity-50"
-                        title="Remove Auto Blur on selected images"
+                        className="btn-glass px-3 py-1.5 text-xs text-white border-white/20 hover:border-white/40 hover:bg-white/10 flex items-center gap-1.5"
                       >
-                        <RotateCcw className="w-3 h-3 text-rose-500" />
-                        {isBulkReverting ? "Reverting..." : "Remove Blur"}
+                        <RotateCcw className="w-3 h-3 text-electric-cyan" />
+                        {isBulkReverting ? "Reverting..." : "Remove Blurs"}
                       </button>
 
                       <button
                         onClick={handleBulkDelete}
                         disabled={isBulkDeleting}
-                        className={`px-2.5 py-1 text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-all ${
-                          confirmBulkDelete
-                            ? "bg-rose-700 text-white hover:bg-rose-800"
-                            : "bg-rose-600 text-white hover:bg-rose-700"
-                        } disabled:opacity-50`}
-                        title="Delete selected images"
+                        className="btn-glass px-3 py-1.5 text-xs text-red-400 border-red-500/30 hover:border-red-500 hover:bg-red-500/10 flex items-center gap-1.5"
                       >
                         <Trash2 className="w-3 h-3" />
                         {isBulkDeleting
                           ? "Deleting..."
                           : confirmBulkDelete
                           ? "Confirm Delete?"
-                          : "Delete"}
+                          : "Delete Assets"}
                       </button>
                     </div>
                   </motion.div>
                 )}
               </AnimatePresence>
 
-              <div className="p-4 sm:p-6">
+              {/* Studio Canvas (Grid) */}
+              <div className="p-6 bg-graphite-darker/30 flex-1 overflow-y-auto">
                 {mediaOrder?.length > 0 ? (
                   <DndContext
                     sensors={sensors}
                     collisionDetection={closestCenter}
                     onDragEnd={handleDragEnd}
+                    measuring={{
+                      droppable: {
+                        strategy: MeasuringStrategy.Always,
+                      }
+                    }}
                   >
                     <SortableContext
                       items={mediaOrder.map((m) => m.id)}
                       strategy={rectSortingStrategy}
                     >
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                         {mediaOrder.map((asset: any, index: number) => {
                           const isImage = !asset.mimeType?.startsWith("video/");
                           const imageIndex = isImage
@@ -644,41 +556,97 @@ export default function ProductDetailPage() {
                     </SortableContext>
                   </DndContext>
                 ) : (
-                  <p className="text-sm text-slate-400 text-center py-6">
-                    No media attached.
-                  </p>
+                  <div className="h-full flex flex-col items-center justify-center text-slate-500 min-h-[300px]">
+                     <Layers className="w-12 h-12 mb-4 opacity-20" />
+                     <p className="text-sm font-medium">No media assets available.</p>
+                  </div>
                 )}
               </div>
-
             </motion.div>
           </div>
 
-          {/* Right column — Captions */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25 }}
-            className="lg:col-span-7"
-          >
-            <div className="glass-card overflow-hidden h-full flex flex-col">
-              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-violet-50/50 to-fuchsia-50/30">
+          {/* Right Column: AI Extraction & Copy Settings */}
+          <div className="lg:col-span-5 flex flex-col gap-6">
+            
+            {/* Context/Extraction Panel */}
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="glass-card overflow-hidden"
+            >
+              <div className="px-6 py-4 border-b border-graphite-border bg-graphite/40 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-500 to-violet-500 flex items-center justify-center">
-                    <Sparkles className="w-3.5 h-3.5 text-white" />
-                  </div>
-                  <h2 className="font-bold text-slate-800">Social Copy Studio</h2>
+                  <Sparkles className="w-4 h-4 text-electric-magenta" />
+                  <h2 className="font-heading font-bold text-white text-sm uppercase tracking-wider">Payload Data</h2>
                 </div>
+              </div>
+              <div className="p-6 grid gap-6">
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-graphite-darker/50 border border-graphite-border p-4 rounded-xl">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Asset Name</label>
+                    <p className="font-bold text-white mt-1 text-lg leading-tight">
+                      {batch.extractedData?.product_name || "Unidentified"}
+                    </p>
+                  </div>
+                  
+                  <div className="bg-electric-cyan/5 border border-electric-cyan/20 p-4 rounded-xl">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-electric-cyan">Override Price</label>
+                    <input
+                      type="text"
+                      value={overridePrice}
+                      onChange={(e) => setOverridePrice(e.target.value)}
+                      placeholder="e.g. $49.99"
+                      className="w-full bg-graphite/50 border border-graphite-border rounded-lg mt-2 px-3 py-1.5 text-white focus:border-electric-cyan focus:ring-1 focus:ring-electric-cyan text-sm transition-all"
+                    />
+                  </div>
+                </div>
+
+                {batch.extractedData?.features?.length > 0 && (
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 block">Extracted Vector Tags</label>
+                    <div className="flex flex-wrap gap-2">
+                      {batch.extractedData.features.map((feat: string, i: number) => (
+                        <span key={i} className="text-xs font-mono text-slate-300 bg-graphite border border-graphite-border px-2 py-1 rounded-md">
+                           {feat}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {batch.rawText && (
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 block">Raw Network Stream</label>
+                    <pre className="text-xs text-slate-400 bg-graphite-darker p-3 rounded-xl border border-graphite-border font-mono whitespace-pre-wrap max-h-32 overflow-y-auto">
+                      {batch.rawText}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+
+            {/* Social Copy Panel */}
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25 }}
+              className="glass-card overflow-hidden flex-1 flex flex-col"
+            >
+              <div className="px-6 py-4 border-b border-graphite-border bg-graphite/40 flex items-center justify-between">
+                <h2 className="font-heading font-bold text-white text-sm uppercase tracking-wider">Syndication Content</h2>
                 {isEditable && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-brand-600 bg-brand-50 px-2.5 py-1 rounded-full border border-brand-100">
-                    Editable
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-electric-emerald bg-electric-emerald/10 px-2.5 py-1 rounded-md border border-electric-emerald/20">
+                    Active
                   </span>
                 )}
               </div>
 
-              <div className="p-6 space-y-6 flex-1">
+              <div className="p-6 space-y-6 flex-1 overflow-y-auto max-h-[500px]">
                 <CaptionBlock
                   platform="Instagram"
-                  gradient="from-yellow-400 via-red-500 to-purple-500"
+                  gradient="from-fuchsia-500 to-orange-500"
                   value={
                     isEditable
                       ? applyPrice(editedInstagram)
@@ -690,7 +658,7 @@ export default function ProductDetailPage() {
                 />
                 <CaptionBlock
                   platform="Facebook"
-                  gradient="from-[#1877F2] to-[#0d65d9]"
+                  gradient="from-blue-500 to-cyan-500"
                   value={
                     isEditable
                       ? applyPrice(editedFacebook)
@@ -702,7 +670,7 @@ export default function ProductDetailPage() {
                 />
                 <CaptionBlock
                   platform="Story"
-                  gradient="from-slate-700 to-slate-900"
+                  gradient="from-slate-600 to-slate-800"
                   value={
                     isEditable
                       ? applyPrice(editedStory)
@@ -713,8 +681,8 @@ export default function ProductDetailPage() {
                   rows={3}
                 />
               </div>
-            </div>
-          </motion.div>
+            </motion.div>
+          </div>
         </div>
       </div>
 
@@ -756,8 +724,8 @@ function SortableMediaItem({
   // CRITICAL: No transition on the dragged item — it must follow the finger/mouse
   // at native framerate. Only passive items (sliding out of the way) get a transition.
   const style: React.CSSProperties = {
-    transform: CSS.Translate.toString(transform),
-    transition: isDragging ? 'none' : (transition || 'transform 200ms cubic-bezier(0.25, 1, 0.5, 1)'),
+    transform: CSS.Transform.toString(transform),
+    transition: isDragging ? undefined : (transition || 'transform 200ms cubic-bezier(0.25, 1, 0.5, 1)'),
     zIndex: isDragging ? 999 : 1,
     position: 'relative' as const,
   };
@@ -767,12 +735,12 @@ function SortableMediaItem({
       ref={setNodeRef}
       style={style}
       className={`relative group rounded-xl overflow-hidden border aspect-square will-change-transform ${
-        isSelected ? "border-brand-500 ring-2 ring-brand-500/30" : "border-slate-200"
-      } ${isDragging ? "shadow-2xl shadow-brand-500/30 ring-2 ring-brand-500 bg-white opacity-90" : "bg-white hover:shadow-md"}`}
+        isSelected ? "border-electric-cyan ring-2 ring-electric-cyan/30" : "border-graphite-border"
+      } ${isDragging ? "shadow-2xl shadow-electric-cyan/30 ring-2 ring-electric-cyan bg-graphite-darker opacity-90" : "bg-graphite-darker hover:border-electric-cyan/50"}`}
     >
       {/* Visual drag indicator */}
-      <div className="absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-10 flex justify-center pt-1 pointer-events-none">
-        <div className="w-8 h-1 bg-white/50 rounded-full" />
+      <div className="absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-10 flex justify-center pt-1 pointer-events-none">
+        <div className="w-8 h-1 bg-white/30 rounded-full" />
       </div>
 
       <div 
@@ -783,8 +751,8 @@ function SortableMediaItem({
       />
 
       {index === 0 && (
-        <div className="absolute top-2 left-2 z-20 bg-brand-600/90 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-lg shadow-sm border border-brand-400 pointer-events-none">
-          Thumbnail / 1st Image
+        <div className="absolute top-2 left-2 z-20 bg-electric-cyan/90 backdrop-blur-md text-graphite-darker text-[10px] font-bold px-2 py-1 rounded-md shadow-[0_0_10px_rgba(0,255,255,0.3)] border border-electric-cyan pointer-events-none">
+          Primary Asset
         </div>
       )}
       
@@ -807,25 +775,25 @@ function SortableMediaItem({
 
       {/* AI Processing Overlay */}
       {asset.isProcessing && (
-        <div className="absolute inset-0 bg-white/70 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center pointer-events-none">
-          <Loader2 className="w-8 h-8 text-brand-600 animate-spin mb-2" />
-          <span className="text-xs font-bold text-brand-700 tracking-wider">
-            PROCESSING AI...
+        <div className="absolute inset-0 bg-graphite-darker/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center pointer-events-none">
+          <Loader2 className="w-8 h-8 text-electric-cyan animate-spin mb-2" />
+          <span className="text-xs font-bold text-electric-cyan tracking-wider">
+            AI PROCESSING...
           </span>
           <button
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => onStopBlur(asset.id, e)}
-            className="mt-3 flex items-center gap-1 px-3 py-1.5 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-full text-[10px] font-bold tracking-wide transition-colors cursor-pointer pointer-events-auto"
+            className="mt-3 flex items-center gap-1 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/40 text-red-400 rounded-full text-[10px] font-bold tracking-wide transition-colors cursor-pointer pointer-events-auto border border-red-500/30"
           >
             <XCircle className="w-3.5 h-3.5" />
-            STOP
+            HALT
           </button>
         </div>
       )}
 
       {/* Interactive Card Overlay */}
       <div
-        className={`absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/20 to-slate-900/60 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2 pointer-events-none ${
+        className={`absolute inset-0 z-10 bg-gradient-to-t from-graphite-darker/95 via-graphite-darker/40 to-transparent opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2 pointer-events-none ${
           asset.isProcessing ? "hidden" : ""
         }`}
       >
@@ -834,10 +802,10 @@ function SortableMediaItem({
           <button
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => onToggleSelect(asset.id, e)}
-            className={`p-1.5 rounded-lg backdrop-blur-md shadow-sm transition-all ${
+            className={`p-1.5 rounded-lg backdrop-blur-md shadow-sm transition-all border ${
               isSelected
-                ? "bg-brand-600 text-white"
-                : "bg-slate-900/60 text-white/80 hover:bg-slate-900/80 hover:text-white"
+                ? "bg-electric-cyan/20 border-electric-cyan text-electric-cyan"
+                : "bg-graphite/60 border-graphite-border text-white/50 hover:bg-graphite hover:text-white"
             } cursor-pointer`}
           >
             {isSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
@@ -846,7 +814,7 @@ function SortableMediaItem({
           <button
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => onSingleDelete(asset.id, e)}
-            className={`p-1.5 rounded-lg shadow-sm transition-all flex items-center gap-1 backdrop-blur-md bg-rose-600/90 text-white hover:bg-rose-600 cursor-pointer`}
+            className={`p-1.5 rounded-lg shadow-sm transition-all flex items-center gap-1 backdrop-blur-md bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/40 cursor-pointer`}
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -859,19 +827,19 @@ function SortableMediaItem({
               <button
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => onMask(imageIndex, e)}
-                className="flex-1 py-1.5 px-2 rounded-lg bg-slate-800/95 backdrop-blur-md hover:bg-slate-800 text-white text-xs font-semibold shadow-sm transition-all border border-white/10 text-center cursor-pointer"
+                className="flex-1 py-1.5 px-2 rounded-lg bg-graphite/80 backdrop-blur-md hover:bg-graphite-border text-slate-300 hover:text-white text-xs font-semibold shadow-sm transition-all border border-graphite-border text-center cursor-pointer"
               >
-                Mask Logo
+                Mask Target
               </button>
 
               <button
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => onSingleRevert(asset.id, e)}
                 disabled={revertingMediaId === asset.id}
-                className="py-1.5 px-2.5 rounded-lg bg-rose-600/90 hover:bg-rose-600 backdrop-blur-md text-white text-xs font-semibold shadow-sm transition-all border border-white/10 flex items-center justify-center gap-1 disabled:opacity-50 cursor-pointer"
+                className="py-1.5 px-2.5 rounded-lg bg-electric-cyan/10 hover:bg-electric-cyan/20 backdrop-blur-md text-electric-cyan text-xs font-semibold shadow-sm transition-all border border-electric-cyan/30 flex items-center justify-center gap-1 disabled:opacity-50 cursor-pointer"
               >
                 <RotateCcw className={`w-3 h-3 ${revertingMediaId === asset.id ? "animate-spin" : ""}`} />
-                <span className="hidden sm:inline">Remove Blur</span>
+                <span className="hidden sm:inline">Unblur</span>
               </button>
             </div>
           </div>
@@ -897,24 +865,24 @@ function CaptionBlock({
   rows: number;
 }) {
   return (
-    <div>
+    <div className="group">
       <div className="flex items-center gap-2 mb-2">
         <div
-          className={`w-5 h-5 rounded-md bg-gradient-to-br ${gradient}`}
+          className={`w-5 h-5 rounded-md bg-gradient-to-br ${gradient} shadow-sm border border-white/10`}
         />
-        <h3 className="text-sm font-bold text-slate-800">{platform}</h3>
+        <h3 className="text-sm font-bold text-slate-300 group-hover:text-white transition-colors">{platform}</h3>
       </div>
       {editable && onChange ? (
         <textarea
           value={value || ""}
           onChange={(e) => onChange(e.target.value)}
           rows={rows}
-          className="input-field resize-y leading-relaxed !bg-slate-50/50"
+          className="w-full bg-graphite-darker/50 border border-graphite-border rounded-xl px-4 py-3 text-sm text-slate-300 placeholder-slate-600 focus:outline-none focus:border-electric-cyan focus:ring-1 focus:ring-electric-cyan resize-y leading-relaxed transition-all"
           placeholder={`${platform} caption...`}
         />
       ) : (
-        <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
-          <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+        <div className="bg-graphite-darker/50 border border-graphite-border rounded-xl p-4">
+          <p className="text-sm text-slate-400 whitespace-pre-wrap leading-relaxed">
             {value || "Not generated yet"}
           </p>
         </div>

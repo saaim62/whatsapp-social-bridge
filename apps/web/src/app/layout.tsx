@@ -1,13 +1,19 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Inter, Outfit } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/layout/AppShell";
 import { BRAND } from "@/lib/brand";
 import { Providers } from "./providers";
 
-const jakarta = Plus_Jakarta_Sans({
+const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-jakarta",
+  variable: "--font-inter",
+  display: "swap",
+});
+
+const outfit = Outfit({
+  subsets: ["latin"],
+  variable: "--font-outfit",
   display: "swap",
 });
 
@@ -22,8 +28,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${jakarta.className} h-screen overflow-hidden`}>
+    <html lang="en" className="dark">
+      <body className={`${inter.variable} ${outfit.variable} h-screen overflow-hidden selection:bg-electric-cyan-dim selection:text-electric-cyan bg-obsidian text-slate-200`}>
         <Providers>
           <AppShell>{children}</AppShell>
         </Providers>

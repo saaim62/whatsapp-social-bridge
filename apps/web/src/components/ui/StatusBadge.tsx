@@ -1,12 +1,12 @@
 const STATUS_STYLES: Record<string, string> = {
-  PUBLISHED: "bg-emerald-500/15 text-emerald-700 border-emerald-200/60",
-  PARTIALLY_PUBLISHED: "bg-teal-500/15 text-teal-700 border-teal-200/60",
-  READY: "bg-brand-500/15 text-brand-700 border-brand-200/60",
-  PUBLISHING: "bg-violet-500/15 text-violet-700 border-violet-200/60",
-  PROCESSING: "bg-amber-500/15 text-amber-700 border-amber-200/60",
-  RECEIVED: "bg-slate-500/15 text-slate-600 border-slate-200/60",
-  APPROVED: "bg-indigo-500/15 text-indigo-700 border-indigo-200/60",
-  FAILED: "bg-rose-500/15 text-rose-700 border-rose-200/60",
+  PUBLISHED: "bg-electric-emerald/10 text-electric-emerald border-electric-emerald/20 shadow-[0_0_10px_rgba(0,255,163,0.1)]",
+  PARTIALLY_PUBLISHED: "bg-teal-500/10 text-teal-400 border-teal-500/20",
+  READY: "bg-electric-cyan/10 text-electric-cyan border-electric-cyan/20 shadow-[0_0_10px_rgba(0,240,255,0.1)]",
+  PUBLISHING: "bg-electric-magenta/10 text-electric-magenta border-electric-magenta/20 shadow-[0_0_10px_rgba(255,0,229,0.1)]",
+  PROCESSING: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  RECEIVED: "bg-slate-500/10 text-slate-400 border-slate-500/20",
+  APPROVED: "bg-brand-500/10 text-brand-400 border-brand-500/20",
+  FAILED: "bg-red-500/10 text-red-400 border-red-500/20 shadow-[0_0_10px_rgba(239,68,68,0.1)]",
 };
 
 const PULSE_STATUSES = new Set(["READY", "PUBLISHING", "PROCESSING", "RECEIVED"]);
