@@ -17,7 +17,12 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd ~/whatsapp-social-bridge
+            git reset --hard HEAD
             git pull origin main
             npm install
+            cd apps/api
+            npx prisma db push
+            npx prisma generate
+            cd ~/whatsapp-social-bridge
             npm run build
             pm2 restart all
