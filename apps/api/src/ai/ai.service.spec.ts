@@ -35,8 +35,8 @@ describe('AiService', () => {
 
   it('should generate mock captions when no real key is provided', async () => {
     const result = await service.generateCaptions({});
-    expect(result.instagram).toBe('Mock IG Caption');
-    expect(result.facebook).toBe('Mock FB Caption');
-    expect(result.story).toBe('Mock Story');
+    expect(result.instagramCaption).toBe('Mock IG Caption');
+    expect(result.facebookCaption).toBe('Mock FB Caption');
+    expect(result.storyText).toBe('Mock Story');
   });
 });

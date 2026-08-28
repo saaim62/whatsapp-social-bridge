@@ -13,21 +13,25 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password) return null;
         try {
-          const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001'}/api/auth/login`, {
+          const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001'}/api/account/login`, {
             email: credentials.email,
             password: credentials.password,
           });
           const user = res.data;
           if (user && user.access_token) {
             return {
-              id: user.userId || credentials.email, // backend should return userId
-              email: credentials.email,
+              id: user.user.id || credentials.email, // backend should return userId
+              email: user.user.email,
+              name: user.user.name,
+              role: user.user.role,
+              trialExpired: user.user.trialExpired,
               accessToken: user.access_token,
             };
           }
           return null;
-        } catch (e) {
-          return null;
+        } catch (e: any) {
+          const message = e.response?.data?.message || "Invalid credentials";
+          throw new Error(message);
         }
       },
     }),
@@ -37,6 +41,8 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.accessToken = (user as any).accessToken;
         token.id = user.id;
+        token.role = (user as any).role;
+        token.trialExpired = (user as any).trialExpired;
       }
       return token;
     },
@@ -44,6 +50,8 @@ export const authOptions: NextAuthOptions = {
       (session as any).accessToken = token.accessToken;
       if (session.user) {
         (session.user as any).id = token.id;
+        (session.user as any).role = token.role;
+        (session.user as any).trialExpired = token.trialExpired;
       }
       return session;
     },

@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { NotificationDropdown } from "@/components/ui/NotificationDropdown";
 import {
   LayoutDashboard,
   Package,
@@ -12,6 +13,7 @@ import {
   Zap,
   ExternalLink,
   Radio,
+  Shield,
 } from "lucide-react";
 import { BRAND } from "@/lib/brand";
 import { API_URL } from "@/lib/api";
@@ -42,13 +44,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
   const router = useRouter();
 
+  const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password", "/reset-password", "/verify-email"];
+  const isPublicRoute = PUBLIC_ROUTES.includes(pathname || "");
+
   useEffect(() => {
-    if (status === "unauthenticated" && pathname !== "/login" && pathname !== "/register") {
+    if (status === "unauthenticated" && !isPublicRoute) {
       router.push("/login");
     }
-  }, [status, pathname, router]);
+  }, [status, isPublicRoute, router]);
 
-  if (pathname === "/login" || pathname === "/register") {
+  if (isPublicRoute) {
     return <>{children}</>;
   }
 
@@ -60,8 +65,53 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
+  const isTrialExpired = (session?.user as any)?.trialExpired;
+
   return (
     <div className="h-screen flex overflow-hidden">
+      {/* Trial Expired Overlay */}
+      {isTrialExpired && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-white/10 backdrop-blur-xl border border-white/20 p-8 rounded-3xl max-w-md w-full shadow-2xl text-center flex flex-col items-center mx-4"
+          >
+            <div className="w-16 h-16 bg-red-500/20 text-red-400 flex items-center justify-center rounded-full mb-6 ring-4 ring-red-500/10">
+              <Shield className="w-8 h-8" />
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-3">Trial Expired</h2>
+            <p className="text-white/70 mb-8 text-sm leading-relaxed">
+              Your 30-day free trial has come to an end. To continue using DropRoute's enterprise features, please activate your subscription for just <strong className="text-white">$10/month</strong>.
+            </p>
+            <button 
+              onClick={async () => {
+                try {
+                  await fetch(`${API_URL}/api/account/mock-pay`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: session?.user?.email })
+                  });
+                  alert('Payment successful! Please log out and log back in to access your account.');
+                  signOut();
+                } catch (e) {
+                  alert('Payment failed');
+                }
+              }}
+              className="w-full bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white font-semibold py-3 rounded-xl transition-all shadow-lg hover:shadow-brand-500/25 flex items-center justify-center gap-2"
+            >
+              <Zap className="w-5 h-5" />
+              Pay $10 (Mock)
+            </button>
+            <button 
+              onClick={() => signOut()}
+              className="mt-4 text-white/50 hover:text-white text-sm transition-colors"
+            >
+              Log out for now
+            </button>
+          </motion.div>
+        </div>
+      )}
       {/* Sidebar (Desktop) */}
       <motion.aside
         initial={{ x: -20, opacity: 0 }}
@@ -96,8 +146,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Navigation */}
         <nav className="relative flex-1 p-4 space-y-1">
-          {NAV_ITEMS.map((item, i) => {
-            const isActive = pathname
+          {(() => {
+            const items = [...NAV_ITEMS];
+            if ((session?.user as any)?.role === 'ADMIN') {
+              items.push({ href: "/admin", label: "Admin Console", icon: Shield });
+            }
+            return items.map((item, i) => {
+              const isActive = pathname
               ? item.href === "/"
                 ? pathname === "/"
                 : pathname.startsWith(item.href)
@@ -129,7 +184,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </Link>
               </motion.div>
             );
-          })}
+          });
+        })()}
         </nav>
 
         {/* WhatsApp connection */}
@@ -189,11 +245,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <div className="hidden lg:flex items-center bg-gradient-to-r from-indigo-50 to-purple-50 px-3 py-1.5 rounded-full border border-indigo-100/50 shadow-sm">
+            <div className="hidden lg:flex items-center bg-gradient-to-r from-indigo-50 to-purple-50 px-3 py-1.5 rounded-full border border-indigo-100/50 shadow-sm mr-2">
               <span className="text-xs font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">
                 {BRAND.tagline}
               </span>
             </div>
+            <NotificationDropdown />
             {/* Mobile Sign Out Button in Header */}
             <button
               onClick={() => signOut({ callbackUrl: "/login" })}
@@ -223,8 +280,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-slate-200 flex items-center justify-around px-2 z-50 pb-safe">
-        {NAV_ITEMS.map((item) => {
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-slate-200 flex items-center justify-around px-2 z-50 pb-safe overflow-x-auto">
+        {(() => {
+          const items = [...NAV_ITEMS];
+          if ((session?.user as any)?.role === 'ADMIN') {
+            items.push({ href: "/admin", label: "Admin", icon: Shield });
+          }
+          return items.map((item) => {
           const isActive = pathname
             ? item.href === "/"
               ? pathname === "/"
@@ -244,7 +306,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <span className="text-[10px] font-medium">{item.label}</span>
             </Link>
           );
-        })}
+        });
+      })()}
       </nav>
     </div>
   );

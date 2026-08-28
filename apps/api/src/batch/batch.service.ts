@@ -189,6 +189,17 @@ export class BatchService {
     // Add media
     if (mediaId && activeBatch) {
       const isVideo = mimeType?.startsWith('video/');
+      let fileSize = 0;
+      if (localPath) {
+        try {
+          const absolutePath = path.resolve(process.cwd(), localPath);
+          const stats = fs.statSync(absolutePath);
+          fileSize = stats.size;
+        } catch (e) {
+          this.logger.warn(`Could not determine file size for ${localPath}`);
+        }
+      }
+
       const media = await this.prisma.mediaAsset.create({
         data: {
           batchId: activeBatch.id,
@@ -196,6 +207,7 @@ export class BatchService {
           mimeType: mimeType,
           localPath: localPath,
           isProcessing: !isVideo,
+          fileSize: fileSize,
         },
       });
 
@@ -258,7 +270,10 @@ export class BatchService {
       where: { id, userId },
       include: {
         mediaAssets: {
-          orderBy: { createdAt: 'asc' },
+          orderBy: [
+            { sortOrder: 'asc' },
+            { createdAt: 'asc' }
+          ],
         },
         generatedContent: true,
         publications: true,
@@ -303,6 +318,33 @@ export class BatchService {
     
     await this.batchQueue.add('publish-batch', { batchId: id, userId });
     return { success: true };
+  }
+
+  async publishBatchesBulk(ids: string[], userId: string) {
+    const batches = await this.prisma.productBatch.findMany({
+      where: { 
+        id: { in: ids },
+        userId 
+      }
+    });
+
+    if (!batches.length) {
+      return { success: false, message: 'No valid batches found' };
+    }
+
+    // 1-minute delay between each publish
+    const delayIntervalMs = 60000;
+    
+    for (let i = 0; i < batches.length; i++) {
+      const batch = batches[i];
+      await this.batchQueue.add(
+        'publish-batch', 
+        { batchId: batch.id, userId },
+        { delay: i * delayIntervalMs }
+      );
+    }
+
+    return { success: true, count: batches.length };
   }
 
   async rejectBatch(id: string, userId: string) {
@@ -353,6 +395,49 @@ export class BatchService {
     return { success: true };
   }
 
+  async deleteBatchesBulk(ids: string[], userId: string) {
+    const batches = await this.prisma.productBatch.findMany({
+      where: { 
+        id: { in: ids },
+        userId 
+      },
+      include: { mediaAssets: true },
+    });
+
+    if (!batches.length) {
+      return { success: false, message: 'No valid batches found' };
+    }
+
+    // Delete physical files
+    for (const batch of batches) {
+      for (const media of batch.mediaAssets) {
+        if (media.localPath) {
+          const absolutePath = path.join(process.cwd(), media.localPath.replace(/^api\//, ''));
+          if (fs.existsSync(absolutePath)) {
+            try {
+              fs.unlinkSync(absolutePath);
+              this.logger.log(`Deleted physical file: ${absolutePath}`);
+            } catch (err) {}
+          }
+          const ext = path.extname(absolutePath);
+          const originalPath = absolutePath.replace(ext, `_original${ext}`);
+          if (fs.existsSync(originalPath)) {
+            try { fs.unlinkSync(originalPath); } catch (err) {}
+          }
+        }
+      }
+    }
+
+    // Delete all valid IDs from DB
+    await this.prisma.productBatch.deleteMany({
+      where: {
+        id: { in: batches.map(b => b.id) }
+      }
+    });
+
+    return { success: true, deletedCount: batches.length };
+  }
+
   async deleteMedia(mediaId: string, userId: string) {
     const media = await this.prisma.mediaAsset.findUnique({
       where: { id: mediaId },
@@ -383,6 +468,25 @@ export class BatchService {
     }
 
     await this.prisma.mediaAsset.delete({ where: { id: mediaId } });
+    return { success: true };
+  }
+
+  async reorderMedia(batchId: string, orderedMediaIds: string[], userId: string) {
+    const batch = await this.prisma.productBatch.findUnique({
+      where: { id: batchId, userId }
+    });
+    if (!batch) return { success: false, message: 'Batch not found' };
+
+    // Update in transaction to ensure consistency
+    await this.prisma.$transaction(
+      orderedMediaIds.map((id, index) => 
+        this.prisma.mediaAsset.updateMany({
+          where: { id, batchId },
+          data: { sortOrder: index }
+        })
+      )
+    );
+    
     return { success: true };
   }
 

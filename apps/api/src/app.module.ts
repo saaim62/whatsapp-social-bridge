@@ -13,6 +13,8 @@ import { AiModule } from './ai/ai.module';
 import { SettingsModule } from './settings/settings.module';
 import { SourcesModule } from './sources/sources.module';
 import { AuthModule } from './auth/auth.module';
+import { AdminModule } from './admin/admin.module';
+import { NotificationModule } from './notification/notification.module';
 
 @Module({
   imports: [
@@ -50,6 +52,8 @@ import { AuthModule } from './auth/auth.module';
     SettingsModule,
     SourcesModule,
     AuthModule,
+    AdminModule,
+    NotificationModule,
   ],
 })
 export class AppModule {}

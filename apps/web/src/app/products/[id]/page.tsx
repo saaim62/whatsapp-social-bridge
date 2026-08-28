@@ -4,6 +4,24 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  rectSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import {
   ChevronLeft,
   Sparkles,
   Tag,
@@ -30,6 +48,7 @@ export default function ProductDetailPage() {
   const id = params?.id as string;
   const router = useRouter();
   const [batch, setBatch] = useState<any>(null);
+  const [mediaOrder, setMediaOrder] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [confirmDeleteMediaId, setConfirmDeleteMediaId] = useState<string | null>(null);
@@ -47,6 +66,48 @@ export default function ProductDetailPage() {
   const [revertingMediaId, setRevertingMediaId] = useState<string | null>(null);
   const [isBulkReverting, setIsBulkReverting] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  
+  const sensors = useSensors(
+    useSensor(MouseSensor, {
+      activationConstraint: {
+        distance: 10, // 10px movement required on desktop to start drag
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 250, // 250ms hold required on mobile to start drag (allows normal scrolling)
+        tolerance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+
+      if (over && active.id !== over.id) {
+        setMediaOrder((items) => {
+          const oldIndex = items.findIndex((i) => i.id === active.id);
+          const newIndex = items.findIndex((i) => i.id === over.id);
+
+          const newOrder = arrayMove(items, oldIndex, newIndex);
+
+          // Save to backend asynchronously
+          fetchWithAuth(`${API_URL}/api/batches/${id}/media/reorder`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ orderedMediaIds: newOrder.map((a) => a.id) }),
+          }).catch((err) => console.error("Failed to reorder media", err));
+
+          return newOrder;
+        });
+      }
+    },
+    [id]
+  );
   
   const hasInitializedEdits = useRef(false);
 
@@ -76,6 +137,16 @@ export default function ProductDetailPage() {
             }
           }
           return data;
+        });
+        
+        setMediaOrder(prev => {
+          // If the fetched assets match the current ones, keep current order (don't disrupt dragging)
+          if (prev.length === data.mediaAssets.length && prev.every((p, i) => p.id === data.mediaAssets[i].id)) {
+             // We can just update the underlying data objects but keep order
+             return prev.map(p => data.mediaAssets.find((a: any) => a.id === p.id) || p);
+          }
+          // Otherwise initialize to the fetched order
+          return data.mediaAssets || [];
         });
         
         if (!hasInitializedEdits.current) {
@@ -166,6 +237,7 @@ export default function ProductDetailPage() {
         ...prev,
         mediaAssets: prev.mediaAssets.filter((a: any) => a.id !== mediaId),
       }));
+      setMediaOrder((prev) => prev.filter((a: any) => a.id !== mediaId));
       setSelectedMediaIds((prev) => {
         const next = new Set(prev);
         next.delete(mediaId);
@@ -255,6 +327,7 @@ export default function ProductDetailPage() {
         ...prev,
         mediaAssets: prev.mediaAssets.filter((a: any) => !selectedMediaIds.has(a.id)),
       }));
+      setMediaOrder((prev) => prev.filter((a: any) => !selectedMediaIds.has(a.id)));
       setSelectedMediaIds(new Set());
       await fetchBatchData();
     } catch (err) {
@@ -512,156 +585,71 @@ export default function ProductDetailPage() {
               </AnimatePresence>
 
               <div className="p-4 sm:p-6">
-                {batch.mediaAssets?.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-3">
-                    {batch.mediaAssets.map((asset: any) => {
-                      const isImage = !asset.mimeType?.startsWith("video/");
-                      const imageIndex = isImage
-                        ? imageAssets.findIndex((a: any) => a.id === asset.id)
-                        : -1;
-                      const isSelected = selectedMediaIds.has(asset.id);
-                      const timestamp = mediaTimestamps[asset.id] || 0;
-                      const mediaSrc = `${API_URL}/${asset.localPath}${
-                        timestamp ? `?t=${timestamp}` : ""
-                      }`;
+                {mediaOrder?.length > 0 ? (
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <SortableContext
+                      items={mediaOrder.map((m) => m.id)}
+                      strategy={rectSortingStrategy}
+                    >
+                      <div className="grid grid-cols-2 gap-3">
+                        {mediaOrder.map((asset: any, index: number) => {
+                          const isImage = !asset.mimeType?.startsWith("video/");
+                          const imageIndex = isImage
+                            ? imageAssets.findIndex((a: any) => a.id === asset.id)
+                            : -1;
+                          const isSelected = selectedMediaIds.has(asset.id);
+                          const timestamp = mediaTimestamps[asset.id] || 0;
+                          const mediaSrc = `${API_URL}/${asset.localPath}${
+                            timestamp ? `?t=${timestamp}` : ""
+                          }`;
 
-                      return (
-                        <div
-                          key={asset.id}
-                          className={`relative group rounded-xl overflow-hidden border aspect-square transition-all ${
-                            isSelected
-                              ? "border-brand-500 ring-2 ring-brand-500/30"
-                              : "border-slate-200"
-                          }`}
-                        >
-                          {asset.mimeType?.startsWith("video/") ? (
-                            <video
-                              src={mediaSrc}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                              muted
-                              loop
-                              autoPlay
-                              playsInline
-                            />
-                          ) : (
-                            <img
-                              src={mediaSrc}
-                              alt=""
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                            />
-                          )}
-
-                          {/* AI Processing Overlay */}
-                          {asset.isProcessing && (
-                            <div className="absolute inset-0 bg-white/70 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center">
-                              <Loader2 className="w-8 h-8 text-brand-600 animate-spin mb-2" />
-                              <span className="text-xs font-bold text-brand-700 tracking-wider">
-                                PROCESSING AI...
-                              </span>
-                              <button
-                                onClick={async (e) => {
-                                  e.preventDefault();
-                                  try {
-                                    await fetchWithAuth(
-                                      `${API_URL}/api/batches/media/${asset.id}/stop-blur`,
-                                      { method: "POST" }
-                                    );
-                                    fetchBatchData();
-                                  } catch (err) {
-                                    console.error("Failed to stop blur", err);
-                                  }
-                                }}
-                                className="mt-3 flex items-center gap-1 px-3 py-1.5 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-full text-[10px] font-bold tracking-wide transition-colors"
-                              >
-                                <XCircle className="w-3.5 h-3.5" />
-                                STOP
-                              </button>
-                            </div>
-                          )}
-
-                          {/* Interactive Card Overlay */}
-                          <div
-                            className={`absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/20 to-slate-900/60 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2 ${
-                              asset.isProcessing ? "hidden" : ""
-                            }`}
-                          >
-                            {/* Top Controls: Checkbox (Left) + Delete Button (Right) */}
-                            <div className="flex items-center justify-between w-full">
-                              {/* Always show checkbox for selection */}
-                              <button
-                                onClick={(e) => toggleSelectMedia(asset.id, e)}
-                                className={`p-1.5 rounded-lg backdrop-blur-md shadow-sm transition-all ${
-                                  isSelected
-                                    ? "bg-brand-600 text-white"
-                                    : "bg-slate-900/60 text-white/80 hover:bg-slate-900/80 hover:text-white"
-                                }`}
-                                title={isSelected ? "Deselect" : "Select"}
-                              >
-                                {isSelected ? (
-                                  <CheckSquare className="w-4 h-4" />
-                                ) : (
-                                  <Square className="w-4 h-4" />
-                                )}
-                              </button>
-
-                              <button
-                                onClick={(e) => handleSingleDelete(asset.id, e)}
-                                className={`p-1.5 rounded-lg shadow-sm transition-all flex items-center gap-1 backdrop-blur-md ${
-                                  confirmDeleteMediaId === asset.id
-                                    ? "bg-rose-700 text-white hover:bg-rose-800"
-                                    : "bg-rose-600/90 text-white hover:bg-rose-600"
-                                }`}
-                                title={
-                                  confirmDeleteMediaId === asset.id
-                                    ? "Click again to confirm"
-                                    : "Delete Media"
+                          return (
+                            <SortableMediaItem
+                              key={asset.id}
+                              asset={asset}
+                              index={index}
+                              isImage={isImage}
+                              imageIndex={imageIndex}
+                              isSelected={isSelected}
+                              mediaSrc={mediaSrc}
+                              revertingMediaId={revertingMediaId}
+                              onToggleSelect={toggleSelectMedia}
+                              onSingleDelete={handleSingleDelete}
+                              onMask={(idx: number, e: React.MouseEvent) => {
+                                e.preventDefault();
+                                setMaskModalInitialIndex(idx >= 0 ? idx : 0);
+                                setIsMaskModalOpen(true);
+                              }}
+                              onSingleRevert={handleSingleRevert}
+                              onStopBlur={async (assetId: string, e: React.MouseEvent) => {
+                                e.preventDefault();
+                                try {
+                                  await fetchWithAuth(
+                                    `${API_URL}/api/batches/media/${assetId}/stop-blur`,
+                                    { method: "POST" }
+                                  );
+                                  fetchBatchData();
+                                } catch (err) {
+                                  console.error("Failed to stop blur", err);
                                 }
-                              >
-                                {confirmDeleteMediaId === asset.id && (
-                                  <span className="text-[10px] font-bold pl-1">Confirm</span>
-                                )}
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-
-                            {/* Bottom Controls: Mask Logo & Quick Remove Blur */}
-                            {isImage && (
-                              <div className="flex flex-col gap-1.5 w-full">
-                                <div className="flex gap-1.5">
-                                  <button
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      setMaskModalInitialIndex(imageIndex >= 0 ? imageIndex : 0);
-                                      setIsMaskModalOpen(true);
-                                    }}
-                                    className="flex-1 py-1.5 px-2 rounded-lg bg-slate-800/95 backdrop-blur-md hover:bg-slate-800 text-white text-xs font-semibold shadow-sm transition-all border border-white/10 text-center"
-                                  >
-                                    Mask Logo
-                                  </button>
-
-                                  <button
-                                    onClick={(e) => handleSingleRevert(asset.id, e)}
-                                    disabled={revertingMediaId === asset.id}
-                                    className="py-1.5 px-2.5 rounded-lg bg-rose-600/90 hover:bg-rose-600 backdrop-blur-md text-white text-xs font-semibold shadow-sm transition-all border border-white/10 flex items-center justify-center gap-1 disabled:opacity-50"
-                                    title="Quickly Remove Auto Blur / Restore Original"
-                                  >
-                                    <RotateCcw className={`w-3 h-3 ${revertingMediaId === asset.id ? "animate-spin" : ""}`} />
-                                    <span className="hidden sm:inline">Remove Blur</span>
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
                 ) : (
                   <p className="text-sm text-slate-400 text-center py-6">
                     No media attached.
                   </p>
                 )}
               </div>
+
             </motion.div>
           </div>
 
@@ -738,6 +726,153 @@ export default function ProductDetailPage() {
         onClose={() => setIsMaskModalOpen(false)}
         onImageUpdated={handleImageUpdated}
       />
+    </div>
+  );
+}
+
+function SortableMediaItem({
+  asset,
+  index,
+  isImage,
+  imageIndex,
+  isSelected,
+  mediaSrc,
+  revertingMediaId,
+  onToggleSelect,
+  onSingleDelete,
+  onMask,
+  onSingleRevert,
+  onStopBlur,
+}: any) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: asset.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`relative group rounded-xl overflow-hidden border aspect-square transition-all ${
+        isSelected ? "border-brand-500 ring-2 ring-brand-500/30" : "border-slate-200"
+      } ${isDragging ? "shadow-xl opacity-90 scale-105 z-50" : "bg-white"}`}
+    >
+      {/* Visual drag indicator for mobile */}
+      <div className="absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-black/20 to-transparent opacity-0 lg:group-hover:opacity-100 transition-opacity z-10 flex justify-center pt-1 pointer-events-none">
+        <div className="w-8 h-1 bg-white/50 rounded-full" />
+      </div>
+
+      <div 
+        {...attributes} 
+        {...listeners} 
+        className="absolute inset-0 z-0 cursor-grab active:cursor-grabbing touch-action-manipulation" 
+      />
+
+      {index === 0 && (
+        <div className="absolute top-2 left-2 z-20 bg-brand-600/90 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-lg shadow-sm border border-brand-400 pointer-events-none">
+          Thumbnail / 1st Image
+        </div>
+      )}
+      
+      {asset.mimeType?.startsWith("video/") ? (
+        <video
+          src={mediaSrc}
+          className="w-full h-full object-cover pointer-events-none"
+          muted
+          loop
+          autoPlay
+          playsInline
+        />
+      ) : (
+        <img
+          src={mediaSrc}
+          alt=""
+          className="w-full h-full object-cover pointer-events-none"
+        />
+      )}
+
+      {/* AI Processing Overlay */}
+      {asset.isProcessing && (
+        <div className="absolute inset-0 bg-white/70 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center pointer-events-none">
+          <Loader2 className="w-8 h-8 text-brand-600 animate-spin mb-2" />
+          <span className="text-xs font-bold text-brand-700 tracking-wider">
+            PROCESSING AI...
+          </span>
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => onStopBlur(asset.id, e)}
+            className="mt-3 flex items-center gap-1 px-3 py-1.5 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-full text-[10px] font-bold tracking-wide transition-colors cursor-pointer pointer-events-auto"
+          >
+            <XCircle className="w-3.5 h-3.5" />
+            STOP
+          </button>
+        </div>
+      )}
+
+      {/* Interactive Card Overlay */}
+      <div
+        className={`absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/20 to-slate-900/60 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2 pointer-events-none ${
+          asset.isProcessing ? "hidden" : ""
+        }`}
+      >
+        {/* Top Controls */}
+        <div className="flex items-center justify-between w-full pointer-events-auto">
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => onToggleSelect(asset.id, e)}
+            className={`p-1.5 rounded-lg backdrop-blur-md shadow-sm transition-all ${
+              isSelected
+                ? "bg-brand-600 text-white"
+                : "bg-slate-900/60 text-white/80 hover:bg-slate-900/80 hover:text-white"
+            } cursor-pointer`}
+          >
+            {isSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+          </button>
+
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => onSingleDelete(asset.id, e)}
+            className={`p-1.5 rounded-lg shadow-sm transition-all flex items-center gap-1 backdrop-blur-md bg-rose-600/90 text-white hover:bg-rose-600 cursor-pointer`}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* Bottom Controls */}
+        {isImage && (
+          <div className="flex flex-col gap-1.5 w-full pointer-events-auto">
+            <div className="flex gap-1.5">
+              <button
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => onMask(imageIndex, e)}
+                className="flex-1 py-1.5 px-2 rounded-lg bg-slate-800/95 backdrop-blur-md hover:bg-slate-800 text-white text-xs font-semibold shadow-sm transition-all border border-white/10 text-center cursor-pointer"
+              >
+                Mask Logo
+              </button>
+
+              <button
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => onSingleRevert(asset.id, e)}
+                disabled={revertingMediaId === asset.id}
+                className="py-1.5 px-2.5 rounded-lg bg-rose-600/90 hover:bg-rose-600 backdrop-blur-md text-white text-xs font-semibold shadow-sm transition-all border border-white/10 flex items-center justify-center gap-1 disabled:opacity-50 cursor-pointer"
+              >
+                <RotateCcw className={`w-3 h-3 ${revertingMediaId === asset.id ? "animate-spin" : ""}`} />
+                <span className="hidden sm:inline">Remove Blur</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

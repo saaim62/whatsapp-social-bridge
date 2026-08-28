@@ -32,6 +32,22 @@ export class BatchController {
     return this.batchService.deleteBatch(id, req.user.userId);
   }
 
+  @Post('delete-bulk')
+  async deleteBatchesBulk(@Request() req: any, @Body() body: { ids: string[] }) {
+    if (!body.ids || !Array.isArray(body.ids) || body.ids.length === 0) {
+      throw new HttpException('No IDs provided', HttpStatus.BAD_REQUEST);
+    }
+    return this.batchService.deleteBatchesBulk(body.ids, req.user.userId);
+  }
+
+  @Post('publish-bulk')
+  async publishBatchesBulk(@Request() req: any, @Body() body: { ids: string[] }) {
+    if (!body.ids || !Array.isArray(body.ids) || body.ids.length === 0) {
+      throw new HttpException('No IDs provided', HttpStatus.BAD_REQUEST);
+    }
+    return this.batchService.publishBatchesBulk(body.ids, req.user.userId);
+  }
+
   @Post(':id/approve')
   async approveBatch(@Request() req: any, @Param('id') id: string, @Body() body: any) {
     return this.batchService.approveBatch(id, body, req.user.userId);
@@ -50,6 +66,18 @@ export class BatchController {
   @Post('media/:mediaId/delete')
   async deleteMedia(@Request() req: any, @Param('mediaId') mediaId: string) {
     return this.batchService.deleteMedia(mediaId, req.user.userId);
+  }
+
+  @Post(':id/media/reorder')
+  async reorderMedia(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() body: { orderedMediaIds: string[] }
+  ) {
+    if (!body.orderedMediaIds || !Array.isArray(body.orderedMediaIds)) {
+      throw new HttpException('Invalid media IDs', HttpStatus.BAD_REQUEST);
+    }
+    return this.batchService.reorderMedia(id, body.orderedMediaIds, req.user.userId);
   }
 
   @Post('media/:mediaId/mask')

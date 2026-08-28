@@ -13,13 +13,36 @@ model User {
   passwordHash  String
   name          String?
   createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  updatedAt          DateTime        @updatedAt
+  lastActiveAt       DateTime        @default(now())
+  role               String          @default("USER")
+  city               String?
+  country            String?
+  isBlocked          Boolean         @default(false)
+  trialEndsAt        DateTime?
+  isPaid             Boolean         @default(false)
+  isEmailVerified    Boolean         @default(false)
+  verificationToken  String?
+  resetPasswordToken String?
+  storageLimitBytes  BigInt          @default(5368709120) // 5GB default
 
   batches       ProductBatch[]
   settings      Settings?
   sources       WhatsappSource[]
   socialAccounts SocialAccount[]
   whatsappContacts WhatsappContact[]
+  notifications Notification[]
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String?
+  type      String   @default("info") // success, error, info, warning
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
 }
 
 model SocialAccount {
@@ -66,6 +89,8 @@ model MediaAsset {
   ocrConfidence  Float?
   needsManualReview Boolean @default(false)
   isProcessing   Boolean      @default(true)
+  fileSize       Int          @default(0) // Size in bytes
+  sortOrder      Int          @default(0) // Order in UI
   createdAt      DateTime     @default(now())
 }
 
