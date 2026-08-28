@@ -6,6 +6,7 @@ import { useSession, signOut } from "next-auth/react";
 import { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { NotificationDropdown } from "@/components/ui/NotificationDropdown";
+import { ConnectionStatusWidget } from "@/components/ui/ConnectionStatus";
 import {
   LayoutDashboard,
   Package,
@@ -225,7 +226,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.1 }}
-          className="h-16 flex-shrink-0 flex items-center justify-between px-8 border-b border-slate-200/60 bg-white/50 backdrop-blur-xl"
+          className="h-16 flex-shrink-0 flex items-center justify-between px-8 border-b border-slate-200/60 bg-white/50 backdrop-blur-xl relative z-50"
         >
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-bold text-slate-900 hidden sm:block">{pageTitle}</h2>
@@ -250,6 +251,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {BRAND.tagline}
               </span>
             </div>
+            <ConnectionStatusWidget variant="header" />
             <NotificationDropdown />
             {/* Mobile Sign Out Button in Header */}
             <button
@@ -279,6 +281,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
+      <div className="md:hidden fixed bottom-16 left-0 right-0 z-40 bg-white">
+        <ConnectionStatusWidget variant="sidebar" />
+      </div>
       {/* Mobile Bottom Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-slate-200 flex items-center justify-around px-2 z-50 pb-safe overflow-x-auto">
         {(() => {

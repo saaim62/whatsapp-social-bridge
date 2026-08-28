@@ -497,7 +497,7 @@ export class SocialService {
   async getSocialAccounts(userId: string) {
     const accounts = await this.prisma.socialAccount.findMany({
       where: { userId },
-      select: { platform: true, createdAt: true, updatedAt: true }
+      select: { platform: true, facebookPageId: true, instagramUserId: true, createdAt: true, updatedAt: true }
     });
     return accounts;
   }

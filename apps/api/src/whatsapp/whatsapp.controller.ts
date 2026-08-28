@@ -19,10 +19,16 @@ export class WhatsappController {
 
     const isReady = this.whatsappService.isReady(userId);
     const qrUrl = this.whatsappService.getQrCodeUrl(userId);
+    let phoneNumber = null;
+
+    if (isReady && client?.user?.id) {
+      phoneNumber = client.user.id.split(':')[0].split('@')[0];
+    }
     
     return {
       isReady,
-      qrUrl
+      qrUrl,
+      phoneNumber
     };
   }
 

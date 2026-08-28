@@ -11,7 +11,7 @@ import {
   TouchSensor,
   useSensor,
   useSensors,
-  DragEndEvent
+  DragEndEvent,
 } from '@dnd-kit/core';
 import {
   arrayMove,
@@ -75,8 +75,8 @@ export default function ProductDetailPage() {
     }),
     useSensor(TouchSensor, {
       activationConstraint: {
-        delay: 250, // 250ms hold required on mobile to start drag (allows normal scrolling)
-        tolerance: 5,
+        delay: 200, // 200ms hold to start drag (allows normal scrolling)
+        tolerance: 8, // 8px tolerance to filter out natural finger jitter
       },
     }),
     useSensor(KeyboardSensor, {
@@ -753,29 +753,33 @@ function SortableMediaItem({
     isDragging,
   } = useSortable({ id: asset.id });
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 50 : 1,
+  // CRITICAL: No transition on the dragged item — it must follow the finger/mouse
+  // at native framerate. Only passive items (sliding out of the way) get a transition.
+  const style: React.CSSProperties = {
+    transform: CSS.Translate.toString(transform),
+    transition: isDragging ? 'none' : (transition || 'transform 200ms cubic-bezier(0.25, 1, 0.5, 1)'),
+    zIndex: isDragging ? 999 : 1,
+    position: 'relative' as const,
   };
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`relative group rounded-xl overflow-hidden border aspect-square transition-all ${
+      className={`relative group rounded-xl overflow-hidden border aspect-square will-change-transform ${
         isSelected ? "border-brand-500 ring-2 ring-brand-500/30" : "border-slate-200"
-      } ${isDragging ? "shadow-xl opacity-90 scale-105 z-50" : "bg-white"}`}
+      } ${isDragging ? "shadow-2xl shadow-brand-500/30 ring-2 ring-brand-500 bg-white opacity-90" : "bg-white hover:shadow-md"}`}
     >
-      {/* Visual drag indicator for mobile */}
-      <div className="absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-black/20 to-transparent opacity-0 lg:group-hover:opacity-100 transition-opacity z-10 flex justify-center pt-1 pointer-events-none">
+      {/* Visual drag indicator */}
+      <div className="absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-10 flex justify-center pt-1 pointer-events-none">
         <div className="w-8 h-1 bg-white/50 rounded-full" />
       </div>
 
       <div 
         {...attributes} 
         {...listeners} 
-        className="absolute inset-0 z-0 cursor-grab active:cursor-grabbing touch-action-manipulation" 
+        className="absolute inset-0 z-[5] cursor-grab active:cursor-grabbing" 
+        style={{ touchAction: 'none' }}
       />
 
       {index === 0 && (

@@ -64,57 +64,90 @@ export function NotificationDropdown() {
                   <p className="text-sm">You have no notifications yet.</p>
                 </div>
               ) : (
-                dbNotifications.map((notification) => (
-                  <div
-                    key={notification.id}
-                    className={`p-3 rounded-xl flex gap-3 transition-colors ${
-                      notification.isRead ? "opacity-70 hover:bg-slate-50" : "bg-brand-50/30 hover:bg-brand-50/50"
-                    }`}
-                  >
-                    <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                        notification.type === "success"
-                          ? "bg-emerald-100 text-emerald-600"
-                          : notification.type === "error"
-                          ? "bg-red-100 text-red-600"
-                          : notification.type === "warning"
-                          ? "bg-amber-100 text-amber-600"
-                          : "bg-brand-100 text-brand-600"
-                      }`}
-                    >
-                      {notification.type === "success" ? (
-                        <CheckCircle2 className="w-4 h-4" />
-                      ) : notification.type === "error" ? (
-                        <X className="w-4 h-4" />
-                      ) : notification.type === "warning" ? (
-                        <AlertTriangle className="w-4 h-4" />
-                      ) : (
-                        <Info className="w-4 h-4" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm ${notification.isRead ? "text-slate-700" : "font-semibold text-slate-900"}`}>
-                        {notification.title}
-                      </p>
-                      {notification.message && (
-                        <p className="text-xs text-slate-500 mt-0.5 line-clamp-2 leading-relaxed">
-                          {notification.message}
+                dbNotifications.map((notification) => {
+                  const content = (
+                    <>
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                          notification.type === "success"
+                            ? "bg-emerald-100 text-emerald-600"
+                            : notification.type === "error"
+                            ? "bg-red-100 text-red-600"
+                            : notification.type === "warning"
+                            ? "bg-amber-100 text-amber-600"
+                            : "bg-brand-100 text-brand-600"
+                        }`}
+                      >
+                        {notification.type === "success" ? (
+                          <CheckCircle2 className="w-4 h-4" />
+                        ) : notification.type === "error" ? (
+                          <X className="w-4 h-4" />
+                        ) : notification.type === "warning" ? (
+                          <AlertTriangle className="w-4 h-4" />
+                        ) : (
+                          <Info className="w-4 h-4" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm ${notification.isRead ? "text-slate-700" : "font-semibold text-slate-900"}`}>
+                          {notification.title}
                         </p>
+                        {notification.message && (
+                          <p className="text-xs text-slate-500 mt-0.5 line-clamp-2 leading-relaxed">
+                            {notification.message}
+                          </p>
+                        )}
+                        <p className="text-[10px] text-slate-400 mt-1.5 font-medium">
+                          {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
+                        </p>
+                      </div>
+                      {!notification.isRead && (
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            markAsRead(notification.id);
+                          }}
+                          className="flex-shrink-0 self-center w-2 h-2 rounded-full bg-brand-500 hover:scale-150 transition-transform"
+                          title="Mark as read"
+                        />
                       )}
-                      <p className="text-[10px] text-slate-400 mt-1.5 font-medium">
-                        {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
-                      </p>
+                    </>
+                  );
+
+                  const wrapperClasses = `p-3 rounded-xl flex gap-3 transition-colors ${
+                    notification.isRead ? "opacity-70 hover:bg-slate-50" : "bg-brand-50/30 hover:bg-brand-50/50"
+                  }`;
+
+                  return notification.link ? (
+                    <a
+                      key={notification.id}
+                      href={notification.link}
+                      onClick={() => {
+                        if (!notification.isRead) markAsRead(notification.id);
+                        setIsOpen(false);
+                      }}
+                      className={`${wrapperClasses} block w-full text-left cursor-pointer`}
+                    >
+                      {content}
+                    </a>
+                  ) : (
+                    <div key={notification.id} className={wrapperClasses}>
+                      {content}
                     </div>
-                    {!notification.isRead && (
-                      <button
-                        onClick={() => markAsRead(notification.id)}
-                        className="flex-shrink-0 self-center w-2 h-2 rounded-full bg-brand-500"
-                        title="Mark as read"
-                      />
-                    )}
-                  </div>
-                ))
+                  );
+                })
               )}
+            </div>
+
+            <div className="p-2 border-t border-slate-100 bg-slate-50/50">
+              <a
+                href="/notifications"
+                onClick={() => setIsOpen(false)}
+                className="w-full py-2 text-sm font-semibold text-slate-600 hover:text-brand-600 transition-colors flex items-center justify-center rounded-lg hover:bg-slate-100"
+              >
+                View all notifications
+              </a>
             </div>
           </motion.div>
         )}

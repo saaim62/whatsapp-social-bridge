@@ -40,6 +40,7 @@ model Notification {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   title     String
   message   String?
+  link      String?  // Added for clickable routing
   type      String   @default("info") // success, error, info, warning
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
