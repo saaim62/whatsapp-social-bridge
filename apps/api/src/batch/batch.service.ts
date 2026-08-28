@@ -243,7 +243,9 @@ export class BatchService {
     return this.prisma.productBatch.findMany({
       where: { userId },
       include: {
-        mediaAssets: true,
+        mediaAssets: {
+          orderBy: { createdAt: 'asc' },
+        },
         generatedContent: true,
         publications: true,
       },
@@ -255,7 +257,9 @@ export class BatchService {
     return this.prisma.productBatch.findUnique({
       where: { id, userId },
       include: {
-        mediaAssets: true,
+        mediaAssets: {
+          orderBy: { createdAt: 'asc' },
+        },
         generatedContent: true,
         publications: true,
       },
