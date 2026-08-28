@@ -311,7 +311,7 @@ export function ImageMaskModal({
             >
               <img
                 ref={imgRef}
-                key={`${currentMedia.id}-${currentTimestamp}`}
+                key={currentMedia.id}
                 src={imageUrl}
                 alt="To mask"
                 className="max-w-full max-h-[52vh] sm:max-h-[60vh] object-contain block pointer-events-none select-none"
