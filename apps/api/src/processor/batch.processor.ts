@@ -24,7 +24,7 @@ export class BatchProcessor extends WorkerHost {
       case 'process-batch':
         return this.handleProcessBatch(job.data.batchId);
       case 'publish-batch':
-        return this.handlePublishBatch(job.data.batchId);
+        return this.handlePublishBatch(job.data.batchId, job.data.targets);
       default:
         this.logger.warn(`Unknown job name: ${job.name}`);
     }
@@ -111,8 +111,8 @@ export class BatchProcessor extends WorkerHost {
     }
   }
 
-  private async handlePublishBatch(batchId: string) {
-    this.logger.log(`Publishing batch ${batchId}...`);
+  private async handlePublishBatch(batchId: string, targets?: string[]) {
+    this.logger.log(`Publishing batch ${batchId} to targets: ${targets?.join(', ') || 'ALL'}...`);
 
     await this.prisma.productBatch.update({
       where: { id: batchId },
@@ -131,52 +131,58 @@ export class BatchProcessor extends WorkerHost {
     let allSuccess = true;
     let anySuccess = false;
 
+    const publishTargets = (targets && targets.length > 0) ? targets : ['INSTAGRAM', 'FACEBOOK'];
+
     // Instagram
-    try {
-      const igResult = await this.socialService.publishInstagram(batch);
-      await this.prisma.publication.create({
-        data: {
-          batchId,
-          platform: 'INSTAGRAM',
-          platformPostId: igResult.id,
-          status: 'PUBLISHED',
-        },
-      });
-      anySuccess = true;
-    } catch (e) {
-      allSuccess = false;
-      await this.prisma.publication.create({
-        data: {
-          batchId,
-          platform: 'INSTAGRAM',
-          status: 'FAILED',
-          error: e.message,
-        },
-      });
+    if (publishTargets.includes('INSTAGRAM')) {
+      try {
+        const igResult = await this.socialService.publishInstagram(batch);
+        await this.prisma.publication.create({
+          data: {
+            batchId,
+            platform: 'INSTAGRAM',
+            platformPostId: igResult.id,
+            status: 'PUBLISHED',
+          },
+        });
+        anySuccess = true;
+      } catch (e) {
+        allSuccess = false;
+        await this.prisma.publication.create({
+          data: {
+            batchId,
+            platform: 'INSTAGRAM',
+            status: 'FAILED',
+            error: e.message,
+          },
+        });
+      }
     }
 
     // Facebook
-    try {
-      const fbResult = await this.socialService.publishFacebook(batch);
-      await this.prisma.publication.create({
-        data: {
-          batchId,
-          platform: 'FACEBOOK',
-          platformPostId: fbResult.id,
-          status: 'PUBLISHED',
-        },
-      });
-      anySuccess = true;
-    } catch (e) {
-      allSuccess = false;
-      await this.prisma.publication.create({
-        data: {
-          batchId,
-          platform: 'FACEBOOK',
-          status: 'FAILED',
-          error: e.message,
-        },
-      });
+    if (publishTargets.includes('FACEBOOK')) {
+      try {
+        const fbResult = await this.socialService.publishFacebook(batch);
+        await this.prisma.publication.create({
+          data: {
+            batchId,
+            platform: 'FACEBOOK',
+            platformPostId: fbResult.id,
+            status: 'PUBLISHED',
+          },
+        });
+        anySuccess = true;
+      } catch (e) {
+        allSuccess = false;
+        await this.prisma.publication.create({
+          data: {
+            batchId,
+            platform: 'FACEBOOK',
+            status: 'FAILED',
+            error: e.message,
+          },
+        });
+      }
     }
 
     const finalStatus = allSuccess

@@ -61,6 +61,8 @@ export default function ProductDetailPage() {
   
   // Modal & Selection state
   const [isMaskModalOpen, setIsMaskModalOpen] = useState(false);
+  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+  const [publishTargets, setPublishTargets] = useState<string[]>(['FACEBOOK', 'INSTAGRAM']);
   const [maskModalInitialIndex, setMaskModalInitialIndex] = useState(0);
   const [selectedMediaIds, setSelectedMediaIds] = useState<Set<string>>(new Set());
   const [mediaTimestamps, setMediaTimestamps] = useState<Record<string, number>>({});
@@ -183,17 +185,37 @@ export default function ProductDetailPage() {
     return () => clearInterval(interval);
   }, [fetchBatchData]);
 
+  const openPublishModal = () => {
+    setIsPublishModalOpen(true);
+  };
+
   const approveAndPublish = async () => {
+    setIsPublishModalOpen(false);
     setBatch((prev: any) => ({ ...prev, status: "PUBLISHING" }));
-    await fetchWithAuth(`${API_URL}/api/batches/${id}/approve`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        instagramCaption: applyPrice(editedInstagram),
-        facebookCaption: applyPrice(editedFacebook),
-        storyText: applyPrice(editedStory),
-      }),
-    });
+    try {
+      if (batch.status === 'READY' || batch.status === 'FAILED' || batch.status === 'RECEIVED') {
+        await fetchWithAuth(`${API_URL}/api/batches/${id}/approve`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            instagramCaption: applyPrice(editedInstagram),
+            facebookCaption: applyPrice(editedFacebook),
+            storyText: applyPrice(editedStory),
+            targets: publishTargets
+          }),
+        });
+      } else {
+        // Just publish since it's already approved
+        await fetchWithAuth(`${API_URL}/api/batches/${id}/publish`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ targets: publishTargets }),
+        });
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Failed to queue publish job.");
+    }
   };
 
   const handleImageUpdated = (mediaId: string) => {
@@ -380,8 +402,14 @@ export default function ProductDetailPage() {
                <h1 className="text-lg sm:text-xl font-heading font-bold text-white truncate">
                  {batch.extractedData?.product_name || "Unidentified Asset"}
                </h1>
-               <div className="hidden sm:block">
+               <div className="hidden sm:flex items-center gap-2">
                  <StatusBadge status={batch.status} />
+                 {batch.publications?.some((p: any) => p.status === 'FAILED') && (
+                   <div className="text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-1 rounded text-xs font-bold" title={batch.publications.find((p: any) => p.status === 'FAILED')?.error}>
+                     <AlertTriangle className="w-3 h-3 inline mr-1" />
+                     {batch.publications.find((p: any) => p.status === 'FAILED')?.platform} Error
+                   </div>
+                 )}
                </div>
              </div>
              <div className="flex items-center gap-2 mt-1 text-xs text-slate-400 font-mono">
@@ -397,13 +425,17 @@ export default function ProductDetailPage() {
              <StatusBadge status={batch.status} />
           </div>
           <button
-            onClick={approveAndPublish}
-            disabled={!isEditable}
+            onClick={openPublishModal}
+            disabled={batch.status === "PUBLISHING"}
             className="btn-glow flex items-center gap-2 disabled:opacity-50"
           >
             <Save className="w-4 h-4 hidden sm:block" />
-            <span className="hidden sm:inline font-bold tracking-wide text-sm">Commit & Execute</span>
-            <span className="sm:hidden font-bold">Commit</span>
+            <span className="hidden sm:inline font-bold tracking-wide text-sm">
+              {isEditable ? "Commit & Execute" : "Republish"}
+            </span>
+            <span className="sm:hidden font-bold">
+              {isEditable ? "Commit" : "Republish"}
+            </span>
           </button>
         </div>
       </div>
@@ -694,6 +726,80 @@ export default function ProductDetailPage() {
         onClose={() => setIsMaskModalOpen(false)}
         onImageUpdated={handleImageUpdated}
       />
+
+      {/* Publish Platform Selection Modal */}
+      <AnimatePresence>
+        {isPublishModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-graphite-darker border border-graphite-border rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl"
+            >
+              <div className="p-6">
+                <h3 className="text-xl font-heading font-bold text-white mb-2">Publish Product</h3>
+                <p className="text-sm text-slate-400 mb-6">Select which platforms to syndicate this content to.</p>
+
+                <div className="space-y-3">
+                  <label className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-colors ${publishTargets.includes('FACEBOOK') ? 'bg-blue-500/10 border-blue-500/50' : 'bg-graphite border-graphite-border hover:border-slate-600'}`}>
+                    <input
+                      type="checkbox"
+                      checked={publishTargets.includes('FACEBOOK')}
+                      onChange={(e) => {
+                        if (e.target.checked) setPublishTargets(prev => [...prev, 'FACEBOOK']);
+                        else setPublishTargets(prev => prev.filter(t => t !== 'FACEBOOK'));
+                      }}
+                      className="w-5 h-5 rounded border-slate-600 bg-graphite-darker text-electric-cyan focus:ring-electric-cyan focus:ring-offset-graphite-darker"
+                    />
+                    <div className="flex-1">
+                      <p className="font-bold text-white">Facebook</p>
+                      <p className="text-xs text-slate-400">Post to linked Page</p>
+                    </div>
+                  </label>
+
+                  <label className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-colors ${publishTargets.includes('INSTAGRAM') ? 'bg-fuchsia-500/10 border-fuchsia-500/50' : 'bg-graphite border-graphite-border hover:border-slate-600'}`}>
+                    <input
+                      type="checkbox"
+                      checked={publishTargets.includes('INSTAGRAM')}
+                      onChange={(e) => {
+                        if (e.target.checked) setPublishTargets(prev => [...prev, 'INSTAGRAM']);
+                        else setPublishTargets(prev => prev.filter(t => t !== 'INSTAGRAM'));
+                      }}
+                      className="w-5 h-5 rounded border-slate-600 bg-graphite-darker text-electric-cyan focus:ring-electric-cyan focus:ring-offset-graphite-darker"
+                    />
+                    <div className="flex-1">
+                      <p className="font-bold text-white">Instagram</p>
+                      <p className="text-xs text-slate-400">Post to linked IG Account</p>
+                    </div>
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-3 mt-8">
+                  <button
+                    onClick={() => setIsPublishModalOpen(false)}
+                    className="flex-1 py-2.5 rounded-xl border border-graphite-border text-slate-300 font-bold hover:bg-graphite transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={approveAndPublish}
+                    disabled={publishTargets.length === 0}
+                    className="flex-1 py-2.5 rounded-xl bg-electric-cyan text-graphite-darker font-bold hover:bg-white transition-colors disabled:opacity-50"
+                  >
+                    {isEditable ? "Execute" : "Republish"}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

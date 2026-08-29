@@ -54,8 +54,8 @@ export class BatchController {
   }
 
   @Post(':id/publish')
-  async publishBatch(@Request() req: any, @Param('id') id: string) {
-    return this.batchService.publishBatch(id, req.user.userId);
+  async publishBatch(@Request() req: any, @Param('id') id: string, @Body() body: any) {
+    return this.batchService.publishBatch(id, req.user.userId, body?.targets);
   }
 
   @Post(':id/reject')

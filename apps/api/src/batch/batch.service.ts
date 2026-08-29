@@ -308,15 +308,15 @@ export class BatchService {
       where: { id, userId },
       data: { status: 'APPROVED' },
     });
-    await this.batchQueue.add('publish-batch', { batchId: id, userId });
+    await this.batchQueue.add('publish-batch', { batchId: id, userId, targets: body?.targets });
     return { success: true };
   }
 
-  async publishBatch(id: string, userId: string) {
+  async publishBatch(id: string, userId: string, targets?: string[]) {
     const batch = await this.prisma.productBatch.findUnique({ where: { id, userId }});
     if (!batch) return { success: false, message: 'Batch not found' };
     
-    await this.batchQueue.add('publish-batch', { batchId: id, userId });
+    await this.batchQueue.add('publish-batch', { batchId: id, userId, targets });
     return { success: true };
   }
 
