@@ -48,22 +48,12 @@ export class SocialService {
     }
   }
 
-  private async uploadToCatbox(absolutePath: string): Promise<string> {
-    this.logger.log(`Uploading ${absolutePath} temporarily to Catbox.moe...`);
-    const formData = new FormData();
-    formData.append('reqtype', 'fileupload');
-    formData.append('fileToUpload', fs.createReadStream(absolutePath));
-
-    const catboxRes = await axios.post(
-      'https://catbox.moe/user/api.php',
-      formData,
-      {
-        headers: formData.getHeaders(),
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-      },
-    );
-    return catboxRes.data;
+  private getPublicMediaUrl(absolutePath: string): string {
+    // Rely on PUBLIC_API_URL or default to the user's known public API domain
+    const baseUrl = this.configService.get('PUBLIC_API_URL') || 'https://api-droproute.duckdns.org';
+    const filename = path.basename(absolutePath);
+    // The NestJS ServeStaticModule serves the uploads folder at /api/uploads
+    return `${baseUrl}/api/uploads/${filename}`;
   }
 
   private async pollInstagramContainer(
@@ -219,7 +209,8 @@ export class SocialService {
           // Pad all media (images & videos) to perfect 1:1 square to satisfy Instagram API
           absolutePath = await this.padMedia(absolutePath, isVideo);
 
-          const catboxUrl = await this.uploadToCatbox(absolutePath);
+          const mediaUrl = this.getPublicMediaUrl(absolutePath);
+          this.logger.log(`Using public URL for Instagram: ${mediaUrl}`);
 
           const params: any = {
             is_carousel_item: 'true',
@@ -227,10 +218,10 @@ export class SocialService {
           };
 
           if (isVideo) {
-            params.video_url = catboxUrl;
+            params.video_url = mediaUrl;
             params.media_type = 'VIDEO';
           } else {
-            params.image_url = catboxUrl;
+            params.image_url = mediaUrl;
           }
 
           const itemRes = await axios.post(
