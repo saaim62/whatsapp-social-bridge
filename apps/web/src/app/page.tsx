@@ -118,24 +118,43 @@ export default function DashboardPage() {
 
         <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-4 py-8">
           {[
-            { id: "whatsapp", label: "WhatsApp", icon: MessageCircle, color: "text-[#25D366]", bg: "bg-[#25D366]/10", border: "border-[#25D366]/30" },
-            { id: "db", label: "Commerce Hub", icon: Database, color: "text-brand-400", bg: "bg-brand-500/10", border: "border-brand-500/30" },
-            { id: "web", label: "Web Storefront", icon: Globe, color: "text-electric-cyan", bg: "bg-electric-cyan-dim", border: "border-electric-cyan/30" },
-            { id: "social", label: "Meta Network", icon: Camera, color: "text-electric-magenta", bg: "bg-electric-magenta-dim", border: "border-electric-magenta/30" },
+            { 
+              id: "whatsapp", label: "WhatsApp", desc: `${batches.length} Received`, 
+              icon: MessageCircle, color: "text-[#25D366]", bg: "bg-[#25D366]/10", border: "border-[#25D366]/30",
+              pulse: false
+            },
+            { 
+              id: "db", label: "Commerce Hub", desc: `${batches.filter(b => b.extractedData).length} Processed`, 
+              icon: Database, color: "text-brand-400", bg: "bg-brand-500/10", border: "border-brand-500/30",
+              pulse: batches.some(b => b.status === 'RECEIVED')
+            },
+            { 
+              id: "web", label: "Pending Review", desc: `${batches.filter(b => b.status === 'READY').length} Awaiting`, 
+              icon: Globe, color: "text-electric-cyan", bg: "bg-electric-cyan-dim", border: "border-electric-cyan/30",
+              pulse: batches.some(b => b.status === 'READY')
+            },
+            { 
+              id: "social", label: "Meta Network", desc: `${batches.filter(b => ['PUBLISHED', 'PARTIALLY_PUBLISHED'].includes(b.status)).length} Published`, 
+              icon: Camera, color: "text-electric-magenta", bg: "bg-electric-magenta-dim", border: "border-electric-magenta/30",
+              pulse: batches.some(b => b.status === 'PUBLISHING')
+            },
           ].map((node, i, arr) => (
             <div key={node.id} className="flex items-center gap-4 w-full md:w-auto">
               <motion.div 
                 whileHover={{ scale: 1.05 }}
-                className={`flex flex-col items-center justify-center p-6 w-32 h-32 rounded-2xl border ${node.border} ${node.bg} backdrop-blur-md relative`}
+                className={`flex flex-col items-center justify-center p-4 sm:p-6 w-36 h-32 rounded-2xl border ${node.border} ${node.bg} backdrop-blur-md relative`}
               >
                 {/* Active node pulse */}
-                <div className={`absolute inset-0 rounded-2xl border-2 border-white/0 ${i === 1 ? 'animate-pulse-cyan' : ''}`} />
-                <node.icon className={`w-8 h-8 mb-3 ${node.color}`} />
+                {node.pulse && (
+                  <div className={`absolute inset-0 rounded-2xl border-2 border-white/0 animate-pulse-cyan`} />
+                )}
+                <node.icon className={`w-8 h-8 mb-2 ${node.color}`} />
                 <span className="text-xs font-bold text-white text-center uppercase tracking-wider">{node.label}</span>
+                <span className={`text-[10px] font-bold mt-1 text-center ${node.color} bg-black/20 px-2 py-0.5 rounded-full`}>{node.desc}</span>
               </motion.div>
 
               {i < arr.length - 1 && (
-                <div className="hidden md:flex flex-1 min-w-[60px] h-0.5 bg-graphite-border relative overflow-hidden">
+                <div className="hidden md:flex flex-1 min-w-[40px] lg:min-w-[60px] h-0.5 bg-graphite-border relative overflow-hidden">
                   <motion.div
                     className="absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-electric-cyan to-transparent"
                     animate={{ x: ["-100%", "300%"] }}
