@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { formatDistanceToNow } from "date-fns";
@@ -249,13 +250,14 @@ export default function ProductsPage() {
                           <video
                             src={`${API_URL}/${batch.mediaAssets[0].localPath}`}
                             className="w-full h-full object-cover"
-                            muted loop autoPlay playsInline
+                            muted loop playsInline preload="metadata"
                           />
                         ) : (
-                          <img
+                          <Image
                             src={`${API_URL}/${batch.mediaAssets[0].localPath}`}
                             alt=""
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                            fill
+                            className="object-cover group-hover:scale-110 transition-transform duration-700"
                           />
                         )
                       ) : (

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { motion } from "framer-motion";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -211,10 +212,11 @@ export default function DashboardPage() {
                   
                   <div className="w-14 h-14 rounded-xl bg-graphite border border-graphite-border overflow-hidden shrink-0 relative">
                     {batch.mediaAssets?.[0]?.localPath ? (
-                      <img
+                      <Image
                         src={`${API_URL}/${batch.mediaAssets[0].localPath}`}
                         alt=""
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                        fill
+                        className="object-cover group-hover:scale-110 transition-transform duration-700"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">

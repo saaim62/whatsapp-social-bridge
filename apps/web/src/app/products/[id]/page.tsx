@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -868,14 +869,15 @@ function SortableMediaItem({
           className="w-full h-full object-cover pointer-events-none"
           muted
           loop
-          autoPlay
           playsInline
+          preload="metadata"
         />
       ) : (
-        <img
+        <Image
           src={mediaSrc}
           alt=""
-          className="w-full h-full object-cover pointer-events-none"
+          fill
+          className="object-cover pointer-events-none"
         />
       )}
 

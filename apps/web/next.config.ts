@@ -2,6 +2,15 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: "../../",
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'api-droproute.duckdns.org',
+        pathname: '/api/uploads/**',
+      },
+    ],
+  },
   async rewrites() {
     return {
       fallback: [
