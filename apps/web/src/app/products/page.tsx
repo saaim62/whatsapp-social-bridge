@@ -6,7 +6,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { formatDistanceToNow } from "date-fns";
-import { Layers, Clock3, CheckCircle2, ImageIcon, Trash2, Loader2, AlertCircle, Search, Filter, Send } from "lucide-react";
+import { Layers, Clock3, CheckCircle2, ImageIcon, Trash2, Loader2, AlertCircle, Search, Filter, Send, Edit2 } from "lucide-react";
 import { API_URL, fetchWithAuth } from "@/lib/api";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
@@ -29,6 +29,9 @@ export default function ProductsPage() {
   const [targetEmailsInput, setTargetEmailsInput] = useState("");
   const [emailHistory, setEmailHistory] = useState<string[]>([]);
   const [isSending, setIsSending] = useState(false);
+
+  const [renamingBatchId, setRenamingBatchId] = useState<string | null>(null);
+  const [renameInput, setRenameInput] = useState("");
 
   useEffect(() => {
     const history = localStorage.getItem("sentEmailsHistory");
@@ -144,9 +147,9 @@ export default function ProductsPage() {
     setIsPublishingBulk(true);
     try {
       const res = await fetchWithAuth(`${API_URL}/api/batches/publish-bulk`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: Array.from(selectedIds) })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ batchIds: Array.from(selectedIds) }),
       });
       if (res.ok) {
         setSelectedIds(new Set());
@@ -155,6 +158,44 @@ export default function ProductsPage() {
       console.error(err);
     } finally {
       setIsPublishingBulk(false);
+    }
+  };
+
+  const handleRenameProduct = async (batchId: string) => {
+    const originalBatch = batches.find((b: any) => b.id === batchId);
+    if (!originalBatch) return;
+    
+    if (!renameInput.trim() || renameInput === originalBatch.extractedData?.product_name) {
+      setRenamingBatchId(null);
+      return;
+    }
+    try {
+      const res = await fetchWithAuth(`${API_URL}/api/batches/${batchId}/rename`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: renameInput.trim() }),
+      });
+      if (res.ok) {
+        setBatches((prev: any[]) => prev.map(b => {
+          if (b.id === batchId) {
+            return {
+              ...b,
+              extractedData: {
+                ...b.extractedData,
+                product_name: renameInput.trim(),
+              },
+            };
+          }
+          return b;
+        }));
+      } else {
+        alert("Failed to rename product");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to rename product");
+    } finally {
+      setRenamingBatchId(null);
     }
   };
 
@@ -351,10 +392,42 @@ export default function ProductsPage() {
                       )}
                     </div>
                   </td>
-                  <td className="px-6 py-4 max-w-[200px]">
-                    <p className="font-heading font-bold text-slate-200 truncate group-hover:text-electric-cyan transition-colors">
-                      {batch.extractedData?.product_name || "Extracting payload..."}
-                    </p>
+                  <td className="px-6 py-4 max-w-[200px] group/rename relative">
+                    {renamingBatchId === batch.id ? (
+                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="text"
+                          autoFocus
+                          value={renameInput}
+                          onChange={(e) => setRenameInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleRenameProduct(batch.id);
+                            if (e.key === "Escape") setRenamingBatchId(null);
+                          }}
+                          className="w-full bg-graphite border border-electric-cyan/50 rounded px-2 py-1 text-white text-sm focus:outline-none"
+                        />
+                        <button onClick={(e) => { e.stopPropagation(); handleRenameProduct(batch.id); }} className="text-electric-cyan p-1 hover:bg-electric-cyan/10 rounded shrink-0">
+                          <CheckCircle2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-heading font-bold text-slate-200 truncate group-hover:text-electric-cyan transition-colors flex-1">
+                          {batch.extractedData?.product_name || "Extracting payload..."}
+                        </p>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRenameInput(batch.extractedData?.product_name || "");
+                            setRenamingBatchId(batch.id);
+                          }}
+                          className="text-slate-400 hover:text-electric-cyan opacity-0 group-hover/rename:opacity-100 transition-opacity p-1 shrink-0"
+                          title="Rename Product"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                     <p className="text-sm font-mono text-electric-cyan mt-1">
                       {batch.extractedData?.price || "—"}
                     </p>
