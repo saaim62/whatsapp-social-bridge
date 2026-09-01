@@ -39,6 +39,8 @@ import {
   CheckSquare,
   Square,
   Layers,
+  Edit2,
+  Search,
 } from "lucide-react";
 import { API_URL, fetchWithAuth } from "@/lib/api";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -74,13 +76,22 @@ export default function ProductDetailPage() {
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
   const [batchesList, setBatchesList] = useState<any[]>([]);
   const [targetBatchId, setTargetBatchId] = useState("");
+  const [moveSearchQuery, setMoveSearchQuery] = useState("");
   const [isMovingMedia, setIsMovingMedia] = useState(false);
   const [retainAIOnMove, setRetainAIOnMove] = useState(false);
 
   const [isSendModalOpen, setIsSendModalOpen] = useState(false);
-  const [usersList, setUsersList] = useState<any[]>([]);
-  const [targetUserId, setTargetUserId] = useState("");
+  const [targetEmailsInput, setTargetEmailsInput] = useState("");
+  const [emailHistory, setEmailHistory] = useState<string[]>([]);
   const [isSending, setIsSending] = useState(false);
+  
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameInput, setRenameInput] = useState("");
+
+  useEffect(() => {
+    const history = localStorage.getItem("sentEmailsHistory");
+    if (history) setEmailHistory(JSON.parse(history));
+  }, []);
   
   const sensors = useSensors(
     useSensor(MouseSensor, {
@@ -424,47 +435,55 @@ export default function ProductDetailPage() {
     }
   };
 
-  const handleClearAIContent = async () => {
-    if (!confirm("Are you sure you want to clear AI generated content? This will remove generated captions and extracted metadata.")) return;
+  const handleRenameProduct = async () => {
+    if (!renameInput.trim() || renameInput === batch.extractedData?.product_name) {
+      setIsRenaming(false);
+      return;
+    }
     try {
-      await fetchWithAuth(`${API_URL}/api/batches/${id}/clear-ai`, { method: "POST" });
-      setEditedInstagram("");
-      setEditedFacebook("");
-      setEditedStory("");
-      setOverridePrice("");
-      await fetchBatchData();
+      await fetchWithAuth(`${API_URL}/api/batches/${id}/rename`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: renameInput.trim() }),
+      });
+      setBatch((prev: any) => ({
+        ...prev,
+        extractedData: {
+          ...prev.extractedData,
+          product_name: renameInput.trim(),
+        },
+      }));
     } catch (err) {
       console.error(err);
-      alert("Failed to clear AI content");
+      alert("Failed to rename product");
+    } finally {
+      setIsRenaming(false);
     }
   };
 
-  const openSendModal = async () => {
-    try {
-      const res = await fetchWithAuth(`${API_URL}/api/batches/users/list`);
-      if (res.ok) {
-        setUsersList(await res.json());
-      }
-    } catch (err) {
-      console.error(err);
-    }
+  const openSendModal = () => {
+    setTargetEmailsInput("");
     setIsSendModalOpen(true);
   };
 
   const handleSendToUser = async () => {
-    if (!targetUserId) return;
+    const emails = targetEmailsInput.split(',').map(e => e.trim()).filter(e => e);
+    if (emails.length === 0) return;
     setIsSending(true);
     try {
       const res = await fetchWithAuth(`${API_URL}/api/batches/${id}/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetUserId }),
+        body: JSON.stringify({ targetEmails: emails }),
       });
       if (res.ok) {
         setIsSendModalOpen(false);
+        const newHistory = Array.from(new Set([...emails, ...emailHistory])).slice(0, 10);
+        setEmailHistory(newHistory);
+        localStorage.setItem("sentEmailsHistory", JSON.stringify(newHistory));
         alert("Product cloned and sent successfully!");
       } else {
-        alert("Failed to send product.");
+        alert("Failed to send product. Ensure the emails belong to registered users.");
       }
     } catch (err) {
       console.error(err);
@@ -755,11 +774,42 @@ export default function ProductDetailPage() {
               <div className="p-6 grid gap-6">
                 
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-graphite-darker/50 border border-graphite-border p-4 rounded-xl">
+                  <div className="bg-graphite-darker/50 border border-graphite-border p-4 rounded-xl flex flex-col justify-between group/rename relative">
                     <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Asset Name</label>
-                    <p className="font-bold text-white mt-1 text-lg leading-tight">
-                      {batch.extractedData?.product_name || "Unidentified"}
-                    </p>
+                    {isRenaming ? (
+                      <div className="flex mt-1 items-center gap-2">
+                        <input
+                          type="text"
+                          autoFocus
+                          value={renameInput}
+                          onChange={(e) => setRenameInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleRenameProduct();
+                            if (e.key === "Escape") setIsRenaming(false);
+                          }}
+                          className="w-full bg-graphite border border-electric-cyan/50 rounded px-2 py-1 text-white text-sm focus:outline-none"
+                        />
+                        <button onClick={handleRenameProduct} className="text-electric-cyan p-1 hover:bg-electric-cyan/10 rounded">
+                          <CheckCircle2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex mt-1 items-start justify-between gap-2">
+                        <p className="font-bold text-white text-lg leading-tight">
+                          {batch.extractedData?.product_name || "Unidentified"}
+                        </p>
+                        <button
+                          onClick={() => {
+                            setRenameInput(batch.extractedData?.product_name || "");
+                            setIsRenaming(true);
+                          }}
+                          className="text-slate-400 hover:text-electric-cyan opacity-0 group-hover/rename:opacity-100 transition-opacity p-1"
+                          title="Rename Product"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                   
                   <div className="bg-electric-cyan/5 border border-electric-cyan/20 p-4 rounded-xl">
@@ -957,22 +1007,47 @@ export default function ProductDetailPage() {
             >
               <div className="p-6">
                 <h3 className="text-xl font-heading font-bold text-white mb-2">Move Media</h3>
-                <p className="text-sm text-slate-400 mb-6">Select a destination product for the selected {selectedMediaIds.size} assets.</p>
+                <p className="text-sm text-slate-400 mb-6">Select a destination product for the selected {selectedMediaIds.size} assets.</p>                <div className="space-y-4">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search products..."
+                      value={moveSearchQuery}
+                      onChange={(e) => setMoveSearchQuery(e.target.value)}
+                      className="w-full bg-graphite border border-graphite-border rounded-xl pl-10 pr-4 py-3 text-sm text-white focus:outline-none focus:border-electric-cyan"
+                    />
+                  </div>
 
-                <div className="space-y-4">
-                  <select
-                    value={targetBatchId}
-                    onChange={(e) => setTargetBatchId(e.target.value)}
-                    className="w-full bg-graphite border border-graphite-border rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-electric-cyan"
-                  >
-                    <option value="" disabled>Select Target Product</option>
-                    {batchesList.map(b => (
-                      <option key={b.id} value={b.id}>
-                        {b.extractedData?.product_name || 'Unidentified'} ({new Date(b.createdAt).toLocaleDateString()})
-                      </option>
-                    ))}
-                  </select>
-                  
+                  <div className="max-h-60 overflow-y-auto rounded-xl border border-graphite-border bg-graphite custom-scrollbar">
+                    {batchesList
+                      .filter((b) => {
+                        const name = b.extractedData?.product_name?.toLowerCase() || "";
+                        const sender = b.senderName?.toLowerCase() || "";
+                        const q = moveSearchQuery.toLowerCase();
+                        return name.includes(q) || sender.includes(q);
+                      })
+                      .map((b) => (
+                        <div
+                          key={b.id}
+                          onClick={() => setTargetBatchId(b.id)}
+                          className={`px-4 py-3 cursor-pointer border-b border-graphite-border last:border-b-0 hover:bg-white/5 transition-colors ${
+                            targetBatchId === b.id ? "bg-electric-cyan/10 border-l-2 border-l-electric-cyan" : ""
+                          }`}
+                        >
+                          <div className="font-bold text-white text-sm truncate">
+                            {b.extractedData?.product_name || "Unknown Product"}
+                          </div>
+                          <div className="text-xs text-slate-400 mt-1">
+                            {b.senderName || "WhatsApp"} • {new Date(b.createdAt).toLocaleDateString()}
+                          </div>
+                        </div>
+                      ))}
+                    {batchesList.length === 0 && (
+                      <div className="p-4 text-sm text-slate-500 text-center">No other products found.</div>
+                    )}
+                  </div>
+                </div>    
                   <label className="flex items-center gap-3 p-3 rounded-xl border border-graphite-border cursor-pointer transition-colors hover:border-slate-600">
                     <input
                       type="checkbox"
@@ -1025,21 +1100,37 @@ export default function ProductDetailPage() {
             >
               <div className="p-6">
                 <h3 className="text-xl font-heading font-bold text-white mb-2">Send to User</h3>
-                <p className="text-sm text-slate-400 mb-6">Select a user account to send a clone of this product.</p>
+                <p className="text-sm text-slate-400 mb-6">Enter the email addresses of the users you want to send this product to.</p>
 
                 <div className="space-y-4">
-                  <select
-                    value={targetUserId}
-                    onChange={(e) => setTargetUserId(e.target.value)}
+                  <input
+                    type="text"
+                    value={targetEmailsInput}
+                    onChange={(e) => setTargetEmailsInput(e.target.value)}
+                    placeholder="user1@example.com, user2@example.com"
                     className="w-full bg-graphite border border-graphite-border rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-electric-cyan"
-                  >
-                    <option value="" disabled>Select User Account</option>
-                    {usersList.map(u => (
-                      <option key={u.id} value={u.id}>
-                        {u.email}
-                      </option>
-                    ))}
-                  </select>
+                  />
+                  {emailHistory.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Recent Contacts</p>
+                      <div className="flex flex-wrap gap-2">
+                        {emailHistory.map(email => (
+                          <button
+                            key={email}
+                            onClick={() => {
+                              const current = targetEmailsInput.split(',').map(e => e.trim()).filter(e => e);
+                              if (!current.includes(email)) {
+                                setTargetEmailsInput([...current, email].join(', '));
+                              }
+                            }}
+                            className="px-2 py-1 rounded-md bg-graphite border border-graphite-border text-xs text-slate-300 hover:text-white hover:border-electric-cyan transition-colors"
+                          >
+                            {email}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-3 mt-8">
@@ -1051,7 +1142,7 @@ export default function ProductDetailPage() {
                   </button>
                   <button
                     onClick={handleSendToUser}
-                    disabled={!targetUserId || isSending}
+                    disabled={!targetEmailsInput.trim() || isSending}
                     className="flex-1 py-2.5 rounded-xl bg-electric-cyan text-graphite-darker font-bold hover:bg-white transition-colors disabled:opacity-50"
                   >
                     {isSending ? "Sending..." : "Send"}
@@ -1121,6 +1212,11 @@ function SortableMediaItem({
       {index === 0 && (
         <div className="absolute top-2 left-2 z-20 bg-electric-cyan/90 backdrop-blur-md text-graphite-darker text-[10px] font-bold px-2 py-1 rounded-md shadow-[0_0_10px_rgba(0,255,255,0.3)] border border-electric-cyan pointer-events-none">
           Primary Asset
+        </div>
+      )}
+      {!isImage && (
+        <div className="absolute top-2 left-2 z-20 bg-electric-magenta/90 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-md shadow-[0_0_10px_rgba(255,0,255,0.3)] border border-electric-magenta pointer-events-none">
+          Video
         </div>
       )}
       

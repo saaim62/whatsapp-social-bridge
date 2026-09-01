@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { formatDistanceToNow } from "date-fns";
-import { Layers, Clock3, CheckCircle2, ImageIcon, Trash2, Loader2, AlertCircle, Search, Filter } from "lucide-react";
+import { Layers, Clock3, CheckCircle2, ImageIcon, Trash2, Loader2, AlertCircle, Search, Filter, Send } from "lucide-react";
 import { API_URL, fetchWithAuth } from "@/lib/api";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
@@ -24,6 +24,16 @@ export default function ProductsPage() {
   const [isDeletingBulk, setIsDeletingBulk] = useState(false);
   const [isPublishingBulk, setIsPublishingBulk] = useState(false);
   const [isClearingAI, setIsClearingAI] = useState(false);
+
+  const [isSendModalOpen, setIsSendModalOpen] = useState(false);
+  const [targetEmailsInput, setTargetEmailsInput] = useState("");
+  const [emailHistory, setEmailHistory] = useState<string[]>([]);
+  const [isSending, setIsSending] = useState(false);
+
+  useEffect(() => {
+    const history = localStorage.getItem("sentEmailsHistory");
+    if (history) setEmailHistory(JSON.parse(history));
+  }, []);
 
   const clearSelectedBatchesAI = async () => {
     if (selectedIds.size === 0) return;
@@ -48,6 +58,38 @@ export default function ProductsPage() {
       console.error(err);
     } finally {
       setIsClearingAI(false);
+    }
+  };
+
+  const openSendModal = () => {
+    setTargetEmailsInput("");
+    setIsSendModalOpen(true);
+  };
+
+  const handleSendToUser = async () => {
+    const emails = targetEmailsInput.split(',').map(e => e.trim()).filter(e => e);
+    if (emails.length === 0) return;
+    setIsSending(true);
+    try {
+      const res = await fetchWithAuth(`${API_URL}/api/batches/send-bulk`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ batchIds: Array.from(selectedIds), targetEmails: emails }),
+      });
+      if (res.ok) {
+        setIsSendModalOpen(false);
+        const newHistory = Array.from(new Set([...emails, ...emailHistory])).slice(0, 10);
+        setEmailHistory(newHistory);
+        localStorage.setItem("sentEmailsHistory", JSON.stringify(newHistory));
+        alert("Products cloned and sent successfully!");
+      } else {
+        alert("Failed to send products. Ensure the emails belong to registered users.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error sending products.");
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -206,6 +248,13 @@ export default function ProductsPage() {
                 <span className="text-sm font-semibold text-electric-cyan bg-electric-cyan-dim px-3 py-1.5 rounded-lg border border-electric-cyan/20">
                   {selectedIds.size} nodes selected
                 </span>
+                <button
+                  onClick={openSendModal}
+                  className="btn-glass flex items-center gap-2 border-electric-cyan/30 hover:border-electric-cyan hover:bg-electric-cyan/10 text-electric-cyan"
+                >
+                  <Send className="w-4 h-4" />
+                  <span className="text-sm">Send</span>
+                </button>
                 <button
                   onClick={clearSelectedBatchesAI}
                   disabled={isClearingAI}
@@ -407,6 +456,77 @@ export default function ProductsPage() {
           </div>
         )}
       </div>
+
+      {/* Send to User Modal */}
+      <AnimatePresence>
+        {isSendModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-graphite-darker border border-graphite-border rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl"
+            >
+              <div className="p-6">
+                <h3 className="text-xl font-heading font-bold text-white mb-2">Send to Users</h3>
+                <p className="text-sm text-slate-400 mb-6">Enter the email addresses of the users you want to send {selectedIds.size} products to.</p>
+
+                <div className="space-y-4">
+                  <input
+                    type="text"
+                    value={targetEmailsInput}
+                    onChange={(e) => setTargetEmailsInput(e.target.value)}
+                    placeholder="user1@example.com, user2@example.com"
+                    className="w-full bg-graphite border border-graphite-border rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-electric-cyan"
+                  />
+                  {emailHistory.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Recent Contacts</p>
+                      <div className="flex flex-wrap gap-2">
+                        {emailHistory.map(email => (
+                          <button
+                            key={email}
+                            onClick={() => {
+                              const current = targetEmailsInput.split(',').map(e => e.trim()).filter(e => e);
+                              if (!current.includes(email)) {
+                                setTargetEmailsInput([...current, email].join(', '));
+                              }
+                            }}
+                            className="px-2 py-1 rounded-md bg-graphite border border-graphite-border text-xs text-slate-300 hover:text-white hover:border-electric-cyan transition-colors"
+                          >
+                            {email}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-3 mt-8">
+                  <button
+                    onClick={() => setIsSendModalOpen(false)}
+                    className="flex-1 py-2.5 rounded-xl border border-graphite-border text-slate-300 font-bold hover:bg-graphite transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSendToUser}
+                    disabled={!targetEmailsInput.trim() || isSending}
+                    className="flex-1 py-2.5 rounded-xl bg-electric-cyan text-graphite-darker font-bold hover:bg-white transition-colors disabled:opacity-50"
+                  >
+                    {isSending ? "Sending..." : "Send"}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

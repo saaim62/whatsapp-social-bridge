@@ -22,11 +22,6 @@ export class BatchController {
     return this.batchService.getBatches(req.user.userId);
   }
 
-  @Get('users/list')
-  async getUsersList(@Request() req: any) {
-    return this.batchService.getUsersList(req.user.userId);
-  }
-
   @Get(':id')
   async getBatch(@Request() req: any, @Param('id') id: string) {
     return this.batchService.getBatch(id, req.user.userId);
@@ -140,11 +135,27 @@ export class BatchController {
     return this.batchService.moveMedia(mediaId, body.targetBatchId, req.user.userId, body.retainAI);
   }
 
-  @Post(':id/send')
-  async sendBatchToUser(@Request() req: any, @Param('id') id: string, @Body() body: { targetUserId: string }) {
-    if (!body.targetUserId) {
-      throw new HttpException('targetUserId is required', HttpStatus.BAD_REQUEST);
+  @Post('send-bulk')
+  async sendBatchesBulk(@Request() req: any, @Body() body: { batchIds: string[], targetEmails: string[] }) {
+    if (!body.batchIds || !body.targetEmails || body.targetEmails.length === 0 || body.batchIds.length === 0) {
+      throw new HttpException('batchIds and targetEmails are required', HttpStatus.BAD_REQUEST);
     }
-    return this.batchService.sendBatchToUser(id, req.user.userId, body.targetUserId);
+    return this.batchService.sendBatchesBulk(body.batchIds, req.user.userId, body.targetEmails);
+  }
+
+  @Post(':id/send')
+  async sendBatchToUser(@Request() req: any, @Param('id') id: string, @Body() body: { targetEmails: string[] }) {
+    if (!body.targetEmails || body.targetEmails.length === 0) {
+      throw new HttpException('targetEmails is required', HttpStatus.BAD_REQUEST);
+    }
+    return this.batchService.sendBatchToUsers(id, req.user.userId, body.targetEmails);
+  }
+
+  @Patch(':id/rename')
+  async renameBatch(@Request() req: any, @Param('id') id: string, @Body() body: { name: string }) {
+    if (!body.name) {
+      throw new HttpException('name is required', HttpStatus.BAD_REQUEST);
+    }
+    return this.batchService.renameBatch(id, req.user.userId, body.name);
   }
 }

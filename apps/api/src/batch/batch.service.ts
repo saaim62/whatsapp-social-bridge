@@ -252,14 +252,6 @@ export class BatchService {
   }
 
   // Dashboard API
-  async getUsersList(currentUserId: string) {
-    const users = await this.prisma.user.findMany({
-      where: { id: { not: currentUserId } },
-      select: { id: true, email: true }
-    });
-    return users;
-  }
-
   async getBatches(userId: string) {
     return this.prisma.productBatch.findMany({
       where: { userId },
@@ -793,71 +785,110 @@ export class BatchService {
     return { success: true };
   }
 
-  async sendBatchToUser(batchId: string, fromUserId: string, toUserId: string) {
+  async renameBatch(batchId: string, userId: string, name: string) {
+    const batch = await this.prisma.productBatch.findUnique({
+      where: { id: batchId, userId }
+    });
+    if (!batch) return { success: false };
+    const extractedData = batch.extractedData as any || {};
+    extractedData.product_name = name;
+    await this.prisma.productBatch.update({
+      where: { id: batchId },
+      data: { extractedData }
+    });
+    return { success: true };
+  }
+
+  async sendBatchesBulk(batchIds: string[], fromUserId: string, targetEmails: string[]) {
+    const users = await this.prisma.user.findMany({
+      where: { email: { in: targetEmails }, isBlocked: false }
+    });
+    if (users.length === 0) return { success: false, message: 'No valid target users found' };
+    
+    for (const batchId of batchIds) {
+      await this.sendBatchToUsersInternal(batchId, fromUserId, users);
+    }
+    return { success: true };
+  }
+
+  async sendBatchToUsers(batchId: string, fromUserId: string, targetEmails: string[]) {
+    const users = await this.prisma.user.findMany({
+      where: { email: { in: targetEmails }, isBlocked: false }
+    });
+    if (users.length === 0) return { success: false, message: 'No valid target users found' };
+    
+    const newBatchIds = await this.sendBatchToUsersInternal(batchId, fromUserId, users);
+    return { success: true, newBatchIds };
+  }
+
+  private async sendBatchToUsersInternal(batchId: string, fromUserId: string, users: any[]) {
     const sourceBatch = await this.prisma.productBatch.findUnique({
       where: { id: batchId, userId: fromUserId },
       include: { mediaAssets: true, generatedContent: true }
     });
 
-    if (!sourceBatch) return { success: false, message: 'Batch not found' };
+    if (!sourceBatch) return [];
 
-    const newBatch = await this.prisma.productBatch.create({
-      data: {
-        userId: toUserId,
-        whatsappMessageId: sourceBatch.whatsappMessageId,
-        senderId: sourceBatch.senderId,
-        senderName: sourceBatch.senderName,
-        rawText: sourceBatch.rawText,
-        extractedData: sourceBatch.extractedData || {},
-        status: sourceBatch.status
-      }
-    });
-
-    if (sourceBatch.generatedContent) {
-      await this.prisma.generatedContent.create({
+    const newBatchIds = [];
+    for (const user of users) {
+      const newBatch = await this.prisma.productBatch.create({
         data: {
-          batchId: newBatch.id,
-          instagramCaption: sourceBatch.generatedContent.instagramCaption,
-          facebookCaption: sourceBatch.generatedContent.facebookCaption,
-          storyText: sourceBatch.generatedContent.storyText
+          userId: user.id,
+          whatsappMessageId: sourceBatch.whatsappMessageId,
+          senderId: sourceBatch.senderId,
+          senderName: sourceBatch.senderName,
+          rawText: sourceBatch.rawText,
+          extractedData: sourceBatch.extractedData || {},
+          status: sourceBatch.status
         }
       });
-    }
+      newBatchIds.push(newBatch.id);
 
-    for (const asset of sourceBatch.mediaAssets) {
-      let newLocalPath: string | null = null;
-      if (asset.localPath) {
-        const absolutePath = path.join(process.cwd(), asset.localPath.replace(/^api\//, ''));
-        if (fs.existsSync(absolutePath)) {
-          const ext = path.extname(absolutePath);
-          const newFileName = `${Date.now()}_${Math.random().toString(36).substring(7)}${ext}`;
-          newLocalPath = `api/uploads/${newFileName}`;
-          const newAbsolutePath = path.join(process.cwd(), 'uploads', newFileName);
-          
-          fs.copyFileSync(absolutePath, newAbsolutePath);
+      if (sourceBatch.generatedContent) {
+        await this.prisma.generatedContent.create({
+          data: {
+            batchId: newBatch.id,
+            instagramCaption: sourceBatch.generatedContent.instagramCaption,
+            facebookCaption: sourceBatch.generatedContent.facebookCaption,
+            storyText: sourceBatch.generatedContent.storyText
+          }
+        });
+      }
 
-          const originalPath = absolutePath.replace(ext, `_original${ext}`);
-          if (fs.existsSync(originalPath)) {
-            const newOriginalPath = newAbsolutePath.replace(ext, `_original${ext}`);
-            fs.copyFileSync(originalPath, newOriginalPath);
+      for (const asset of sourceBatch.mediaAssets) {
+        let newLocalPath: string | null = null;
+        if (asset.localPath) {
+          const absolutePath = path.join(process.cwd(), asset.localPath.replace(/^api\//, ''));
+          if (fs.existsSync(absolutePath)) {
+            const ext = path.extname(absolutePath);
+            const newFileName = `${Date.now()}_${Math.random().toString(36).substring(7)}${ext}`;
+            newLocalPath = `api/uploads/${newFileName}`;
+            const newAbsolutePath = path.join(process.cwd(), 'uploads', newFileName);
+            
+            fs.copyFileSync(absolutePath, newAbsolutePath);
+
+            const originalPath = absolutePath.replace(ext, `_original${ext}`);
+            if (fs.existsSync(originalPath)) {
+              const newOriginalPath = newAbsolutePath.replace(ext, `_original${ext}`);
+              fs.copyFileSync(originalPath, newOriginalPath);
+            }
           }
         }
+
+        await this.prisma.mediaAsset.create({
+          data: {
+            batchId: newBatch.id,
+            whatsappMediaId: asset.whatsappMediaId,
+            mimeType: asset.mimeType,
+            localPath: newLocalPath || asset.localPath,
+            isProcessing: asset.isProcessing,
+            fileSize: asset.fileSize,
+            sortOrder: asset.sortOrder,
+            ocrConfidence: asset.ocrConfidence
+          }
+        });
       }
-
-      await this.prisma.mediaAsset.create({
-        data: {
-          batchId: newBatch.id,
-          whatsappMediaId: asset.whatsappMediaId,
-          mimeType: asset.mimeType,
-          localPath: newLocalPath || asset.localPath,
-          isProcessing: asset.isProcessing,
-          fileSize: asset.fileSize,
-          sortOrder: asset.sortOrder,
-          ocrConfidence: asset.ocrConfidence
-        }
-      });
     }
-
-    return { success: true, newBatchId: newBatch.id };
+    return newBatchIds;
   }
 }
