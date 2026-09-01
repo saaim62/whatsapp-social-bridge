@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -380,7 +381,7 @@ export class BatchService {
       await tx.productBatch.update({
         where: { id },
         data: {
-          extractedData: null
+          extractedData: Prisma.DbNull
         }
       });
       
@@ -411,7 +412,7 @@ export class BatchService {
 
       await tx.productBatch.updateMany({
         where: { id: { in: ids } },
-        data: { extractedData: null }
+        data: { extractedData: Prisma.DbNull }
       });
 
       await tx.mediaAsset.updateMany({
@@ -824,7 +825,7 @@ export class BatchService {
     }
 
     for (const asset of sourceBatch.mediaAssets) {
-      let newLocalPath = null;
+      let newLocalPath: string | null = null;
       if (asset.localPath) {
         const absolutePath = path.join(process.cwd(), asset.localPath.replace(/^api\//, ''));
         if (fs.existsSync(absolutePath)) {
