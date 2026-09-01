@@ -395,17 +395,45 @@ export default function SourcesPage() {
                           className="w-4 h-4 text-electric-cyan rounded border-slate-600 bg-graphite-darker checked:bg-electric-cyan focus:ring-electric-cyan ml-1 cursor-pointer"
                         />
                         
-                        {/* Icon */}
-                        <div className={`p-3 rounded-xl border relative overflow-hidden transition-colors duration-500 ${
-                          source.isEnabled 
-                            ? 'bg-graphite border-electric-cyan/30' 
-                            : 'bg-graphite-darker border-graphite-border'
-                        }`}>
-                          {source.isEnabled && (
-                             <div className="absolute inset-0 bg-electric-cyan/10 blur-md" />
-                          )}
-                          <div className="relative z-10">
-                            {getIcon(source.type)}
+                        {/* Icon with Popover */}
+                        <div className="relative group/icon cursor-pointer z-20">
+                          <div className={`p-3 rounded-xl border relative overflow-hidden transition-all duration-300 hover:scale-105 hover:shadow-[0_0_15px_rgba(0,255,255,0.2)] hover:border-electric-cyan ${
+                            source.isEnabled 
+                              ? 'bg-graphite border-electric-cyan/30' 
+                              : 'bg-graphite-darker border-graphite-border'
+                          }`}>
+                            {source.isEnabled && (
+                               <div className="absolute inset-0 bg-electric-cyan/10 blur-md" />
+                            )}
+                            <div className="relative z-10">
+                              {getIcon(source.type)}
+                            </div>
+                          </div>
+                          
+                          {/* Popover Tooltip */}
+                          <div className="absolute top-full left-0 mt-3 w-72 p-4 rounded-xl bg-graphite-darker border border-graphite-border shadow-2xl opacity-0 invisible group-hover/icon:opacity-100 group-hover/icon:visible transition-all duration-300 group-hover/icon:translate-y-0 translate-y-2 pointer-events-none z-50">
+                            <div className="flex flex-col gap-3">
+                              <div>
+                                <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Full Name</p>
+                                <p className="text-sm font-bold text-white break-words mt-0.5">{source.name}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">WhatsApp ID / Number</p>
+                                <p className="text-sm font-mono text-electric-cyan break-all mt-0.5">{source.jid}</p>
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Type</p>
+                                  <p className="text-sm text-slate-300 mt-0.5 capitalize">{source.type.toLowerCase()}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Status</p>
+                                  <p className={`text-sm mt-0.5 font-bold ${source.isEnabled ? "text-electric-emerald" : "text-slate-500"}`}>
+                                    {source.isEnabled ? "Active" : "Ignored"}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         </div>
                         
