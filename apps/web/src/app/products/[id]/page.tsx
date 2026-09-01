@@ -1223,16 +1223,18 @@ function SortableMediaItem({
         style={{ touchAction: 'none' }}
       />
 
-      {index === 0 && (
-        <div className="absolute top-2 left-2 z-20 bg-electric-cyan/90 backdrop-blur-md text-graphite-darker text-[10px] font-bold px-2 py-1 rounded-md shadow-[0_0_10px_rgba(0,255,255,0.3)] border border-electric-cyan pointer-events-none">
-          Primary Asset
-        </div>
-      )}
-      {!isImage && (
-        <div className="absolute top-2 left-2 z-20 bg-electric-magenta/90 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-md shadow-[0_0_10px_rgba(255,0,255,0.3)] border border-electric-magenta pointer-events-none">
-          Video
-        </div>
-      )}
+      <div className="absolute top-2 right-2 z-20 flex flex-col gap-1 items-end pointer-events-none">
+        {!isImage && (
+          <div className="bg-indigo-500/90 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-md shadow-sm border border-indigo-400/50">
+            Video Asset
+          </div>
+        )}
+        {index === 0 && (
+          <div className="bg-electric-cyan/90 backdrop-blur-md text-graphite-darker text-[10px] font-bold px-2 py-1 rounded-md shadow-sm border border-electric-cyan/50">
+            Primary Asset
+          </div>
+        )}
+      </div>
       
       {!isImage ? (
         <video
