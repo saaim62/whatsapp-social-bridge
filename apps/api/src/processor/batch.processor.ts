@@ -133,7 +133,7 @@ export class BatchProcessor extends WorkerHost {
 
     const publishTargets = (targets && targets.length > 0) ? targets : ['INSTAGRAM', 'FACEBOOK'];
 
-    // Instagram
+    // Instagram Feed
     if (publishTargets.includes('INSTAGRAM')) {
       try {
         const igResult = await this.socialService.publishInstagram(batch);
@@ -159,7 +159,33 @@ export class BatchProcessor extends WorkerHost {
       }
     }
 
-    // Facebook
+    // Instagram Story
+    if (publishTargets.includes('INSTAGRAM_STORY')) {
+      try {
+        const igStoryResult = await this.socialService.publishInstagramStory(batch);
+        await this.prisma.publication.create({
+          data: {
+            batchId,
+            platform: 'INSTAGRAM_STORY',
+            platformPostId: igStoryResult.id,
+            status: 'PUBLISHED',
+          },
+        });
+        anySuccess = true;
+      } catch (e) {
+        allSuccess = false;
+        await this.prisma.publication.create({
+          data: {
+            batchId,
+            platform: 'INSTAGRAM_STORY',
+            status: 'FAILED',
+            error: e.message,
+          },
+        });
+      }
+    }
+
+    // Facebook Feed
     if (publishTargets.includes('FACEBOOK')) {
       try {
         const fbResult = await this.socialService.publishFacebook(batch);
@@ -178,6 +204,32 @@ export class BatchProcessor extends WorkerHost {
           data: {
             batchId,
             platform: 'FACEBOOK',
+            status: 'FAILED',
+            error: e.message,
+          },
+        });
+      }
+    }
+
+    // Facebook Story
+    if (publishTargets.includes('FACEBOOK_STORY')) {
+      try {
+        const fbStoryResult = await this.socialService.publishFacebookStory(batch);
+        await this.prisma.publication.create({
+          data: {
+            batchId,
+            platform: 'FACEBOOK_STORY',
+            platformPostId: fbStoryResult.id,
+            status: 'PUBLISHED',
+          },
+        });
+        anySuccess = true;
+      } catch (e) {
+        allSuccess = false;
+        await this.prisma.publication.create({
+          data: {
+            batchId,
+            platform: 'FACEBOOK_STORY',
             status: 'FAILED',
             error: e.message,
           },

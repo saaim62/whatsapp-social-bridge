@@ -251,6 +251,14 @@ export class BatchService {
   }
 
   // Dashboard API
+  async getUsersList(currentUserId: string) {
+    const users = await this.prisma.user.findMany({
+      where: { id: { not: currentUserId } },
+      select: { id: true, email: true }
+    });
+    return users;
+  }
+
   async getBatches(userId: string) {
     return this.prisma.productBatch.findMany({
       where: { userId },
@@ -353,6 +361,66 @@ export class BatchService {
       data: { status: 'FAILED' },
     });
     return { success: true };
+  }
+
+  async clearAIContent(id: string, userId: string) {
+    const batch = await this.prisma.productBatch.findUnique({
+      where: { id, userId },
+      include: { generatedContent: true }
+    });
+    if (!batch) return { success: false, message: 'Batch not found' };
+
+    await this.prisma.$transaction(async (tx) => {
+      if (batch.generatedContent) {
+        await tx.generatedContent.delete({
+          where: { id: batch.generatedContent.id }
+        });
+      }
+      
+      await tx.productBatch.update({
+        where: { id },
+        data: {
+          extractedData: null
+        }
+      });
+      
+      await tx.mediaAsset.updateMany({
+        where: { batchId: id },
+        data: { ocrConfidence: null }
+      });
+    });
+
+    return { success: true };
+  }
+
+  async clearAIContentBulk(ids: string[], userId: string) {
+    const batches = await this.prisma.productBatch.findMany({
+      where: { id: { in: ids }, userId },
+      include: { generatedContent: true }
+    });
+
+    if (!batches.length) return { success: false, message: 'No valid batches found' };
+
+    await this.prisma.$transaction(async (tx) => {
+      const generatedIds = batches.map(b => b.generatedContent?.id).filter(id => id) as string[];
+      if (generatedIds.length > 0) {
+        await tx.generatedContent.deleteMany({
+          where: { id: { in: generatedIds } }
+        });
+      }
+
+      await tx.productBatch.updateMany({
+        where: { id: { in: ids } },
+        data: { extractedData: null }
+      });
+
+      await tx.mediaAsset.updateMany({
+        where: { batchId: { in: ids } },
+        data: { ocrConfidence: null }
+      });
+    });
+
+    return { success: true, count: batches.length };
   }
 
   async deleteBatch(id: string, userId: string) {
@@ -677,5 +745,118 @@ export class BatchService {
       this.logger.error(`Error stopping blur for media ${mediaId}:`, error);
       return { success: false, message: 'Failed to stop blur process' };
     }
+  }
+
+  async moveMedia(mediaId: string, targetBatchId: string, userId: string, retainAI: boolean = false) {
+    const media = await this.prisma.mediaAsset.findUnique({
+      where: { id: mediaId },
+      include: { batch: true },
+    });
+    if (!media || media.batch.userId !== userId) {
+      return { success: false, message: 'Media not found' };
+    }
+
+    const targetBatch = await this.prisma.productBatch.findUnique({
+      where: { id: targetBatchId, userId }
+    });
+    if (!targetBatch) {
+      return { success: false, message: 'Target batch not found' };
+    }
+
+    // Get max sort order of target batch
+    const targetMedia = await this.prisma.mediaAsset.findMany({
+      where: { batchId: targetBatchId },
+      orderBy: { sortOrder: 'desc' },
+      take: 1
+    });
+    const nextSortOrder = targetMedia.length > 0 ? targetMedia[0].sortOrder + 1 : 0;
+
+    await this.prisma.mediaAsset.update({
+      where: { id: mediaId },
+      data: {
+        batchId: targetBatchId,
+        sortOrder: nextSortOrder
+      }
+    });
+
+    if (!retainAI) {
+      // Clear OCR confidence on media if they don't want to retain AI
+      await this.prisma.mediaAsset.update({
+        where: { id: mediaId },
+        data: {
+          ocrConfidence: null
+        }
+      });
+    }
+
+    return { success: true };
+  }
+
+  async sendBatchToUser(batchId: string, fromUserId: string, toUserId: string) {
+    const sourceBatch = await this.prisma.productBatch.findUnique({
+      where: { id: batchId, userId: fromUserId },
+      include: { mediaAssets: true, generatedContent: true }
+    });
+
+    if (!sourceBatch) return { success: false, message: 'Batch not found' };
+
+    const newBatch = await this.prisma.productBatch.create({
+      data: {
+        userId: toUserId,
+        whatsappMessageId: sourceBatch.whatsappMessageId,
+        senderId: sourceBatch.senderId,
+        senderName: sourceBatch.senderName,
+        rawText: sourceBatch.rawText,
+        extractedData: sourceBatch.extractedData || {},
+        status: sourceBatch.status
+      }
+    });
+
+    if (sourceBatch.generatedContent) {
+      await this.prisma.generatedContent.create({
+        data: {
+          batchId: newBatch.id,
+          instagramCaption: sourceBatch.generatedContent.instagramCaption,
+          facebookCaption: sourceBatch.generatedContent.facebookCaption,
+          storyText: sourceBatch.generatedContent.storyText
+        }
+      });
+    }
+
+    for (const asset of sourceBatch.mediaAssets) {
+      let newLocalPath = null;
+      if (asset.localPath) {
+        const absolutePath = path.join(process.cwd(), asset.localPath.replace(/^api\//, ''));
+        if (fs.existsSync(absolutePath)) {
+          const ext = path.extname(absolutePath);
+          const newFileName = `${Date.now()}_${Math.random().toString(36).substring(7)}${ext}`;
+          newLocalPath = `api/uploads/${newFileName}`;
+          const newAbsolutePath = path.join(process.cwd(), 'uploads', newFileName);
+          
+          fs.copyFileSync(absolutePath, newAbsolutePath);
+
+          const originalPath = absolutePath.replace(ext, `_original${ext}`);
+          if (fs.existsSync(originalPath)) {
+            const newOriginalPath = newAbsolutePath.replace(ext, `_original${ext}`);
+            fs.copyFileSync(originalPath, newOriginalPath);
+          }
+        }
+      }
+
+      await this.prisma.mediaAsset.create({
+        data: {
+          batchId: newBatch.id,
+          whatsappMediaId: asset.whatsappMediaId,
+          mimeType: asset.mimeType,
+          localPath: newLocalPath || asset.localPath,
+          isProcessing: asset.isProcessing,
+          fileSize: asset.fileSize,
+          sortOrder: asset.sortOrder,
+          ocrConfidence: asset.ocrConfidence
+        }
+      });
+    }
+
+    return { success: true, newBatchId: newBatch.id };
   }
 }

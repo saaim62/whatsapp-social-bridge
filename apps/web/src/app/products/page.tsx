@@ -23,6 +23,33 @@ export default function ProductsPage() {
   const [itemsPerPage, setItemsPerPage] = useState(25);
   const [isDeletingBulk, setIsDeletingBulk] = useState(false);
   const [isPublishingBulk, setIsPublishingBulk] = useState(false);
+  const [isClearingAI, setIsClearingAI] = useState(false);
+
+  const clearSelectedBatchesAI = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm("Are you sure you want to clear AI content for these selected batches?")) return;
+    setIsClearingAI(true);
+    try {
+      const res = await fetchWithAuth(`${API_URL}/api/batches/clear-ai-bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedIds) })
+      });
+      if (res.ok) {
+        setBatches(batches => batches.map(b => {
+          if (selectedIds.has(b.id)) {
+            return { ...b, extractedData: null, generatedContent: null };
+          }
+          return b;
+        }));
+        setSelectedIds(new Set());
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsClearingAI(false);
+    }
+  };
 
   const deleteBatch = async (id: string) => {
     if (confirmDeleteId !== id) {
@@ -179,6 +206,14 @@ export default function ProductsPage() {
                 <span className="text-sm font-semibold text-electric-cyan bg-electric-cyan-dim px-3 py-1.5 rounded-lg border border-electric-cyan/20">
                   {selectedIds.size} nodes selected
                 </span>
+                <button
+                  onClick={clearSelectedBatchesAI}
+                  disabled={isClearingAI}
+                  className="btn-glass flex items-center gap-2 border-amber-500/30 hover:border-amber-500 hover:bg-amber-500/10 text-amber-400"
+                >
+                  {isClearingAI ? <Loader2 className="w-4 h-4 animate-spin" /> : <Layers className="w-4 h-4" />}
+                  <span className="text-sm">Clear AI</span>
+                </button>
                 <button
                   onClick={deleteSelectedBatches}
                   disabled={isDeletingBulk}

@@ -22,6 +22,11 @@ export class BatchController {
     return this.batchService.getBatches(req.user.userId);
   }
 
+  @Get('users/list')
+  async getUsersList(@Request() req: any) {
+    return this.batchService.getUsersList(req.user.userId);
+  }
+
   @Get(':id')
   async getBatch(@Request() req: any, @Param('id') id: string) {
     return this.batchService.getBatch(id, req.user.userId);
@@ -61,6 +66,19 @@ export class BatchController {
   @Post(':id/reject')
   async rejectBatch(@Request() req: any, @Param('id') id: string) {
     return this.batchService.rejectBatch(id, req.user.userId);
+  }
+
+  @Post(':id/clear-ai')
+  async clearAIContent(@Request() req: any, @Param('id') id: string) {
+    return this.batchService.clearAIContent(id, req.user.userId);
+  }
+
+  @Post('clear-ai-bulk')
+  async clearAIContentBulk(@Request() req: any, @Body() body: { ids: string[] }) {
+    if (!body.ids || !Array.isArray(body.ids) || body.ids.length === 0) {
+      throw new HttpException('No IDs provided', HttpStatus.BAD_REQUEST);
+    }
+    return this.batchService.clearAIContentBulk(body.ids, req.user.userId);
   }
 
   @Post('media/:mediaId/delete')
@@ -108,5 +126,25 @@ export class BatchController {
       throw new HttpException(result.message || 'Failed to stop blur', HttpStatus.BAD_REQUEST);
     }
     return result;
+  }
+
+  @Post('media/:mediaId/move')
+  async moveMedia(
+    @Request() req: any,
+    @Param('mediaId') mediaId: string,
+    @Body() body: { targetBatchId: string; retainAI?: boolean }
+  ) {
+    if (!body.targetBatchId) {
+      throw new HttpException('targetBatchId is required', HttpStatus.BAD_REQUEST);
+    }
+    return this.batchService.moveMedia(mediaId, body.targetBatchId, req.user.userId, body.retainAI);
+  }
+
+  @Post(':id/send')
+  async sendBatchToUser(@Request() req: any, @Param('id') id: string, @Body() body: { targetUserId: string }) {
+    if (!body.targetUserId) {
+      throw new HttpException('targetUserId is required', HttpStatus.BAD_REQUEST);
+    }
+    return this.batchService.sendBatchToUser(id, req.user.userId, body.targetUserId);
   }
 }

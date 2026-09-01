@@ -79,7 +79,7 @@ export class AdminService {
     const users = await this.prisma.user.findMany({
       include: {
         batches: {
-          select: { id: true, mediaAssets: { select: { id: true, fileSize: true } } }
+          select: { id: true, mediaAssets: { select: { id: true, fileSize: true, localPath: true } } }
         }
       },
       orderBy: { createdAt: 'desc' }
@@ -91,7 +91,15 @@ export class AdminService {
       user.batches.forEach(b => {
         totalMedia += b.mediaAssets.length;
         b.mediaAssets.forEach(m => {
-          totalStorage += (m.fileSize || 0);
+          let fsize = m.fileSize || 0;
+          if (fsize === 0 && m.localPath && fs.existsSync(m.localPath)) {
+            try {
+              fsize = fs.statSync(m.localPath).size;
+            } catch (e) {
+              // Ignore
+            }
+          }
+          totalStorage += fsize;
         });
       });
 
@@ -138,7 +146,15 @@ export class AdminService {
     let currentUsage = 0;
     user.batches.forEach(b => {
       b.mediaAssets.forEach(m => {
-        currentUsage += (m.fileSize || 0);
+        let fsize = m.fileSize || 0;
+        if (fsize === 0 && m.localPath && fs.existsSync(m.localPath)) {
+          try {
+            fsize = fs.statSync(m.localPath).size;
+          } catch (e) {
+            // Ignore
+          }
+        }
+        currentUsage += fsize;
       });
     });
 

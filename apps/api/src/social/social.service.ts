@@ -500,4 +500,146 @@ export class SocialService {
     this.logger.log(`Disconnected Meta for user ${userId}`);
     return { success: true };
   }
+
+  async publishInstagramStory(batch: any): Promise<{ id: string }> {
+    this.logger.log(`Publishing to Instagram Story for batch ${batch.id}`);
+    
+    // We assume the Meta account is linked
+    const socialAcc = await this.prisma.socialAccount.findUnique({
+      where: { userId_platform: { userId: batch.userId, platform: 'META' } }
+    });
+
+    const userAccessToken = socialAcc?.accessToken;
+
+    if (!userAccessToken) {
+      throw new Error('User Access Token is missing. Please connect your Meta account.');
+    }
+
+    const { pageAccessToken, igAccountId } = await this.getMetaPublishingContext(userAccessToken);
+
+    if (!igAccountId) {
+      throw new Error('No Instagram Business Account linked to your Facebook Page.');
+    }
+    const accessToken = pageAccessToken;
+
+    try {
+      const allAssets = batch.mediaAssets || [];
+      if (allAssets.length === 0) {
+        this.logger.warn('No images/videos found for Instagram Story.');
+        return { id: 'success' };
+      }
+
+      // We publish only the first asset as a story (Instagram API limitation for simple flows)
+      const asset = allAssets[0];
+      let absolutePath = path.join(process.cwd(), asset.localPath.replace(/^api\//, ''));
+      let finalCreationId = '';
+
+      if (fs.existsSync(absolutePath)) {
+        const isVideo = asset.mimeType?.startsWith('video/') || false;
+
+        const mediaUrl = this.getPublicMediaUrl(absolutePath);
+        this.logger.log(`Using public URL for Instagram Story: ${mediaUrl}`);
+
+        const params: any = {
+          media_type: 'STORIES',
+          access_token: accessToken,
+        };
+
+        if (isVideo) {
+          params.video_url = mediaUrl;
+        } else {
+          params.image_url = mediaUrl;
+        }
+
+        const itemRes = await axios.post(
+          `https://graph.facebook.com/v19.0/${igAccountId}/media`,
+          null,
+          { params },
+        );
+
+        const creationId = itemRes.data.id;
+        finalCreationId = creationId; 
+
+        await this.pollInstagramContainer(creationId, accessToken);
+        
+        const publishRes = await axios.post(
+          `https://graph.facebook.com/v19.0/${igAccountId}/media_publish`,
+          null,
+          { params: { creation_id: creationId, access_token: accessToken } },
+        );
+        
+        this.logger.log(`Successfully published Instagram Story: ${publishRes.data.id}`);
+      }
+      return { id: finalCreationId || 'success' };
+    } catch (error: any) {
+      this.logger.error(
+        'Error publishing to Instagram Story',
+        error.response?.data || error.message,
+      );
+      throw error;
+    }
+  }
+
+  async publishFacebookStory(batch: any): Promise<{ id: string }> {
+    this.logger.log(`Publishing to Facebook Story for batch ${batch.id}`);
+    
+    const socialAcc = await this.prisma.socialAccount.findUnique({
+      where: { userId_platform: { userId: batch.userId, platform: 'META' } }
+    });
+
+    const userAccessToken = socialAcc?.accessToken;
+
+    if (!userAccessToken) {
+      throw new Error('Access Token is missing. Please connect your Meta account.');
+    }
+
+    const { pageId, pageAccessToken: accessToken } = await this.getMetaPublishingContext(userAccessToken);
+
+    try {
+      const allAssets = batch.mediaAssets || [];
+      if (allAssets.length === 0) {
+        this.logger.warn('No images/videos found for Facebook Story.');
+        return { id: 'success' };
+      }
+
+      const asset = allAssets[0];
+      let absolutePath = path.join(process.cwd(), asset.localPath.replace(/^api\//, ''));
+      let finalResId = '';
+
+      if (fs.existsSync(absolutePath)) {
+        const isVideo = asset.mimeType?.startsWith('video/') || false;
+
+        if (isVideo) {
+          absolutePath = await this.compressVideo(absolutePath);
+        }
+
+        const formData = new FormData();
+        formData.append('source', fs.createReadStream(absolutePath));
+        formData.append('access_token', accessToken);
+
+        const endpoint = isVideo ? 'video_stories' : 'photo_stories';
+
+        const res = await axios.post(
+          `https://graph.facebook.com/v19.0/${pageId}/${endpoint}`,
+          formData,
+          {
+            headers: formData.getHeaders(),
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity,
+          },
+        );
+        finalResId = res.data.id || res.data.post_id || res.data.video_id; 
+        this.logger.log(
+          `Successfully published to Facebook Story: ${finalResId}`,
+        );
+      }
+      return { id: finalResId || 'success' };
+    } catch (error: any) {
+      this.logger.error(
+        'Error publishing to Facebook Story',
+        error.response?.data || error.message,
+      );
+      throw error;
+    }
+  }
 }

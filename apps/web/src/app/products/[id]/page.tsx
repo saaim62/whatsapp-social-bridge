@@ -71,6 +71,17 @@ export default function ProductDetailPage() {
   const [isBulkReverting, setIsBulkReverting] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   
+  const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
+  const [batchesList, setBatchesList] = useState<any[]>([]);
+  const [targetBatchId, setTargetBatchId] = useState("");
+  const [isMovingMedia, setIsMovingMedia] = useState(false);
+  const [retainAIOnMove, setRetainAIOnMove] = useState(false);
+
+  const [isSendModalOpen, setIsSendModalOpen] = useState(false);
+  const [usersList, setUsersList] = useState<any[]>([]);
+  const [targetUserId, setTargetUserId] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  
   const sensors = useSensors(
     useSensor(MouseSensor, {
       activationConstraint: {
@@ -291,8 +302,15 @@ export default function ProductDetailPage() {
     });
   };
 
+  const isVideoAsset = (asset: any) => {
+    if (asset.mimeType?.startsWith("video/")) return true;
+    if (asset.localPath?.toLowerCase().match(/\.(mp4|mov|webm)$/)) return true;
+    if (asset.originalUrl?.toLowerCase().match(/\.(mp4|mov|webm)$/)) return true;
+    return false;
+  };
+
   const imageAssets = (batch?.mediaAssets || []).filter(
-    (a: any) => !a.mimeType?.startsWith("video/")
+    (a: any) => !isVideoAsset(a)
   );
 
   const toggleSelectAll = () => {
@@ -363,6 +381,99 @@ export default function ProductDetailPage() {
     }
   };
 
+  const openMoveModal = async () => {
+    try {
+      const res = await fetchWithAuth(`${API_URL}/api/batches`);
+      if (res.ok) {
+        const data = await res.json();
+        setBatchesList(data.filter((b: any) => b.id !== id));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    setIsMoveModalOpen(true);
+  };
+
+  const handleMoveMedia = async () => {
+    if (selectedMediaIds.size === 0 || !targetBatchId) return;
+    setIsMovingMedia(true);
+    const ids = Array.from(selectedMediaIds);
+    try {
+      await Promise.all(
+        ids.map((mediaId) =>
+          fetchWithAuth(`${API_URL}/api/batches/media/${mediaId}/move`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ targetBatchId, retainAI: retainAIOnMove }),
+          })
+        )
+      );
+      setBatch((prev: any) => ({
+        ...prev,
+        mediaAssets: prev.mediaAssets.filter((a: any) => !selectedMediaIds.has(a.id)),
+      }));
+      setMediaOrder((prev) => prev.filter((a: any) => !selectedMediaIds.has(a.id)));
+      setSelectedMediaIds(new Set());
+      setIsMoveModalOpen(false);
+      await fetchBatchData();
+    } catch (err) {
+      console.error("Bulk move error", err);
+      alert("Failed to move some images");
+    } finally {
+      setIsMovingMedia(false);
+    }
+  };
+
+  const handleClearAIContent = async () => {
+    if (!confirm("Are you sure you want to clear AI generated content? This will remove generated captions and extracted metadata.")) return;
+    try {
+      await fetchWithAuth(`${API_URL}/api/batches/${id}/clear-ai`, { method: "POST" });
+      setEditedInstagram("");
+      setEditedFacebook("");
+      setEditedStory("");
+      setOverridePrice("");
+      await fetchBatchData();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to clear AI content");
+    }
+  };
+
+  const openSendModal = async () => {
+    try {
+      const res = await fetchWithAuth(`${API_URL}/api/batches/users/list`);
+      if (res.ok) {
+        setUsersList(await res.json());
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    setIsSendModalOpen(true);
+  };
+
+  const handleSendToUser = async () => {
+    if (!targetUserId) return;
+    setIsSending(true);
+    try {
+      const res = await fetchWithAuth(`${API_URL}/api/batches/${id}/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetUserId }),
+      });
+      if (res.ok) {
+        setIsSendModalOpen(false);
+        alert("Product cloned and sent successfully!");
+      } else {
+        alert("Failed to send product.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error sending product.");
+    } finally {
+      setIsSending(false);
+    }
+  };
+
   if (loading) return <LoadingSpinner label="Loading product..." />;
 
   if (!batch) {
@@ -425,6 +536,25 @@ export default function ProductDetailPage() {
           <div className="sm:hidden block">
              <StatusBadge status={batch.status} />
           </div>
+          <button
+            onClick={openSendModal}
+            className="btn-glass flex items-center gap-2 border-electric-cyan/30 text-electric-cyan hover:border-electric-cyan hover:bg-electric-cyan/10"
+            title="Send Product to Another User"
+          >
+            <span className="hidden sm:inline font-bold tracking-wide text-sm">
+              Send to User
+            </span>
+          </button>
+          <button
+            onClick={handleClearAIContent}
+            className="btn-glass flex items-center gap-2 border-red-500/30 text-red-400 hover:border-red-500 hover:bg-red-500/10"
+            title="Clear AI Content"
+          >
+            <RotateCcw className="w-4 h-4 hidden sm:block" />
+            <span className="hidden sm:inline font-bold tracking-wide text-sm">
+              Clear AI Data
+            </span>
+          </button>
           <button
             onClick={openPublishModal}
             disabled={batch.status === "PUBLISHING"}
@@ -498,6 +628,14 @@ export default function ProductDetailPage() {
 
                     <div className="flex items-center gap-3 ml-auto">
                       <button
+                        onClick={openMoveModal}
+                        className="btn-glass px-3 py-1.5 text-xs text-white border-white/20 hover:border-white/40 hover:bg-white/10 flex items-center gap-1.5"
+                      >
+                        <Layers className="w-3 h-3 text-electric-cyan" />
+                        Move
+                      </button>
+
+                      <button
                         onClick={handleBulkRevert}
                         disabled={isBulkReverting}
                         className="btn-glass px-3 py-1.5 text-xs text-white border-white/20 hover:border-white/40 hover:bg-white/10 flex items-center gap-1.5"
@@ -542,7 +680,7 @@ export default function ProductDetailPage() {
                     >
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                         {mediaOrder.map((asset: any, index: number) => {
-                          const isImage = !asset.mimeType?.startsWith("video/");
+                          const isImage = !isVideoAsset(asset);
                           const imageIndex = isImage
                             ? imageAssets.findIndex((a: any) => a.id === asset.id)
                             : -1;
@@ -801,6 +939,129 @@ export default function ProductDetailPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Move Media Modal */}
+      <AnimatePresence>
+        {isMoveModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-graphite-darker border border-graphite-border rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl"
+            >
+              <div className="p-6">
+                <h3 className="text-xl font-heading font-bold text-white mb-2">Move Media</h3>
+                <p className="text-sm text-slate-400 mb-6">Select a destination product for the selected {selectedMediaIds.size} assets.</p>
+
+                <div className="space-y-4">
+                  <select
+                    value={targetBatchId}
+                    onChange={(e) => setTargetBatchId(e.target.value)}
+                    className="w-full bg-graphite border border-graphite-border rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-electric-cyan"
+                  >
+                    <option value="" disabled>Select Target Product</option>
+                    {batchesList.map(b => (
+                      <option key={b.id} value={b.id}>
+                        {b.extractedData?.product_name || 'Unidentified'} ({new Date(b.createdAt).toLocaleDateString()})
+                      </option>
+                    ))}
+                  </select>
+                  
+                  <label className="flex items-center gap-3 p-3 rounded-xl border border-graphite-border cursor-pointer transition-colors hover:border-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={retainAIOnMove}
+                      onChange={(e) => setRetainAIOnMove(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-600 bg-graphite-darker text-electric-cyan"
+                    />
+                    <div className="flex-1">
+                      <p className="font-bold text-white text-sm">Retain AI Data</p>
+                      <p className="text-xs text-slate-400">Keep generated AI info on these assets</p>
+                    </div>
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-3 mt-8">
+                  <button
+                    onClick={() => setIsMoveModalOpen(false)}
+                    className="flex-1 py-2.5 rounded-xl border border-graphite-border text-slate-300 font-bold hover:bg-graphite transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleMoveMedia}
+                    disabled={!targetBatchId || isMovingMedia}
+                    className="flex-1 py-2.5 rounded-xl bg-electric-cyan text-graphite-darker font-bold hover:bg-white transition-colors disabled:opacity-50"
+                  >
+                    {isMovingMedia ? "Moving..." : "Move"}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Send to User Modal */}
+      <AnimatePresence>
+        {isSendModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-graphite-darker border border-graphite-border rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl"
+            >
+              <div className="p-6">
+                <h3 className="text-xl font-heading font-bold text-white mb-2">Send to User</h3>
+                <p className="text-sm text-slate-400 mb-6">Select a user account to send a clone of this product.</p>
+
+                <div className="space-y-4">
+                  <select
+                    value={targetUserId}
+                    onChange={(e) => setTargetUserId(e.target.value)}
+                    className="w-full bg-graphite border border-graphite-border rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-electric-cyan"
+                  >
+                    <option value="" disabled>Select User Account</option>
+                    {usersList.map(u => (
+                      <option key={u.id} value={u.id}>
+                        {u.email}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-3 mt-8">
+                  <button
+                    onClick={() => setIsSendModalOpen(false)}
+                    className="flex-1 py-2.5 rounded-xl border border-graphite-border text-slate-300 font-bold hover:bg-graphite transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSendToUser}
+                    disabled={!targetUserId || isSending}
+                    className="flex-1 py-2.5 rounded-xl bg-electric-cyan text-graphite-darker font-bold hover:bg-white transition-colors disabled:opacity-50"
+                  >
+                    {isSending ? "Sending..." : "Send"}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -863,7 +1124,7 @@ function SortableMediaItem({
         </div>
       )}
       
-      {asset.mimeType?.startsWith("video/") ? (
+      {isVideoAsset(asset) ? (
         <video
           src={mediaSrc}
           className="w-full h-full object-cover pointer-events-none"
@@ -901,9 +1162,7 @@ function SortableMediaItem({
 
       {/* Interactive Card Overlay */}
       <div
-        className={`absolute inset-0 z-10 bg-gradient-to-t from-graphite-darker/95 via-graphite-darker/40 to-transparent opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2 pointer-events-none ${
-          asset.isProcessing ? "hidden" : ""
-        }`}
+        className={`absolute inset-0 z-20 bg-gradient-to-t from-graphite-darker/95 via-graphite-darker/40 to-transparent opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2 pointer-events-none`}
       >
         {/* Top Controls */}
         <div className="flex items-center justify-between w-full pointer-events-auto">
