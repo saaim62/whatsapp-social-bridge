@@ -7,7 +7,10 @@ import { Queue } from 'bullmq';
 import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 const sharp = require('sharp');
+const execAsync = promisify(exec);
 import { AiService } from '../ai/ai.service';
 import { OcrService } from '../ai/ocr.service';
 import {
@@ -530,6 +533,47 @@ export class BatchService {
 
     await this.prisma.mediaAsset.delete({ where: { id: mediaId } });
     return { success: true };
+  }
+
+  async forceImage(mediaId: string, userId: string) {
+    const media = await this.prisma.mediaAsset.findUnique({
+      where: { id: mediaId },
+      include: { batch: true },
+    });
+    if (!media || media.batch.userId !== userId) return { success: false, message: 'Media not found' };
+    
+    if (media.localPath && media.mimeType?.startsWith('video/')) {
+      const absolutePath = path.join(process.cwd(), media.localPath.replace(/^api\//, ''));
+      if (fs.existsSync(absolutePath)) {
+        const newLocalPath = media.localPath.replace(/\.(mp4|mov|webm)$/i, '.jpeg');
+        const newAbsolutePath = path.join(process.cwd(), newLocalPath.replace(/^api\//, ''));
+        
+        try {
+          await execAsync(`ffmpeg -i "${absolutePath}" -vframes 1 "${newAbsolutePath}"`);
+          
+          await this.prisma.mediaAsset.update({
+            where: { id: mediaId },
+            data: {
+              localPath: newLocalPath,
+              mimeType: 'image/jpeg'
+            }
+          });
+          
+          try {
+            fs.unlinkSync(absolutePath);
+          } catch (err) {
+            this.logger.error(`Failed to delete old video file: ${absolutePath}`, err);
+          }
+          
+          return { success: true };
+        } catch (err) {
+          this.logger.error(`Failed to force image using ffmpeg for ${mediaId}`, err);
+          return { success: false, message: 'Failed to convert video to image' };
+        }
+      }
+    }
+    
+    return { success: false, message: 'Not a valid video asset' };
   }
 
   async reorderMedia(batchId: string, orderedMediaIds: string[], userId: string) {

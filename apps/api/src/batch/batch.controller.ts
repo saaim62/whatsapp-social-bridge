@@ -159,4 +159,9 @@ export class BatchController {
     }
     return this.batchService.renameBatch(id, req.user.userId, body.name);
   }
+
+  @Post('media/:id/force-image')
+  async forceImage(@Request() req: any, @Param('id') id: string) {
+    return this.batchService.forceImage(id, req.user.userId);
+  }
 }

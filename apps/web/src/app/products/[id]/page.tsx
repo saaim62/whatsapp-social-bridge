@@ -476,6 +476,20 @@ export default function ProductDetailPage() {
     }
   };
 
+  const handleForceImage = async (mediaId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await fetchWithAuth(`${API_URL}/api/batches/media/${mediaId}/force-image`, {
+        method: "POST"
+      });
+      await fetchBatchData();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to force image conversion");
+    }
+  };
+
   const openSendModal = () => {
     setTargetEmailsInput("");
     setIsSendModalOpen(true);
@@ -754,6 +768,7 @@ export default function ProductDetailPage() {
                                   console.error("Failed to stop blur", err);
                                 }
                               }}
+                              onForceImage={handleForceImage}
                             />
                           );
                         })}
@@ -1184,6 +1199,7 @@ function SortableMediaItem({
   onMask,
   onSingleRevert,
   onStopBlur,
+  onForceImage,
 }: any) {
   const {
     attributes,
@@ -1230,7 +1246,7 @@ function SortableMediaItem({
           </div>
         )}
         {index === 0 && (
-          <div className="bg-electric-cyan/90 backdrop-blur-md text-graphite-darker text-[10px] font-bold px-2 py-1 rounded-md shadow-sm border border-electric-cyan/50">
+          <div className="bg-blue-500/90 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-md shadow-sm border border-blue-400/50">
             Primary Asset
           </div>
         )}
@@ -1321,6 +1337,17 @@ function SortableMediaItem({
                 <span className="hidden sm:inline">Unblur</span>
               </button>
             </div>
+          </div>
+        )}
+        {!isImage && onForceImage && (
+          <div className="flex flex-col gap-1.5 w-full pointer-events-auto">
+            <button
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => onForceImage(asset.id, e)}
+              className="w-full py-1.5 px-2 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/40 backdrop-blur-md text-indigo-400 hover:text-white text-xs font-semibold shadow-sm transition-all border border-indigo-500/30 text-center cursor-pointer"
+            >
+              Treat as Image (Override)
+            </button>
           </div>
         )}
       </div>
