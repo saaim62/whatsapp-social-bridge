@@ -1124,7 +1124,7 @@ function SortableMediaItem({
         </div>
       )}
       
-      {isVideoAsset(asset) ? (
+      {!isImage ? (
         <video
           src={mediaSrc}
           className="w-full h-full object-cover pointer-events-none"
