@@ -829,7 +829,7 @@ export class BatchService {
 
     if (!sourceBatch) return [];
 
-    const newBatchIds = [];
+    const newBatchIds: string[] = [];
     for (const user of users) {
       const newBatch = await this.prisma.productBatch.create({
         data: {

@@ -435,6 +435,21 @@ export default function ProductDetailPage() {
     }
   };
 
+  const handleClearAIContent = async () => {
+    if (!confirm("Are you sure you want to clear AI generated content? This will remove generated captions and extracted metadata.")) return;
+    try {
+      await fetchWithAuth(`${API_URL}/api/batches/${id}/clear-ai`, { method: "POST" });
+      setEditedInstagram("");
+      setEditedFacebook("");
+      setEditedStory("");
+      setOverridePrice("");
+      await fetchBatchData();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to clear AI content");
+    }
+  };
+
   const handleRenameProduct = async () => {
     if (!renameInput.trim() || renameInput === batch.extractedData?.product_name) {
       setIsRenaming(false);
@@ -1047,7 +1062,6 @@ export default function ProductDetailPage() {
                       <div className="p-4 text-sm text-slate-500 text-center">No other products found.</div>
                     )}
                   </div>
-                </div>    
                   <label className="flex items-center gap-3 p-3 rounded-xl border border-graphite-border cursor-pointer transition-colors hover:border-slate-600">
                     <input
                       type="checkbox"
