@@ -15,6 +15,10 @@ export class EmailService {
       this.transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST,
         port: Number(process.env.SMTP_PORT) || 587,
+        secure: Number(process.env.SMTP_PORT) === 465,
+        connectionTimeout: 5000,
+        greetingTimeout: 5000,
+        socketTimeout: 5000,
         auth: {
           user: process.env.SMTP_USER,
           pass: process.env.SMTP_PASS,
@@ -46,17 +50,17 @@ export class EmailService {
     this.logger.log(`${url}`);
     this.logger.log(`\n======================================================\n\n`);
 
-    try {
-      const info = await this.transporter.sendMail({
-        from: '"DropRoute" <noreply@droproute.com>',
-        to: email,
-        subject: 'Verify your DropRoute Account',
-        html: `<p>Please click <a href="${url}">here</a> to verify your account.</p>`,
-      });
+    // Fire and forget so we don't block the UI
+    this.transporter.sendMail({
+      from: '"DropRoute" <noreply@droproute.com>',
+      to: email,
+      subject: 'Verify your DropRoute Account',
+      html: `<p>Please click <a href="${url}">here</a> to verify your account.</p>`,
+    }).then(info => {
       this.logger.log(`Ethereal Email Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
-    } catch (e) {
+    }).catch(e => {
       this.logger.error('Failed to send verification email', e);
-    }
+    });
   }
 
   async sendPasswordResetEmail(email: string, token: string) {
@@ -69,16 +73,16 @@ export class EmailService {
     this.logger.log(`${url}`);
     this.logger.log(`\n======================================================\n\n`);
 
-    try {
-      const info = await this.transporter.sendMail({
-        from: '"DropRoute" <noreply@droproute.com>',
-        to: email,
-        subject: 'Reset your DropRoute Password',
-        html: `<p>Please click <a href="${url}">here</a> to reset your password.</p>`,
-      });
+    // Fire and forget so we don't block the UI
+    this.transporter.sendMail({
+      from: '"DropRoute" <noreply@droproute.com>',
+      to: email,
+      subject: 'Reset your DropRoute Password',
+      html: `<p>Please click <a href="${url}">here</a> to reset your password.</p>`,
+    }).then(info => {
       this.logger.log(`Ethereal Email Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
-    } catch (e) {
+    }).catch(e => {
       this.logger.error('Failed to send reset email', e);
-    }
+    });
   }
 }
