@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards, Request, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards, Request, Delete } from '@nestjs/common';
 import { WhatsappService } from './whatsapp.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
@@ -30,6 +30,13 @@ export class WhatsappController {
       qrUrl,
       phoneNumber
     };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('resync-history')
+  async resyncHistory(@Request() req: any, @Body() body: any) {
+    const customDepth = body?.depthHours ? parseInt(body.depthHours, 10) : undefined;
+    return this.whatsappService.resyncHistoricalBuffer(req.user.userId, customDepth);
   }
 
   @UseGuards(JwtAuthGuard)

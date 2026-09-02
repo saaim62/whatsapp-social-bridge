@@ -178,6 +178,10 @@ export class WhatsappService implements OnModuleInit {
       const debugLog = `[${new Date().toISOString()}] UP EVENT: ${m.type} for ${userId}, count: ${m.messages?.length || 0}\n`;
       require('fs').appendFileSync(require('path').join(process.cwd(), 'debug-messages.log'), debugLog);
 
+      if (m.messages && m.messages.length > 0) {
+        this.saveMessagesToCache(userId, m.messages);
+      }
+
       const settings = await this.settingsService.getSettings(userId);
       if (!settings.isSyncActive) {
         this.logger.log(
@@ -240,6 +244,10 @@ export class WhatsappService implements OnModuleInit {
         this.logger.log(
           `Received historical sync for user ${userId}: ${contacts.length} contacts, ${chats.length} chats, ${messages.length} messages.`,
         );
+
+        if (messages && messages.length > 0) {
+          this.saveMessagesToCache(userId, messages);
+        }
 
         // 1. Synchronize Address Book & Contacts first
         const uniqueContacts = new Map<string, any>();
@@ -324,6 +332,23 @@ export class WhatsappService implements OnModuleInit {
           `Historical buffer filtered: ${Object.keys(chatGroups).length} chats found within ${depthHours}h window. Dropped ${droppedCount} older messages.`,
         );
 
+        // Load existing batches and media to ensure ZERO duplicates
+        const existingBatches = await this.prisma.productBatch.findMany({
+          where: { userId },
+          select: { whatsappMessageId: true, senderId: true, rawText: true },
+        });
+        const existingMedia = await this.prisma.mediaAsset.findMany({
+          where: { batch: { userId } },
+          select: { whatsappMediaId: true },
+        });
+        const existingMsgIds = new Set<string>();
+        for (const b of existingBatches) {
+          if (b.whatsappMessageId) existingMsgIds.add(b.whatsappMessageId);
+        }
+        for (const m of existingMedia) {
+          if (m.whatsappMediaId) existingMsgIds.add(m.whatsappMediaId);
+        }
+
         let totalBundlesIngested = 0;
 
         for (const sender in chatGroups) {
@@ -367,82 +392,30 @@ export class WhatsappService implements OnModuleInit {
             return tsA - tsB;
           });
 
-          let currentBundle: any[] = [];
-          let bundleHasMedia = false;
-          let bundleHasDesc = false;
-          let bundleFirstItemType: 'media' | 'desc' | 'both' | null = null;
-          let lastTimestamp = 0;
-          const productBundles: any[][] = [];
+          const productBundles = this.extractProductBundles(sortedChatMessages);
 
-          for (const msg of sortedChatMessages) {
-            const content = this.unwrapMessage(msg.message);
-            if (!content) continue;
+          for (const bundle of productBundles) {
+            const isMsgDuplicate = bundle.some((m: any) => m.key?.id && existingMsgIds.has(m.key.id));
+            const bundleText = bundle.map((m: any) => {
+              const c = this.unwrapMessage(m.message);
+              return c?.imageMessage?.caption || c?.videoMessage?.caption || c?.conversation || c?.extendedTextMessage?.text || '';
+            }).join('\n').trim();
 
-            const isMedia = !!(
-              content.imageMessage ||
-              content.videoMessage ||
-              content.documentMessage?.mimetype?.startsWith('image/') ||
-              content.documentMessage?.mimetype?.startsWith('video/')
+            const isContentDuplicate = bundleText.length > 20 && existingBatches.some(
+              b => b.senderId === sender && b.rawText && b.rawText.trim() === bundleText
             );
 
-            let caption = '';
-            if (content.imageMessage) caption = content.imageMessage.caption || '';
-            else if (content.videoMessage) caption = content.videoMessage.caption || '';
-            else if (content.documentMessage) caption = content.documentMessage.caption || '';
-            else if (content.conversation) caption = content.conversation;
-            else if (content.extendedTextMessage) caption = content.extendedTextMessage.text || '';
-
-            const hasMedia = isMedia;
-            const hasDesc = caption.trim().length > 5;
-
-            if (!hasMedia && !hasDesc) continue;
-
-            let shouldStartNewBundle = false;
-            const tsRaw = msg.messageTimestamp;
-            const ts = typeof tsRaw === 'number' ? tsRaw : Number(tsRaw?.toString() || 0);
-
-            if (currentBundle.length > 0 && lastTimestamp > 0 && ts - lastTimestamp > 300) {
-              shouldStartNewBundle = true;
-            } else if (hasDesc && !hasMedia) {
-              if (bundleHasDesc) shouldStartNewBundle = true;
-            } else if (hasMedia && !hasDesc) {
-              if (bundleHasDesc && (bundleFirstItemType === 'media' || bundleFirstItemType === 'both')) {
-                shouldStartNewBundle = true;
-              }
-            } else if (hasMedia && hasDesc) {
-              if (bundleHasDesc) shouldStartNewBundle = true;
+            if (isMsgDuplicate || isContentDuplicate) {
+              continue; // Skip duplicate!
             }
 
-            if (shouldStartNewBundle) {
-              if (currentBundle.length > 0) productBundles.push(currentBundle);
-              currentBundle = [msg];
-              bundleHasMedia = hasMedia;
-              bundleHasDesc = hasDesc;
-              bundleFirstItemType = hasMedia && hasDesc ? 'both' : hasMedia ? 'media' : 'desc';
-              lastTimestamp = ts;
-            } else {
-              currentBundle.push(msg);
-              if (!bundleFirstItemType) {
-                bundleFirstItemType = hasMedia && hasDesc ? 'both' : hasMedia ? 'media' : 'desc';
-              }
-              if (hasMedia) bundleHasMedia = true;
-              if (hasDesc) bundleHasDesc = true;
-              lastTimestamp = ts;
+            for (const msg of bundle) {
+              await this.handleIncomingMessage(userId, msg);
+              if (msg.key?.id) existingMsgIds.add(msg.key.id);
             }
-          }
-          if (currentBundle.length > 0) productBundles.push(currentBundle);
-
-          if (productBundles.length > 0) {
-            this.logger.log(`Ingesting ${productBundles.length} retroactive product bundle(s) from ${sender}...`);
-            for (const bundle of productBundles) {
-              for (const msg of bundle) {
-                await this.handleIncomingMessage(userId, msg);
-              }
-              await new Promise((resolve) => setTimeout(resolve, 400));
-            }
-            // Force close active batch for this sender so batches are processed immediately
+            await new Promise((resolve) => setTimeout(resolve, 400));
             await this.batchService.forceCloseActiveBatch(userId, sender);
-            totalBundlesIngested += productBundles.length;
+            totalBundlesIngested++;
           }
         }
 
@@ -685,5 +658,271 @@ export class WhatsappService implements OnModuleInit {
     });
 
     return { success: true };
+  }
+
+  private getHistoryCachePath(userId: string): string {
+    const dir = `./sessions`;
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    return path.join(dir, `user_${userId}_history.json`);
+  }
+
+  private saveMessagesToCache(userId: string, newMessages: any[]) {
+    try {
+      const filePath = this.getHistoryCachePath(userId);
+      let existing: any[] = [];
+      if (fs.existsSync(filePath)) {
+        try {
+          existing = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        } catch (e) {
+          existing = [];
+        }
+      }
+
+      const map = new Map<string, any>();
+      for (const m of existing) {
+        if (m?.key?.id) map.set(m.key.id, m);
+      }
+      for (const m of newMessages) {
+        if (m?.key?.id) map.set(m.key.id, m);
+      }
+
+      const all = Array.from(map.values()).sort((a, b) => {
+        const tsA = Number(a.messageTimestamp?.toString() || 0);
+        const tsB = Number(b.messageTimestamp?.toString() || 0);
+        return tsA - tsB;
+      });
+
+      // Keep latest 10,000 messages to prevent unbounded growth
+      const trimmed = all.slice(-10000);
+      fs.writeFileSync(filePath, JSON.stringify(trimmed));
+    } catch (err) {
+      this.logger.error(`Failed to save messages to history cache for user ${userId}`, err);
+    }
+  }
+
+  private loadMessagesFromCache(userId: string): any[] {
+    try {
+      const filePath = this.getHistoryCachePath(userId);
+      if (fs.existsSync(filePath)) {
+        return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      }
+    } catch (err) {
+      this.logger.error(`Failed to load messages from history cache for user ${userId}`, err);
+    }
+    return [];
+  }
+
+  private extractProductBundles(sortedChatMessages: any[]): any[][] {
+    let currentBundle: any[] = [];
+    let bundleHasMedia = false;
+    let bundleHasDesc = false;
+    let bundleFirstItemType: 'media' | 'desc' | 'both' | null = null;
+    let lastTimestamp = 0;
+    const productBundles: any[][] = [];
+
+    for (const msg of sortedChatMessages) {
+      const content = this.unwrapMessage(msg.message);
+      if (!content) continue;
+
+      const isMedia = !!(
+        content.imageMessage ||
+        content.videoMessage ||
+        content.documentMessage?.mimetype?.startsWith('image/') ||
+        content.documentMessage?.mimetype?.startsWith('video/')
+      );
+
+      let caption = '';
+      if (content.imageMessage) caption = content.imageMessage.caption || '';
+      else if (content.videoMessage) caption = content.videoMessage.caption || '';
+      else if (content.documentMessage) caption = content.documentMessage.caption || '';
+      else if (content.conversation) caption = content.conversation;
+      else if (content.extendedTextMessage) caption = content.extendedTextMessage.text || '';
+
+      const hasMedia = isMedia;
+      const hasDesc = caption.trim().length > 5;
+
+      if (!hasMedia && !hasDesc) continue;
+
+      let shouldStartNewBundle = false;
+      const tsRaw = msg.messageTimestamp;
+      const ts = typeof tsRaw === 'number' ? tsRaw : Number(tsRaw?.toString() || 0);
+
+      if (currentBundle.length > 0 && lastTimestamp > 0 && ts - lastTimestamp > 300) {
+        shouldStartNewBundle = true;
+      } else if (hasDesc && !hasMedia) {
+        if (bundleHasDesc) shouldStartNewBundle = true;
+      } else if (hasMedia && !hasDesc) {
+        if (bundleHasDesc && (bundleFirstItemType === 'media' || bundleFirstItemType === 'both')) {
+          shouldStartNewBundle = true;
+        }
+      } else if (hasMedia && hasDesc) {
+        if (bundleHasDesc) shouldStartNewBundle = true;
+      }
+
+      if (shouldStartNewBundle) {
+        if (currentBundle.length > 0) productBundles.push(currentBundle);
+        currentBundle = [msg];
+        bundleHasMedia = hasMedia;
+        bundleHasDesc = hasDesc;
+        bundleFirstItemType = hasMedia && hasDesc ? 'both' : hasMedia ? 'media' : 'desc';
+        lastTimestamp = ts;
+      } else {
+        currentBundle.push(msg);
+        if (!bundleFirstItemType) {
+          bundleFirstItemType = hasMedia && hasDesc ? 'both' : hasMedia ? 'media' : 'desc';
+        }
+        if (hasMedia) bundleHasMedia = true;
+        if (hasDesc) bundleHasDesc = true;
+        lastTimestamp = ts;
+      }
+    }
+    if (currentBundle.length > 0) productBundles.push(currentBundle);
+    return productBundles;
+  }
+
+  async resyncHistoricalBuffer(userId: string, customDepthHours?: number) {
+    const settings = await this.settingsService.getSettings(userId);
+    const depthHours = customDepthHours || settings.historySyncDepthHours || 24;
+
+    if (customDepthHours && customDepthHours !== settings.historySyncDepthHours) {
+      await this.settingsService.updateSettings(userId, { historySyncDepthHours: customDepthHours });
+    }
+
+    const messages = this.loadMessagesFromCache(userId);
+    if (!messages || messages.length === 0) {
+      return {
+        success: false,
+        message: 'No messages found in historical archive yet. Disconnect & link WhatsApp once via QR code to seed the retroactive archive.',
+        imported: 0,
+        skipped: 0,
+        depthHours,
+      };
+    }
+
+    const cutoffTimeMs = Date.now() - depthHours * 60 * 60 * 1000;
+    const cutoffSeconds = Math.floor(cutoffTimeMs / 1000);
+
+    const existingBatches = await this.prisma.productBatch.findMany({
+      where: { userId },
+      select: { whatsappMessageId: true, senderId: true, rawText: true },
+    });
+    const existingMedia = await this.prisma.mediaAsset.findMany({
+      where: { batch: { userId } },
+      select: { whatsappMediaId: true },
+    });
+
+    const existingMsgIds = new Set<string>();
+    for (const b of existingBatches) {
+      if (b.whatsappMessageId) existingMsgIds.add(b.whatsappMessageId);
+    }
+    for (const m of existingMedia) {
+      if (m.whatsappMediaId) existingMsgIds.add(m.whatsappMediaId);
+    }
+
+    const chatGroups: Record<string, any[]> = {};
+    for (const msg of messages) {
+      if (!msg.message || msg.key?.fromMe) continue;
+      const sender = msg.key?.remoteJid;
+      if (!sender) continue;
+
+      const tsRaw = msg.messageTimestamp;
+      const msgTime = typeof tsRaw === 'number'
+        ? tsRaw
+        : typeof tsRaw?.toNumber === 'function'
+          ? tsRaw.toNumber()
+          : (tsRaw?.low || parseInt(tsRaw?.toString() || '0', 10));
+
+      if (msgTime < cutoffSeconds) continue;
+
+      if (!chatGroups[sender]) chatGroups[sender] = [];
+      chatGroups[sender].push(msg);
+    }
+
+    const enabledSourcesCount = await this.prisma.whatsappSource.count({
+      where: { userId, isEnabled: true },
+    });
+
+    let importedCount = 0;
+    let skippedCount = 0;
+
+    for (const sender in chatGroups) {
+      const chatMsgs = chatGroups[sender];
+      if (!chatMsgs || chatMsgs.length === 0) continue;
+
+      if (enabledSourcesCount > 0) {
+        const source = await this.prisma.whatsappSource.findUnique({
+          where: { userId_jid: { userId, jid: sender } },
+        });
+        if (source && !source.isEnabled) {
+          this.logger.log(`Skipping retroactive sync for disabled source: ${sender}`);
+          continue;
+        }
+      }
+
+      await this.sourcesService.isSourceAllowed(sender, chatMsgs[0]?.pushName, userId);
+      if (enabledSourcesCount === 0) {
+        await this.prisma.whatsappSource.updateMany({
+          where: { userId, jid: sender },
+          data: { isEnabled: true },
+        });
+      }
+
+      const sortedChatMessages = chatMsgs.sort((a: any, b: any) => {
+        const tsA = typeof a.messageTimestamp === 'number' ? a.messageTimestamp : Number(a.messageTimestamp?.toString() || 0);
+        const tsB = typeof b.messageTimestamp === 'number' ? b.messageTimestamp : Number(b.messageTimestamp?.toString() || 0);
+        return tsA - tsB;
+      });
+
+      const productBundles = this.extractProductBundles(sortedChatMessages);
+
+      for (const bundle of productBundles) {
+        // DEDUPLICATION: Skip if ANY message ID is already registered
+        const isMsgDuplicate = bundle.some((m: any) => m.key?.id && existingMsgIds.has(m.key.id));
+        
+        // Also skip if rawText identically matches existing batch from this sender
+        const bundleText = bundle.map((m: any) => {
+          const c = this.unwrapMessage(m.message);
+          return c?.imageMessage?.caption || c?.videoMessage?.caption || c?.conversation || c?.extendedTextMessage?.text || '';
+        }).join('\n').trim();
+
+        const isContentDuplicate = bundleText.length > 20 && existingBatches.some(
+          b => b.senderId === sender && b.rawText && b.rawText.trim() === bundleText
+        );
+
+        if (isMsgDuplicate || isContentDuplicate) {
+          skippedCount++;
+          continue; // Skip duplicate!
+        }
+
+        for (const msg of bundle) {
+          await this.handleIncomingMessage(userId, msg);
+          if (msg.key?.id) existingMsgIds.add(msg.key.id);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        await this.batchService.forceCloseActiveBatch(userId, sender);
+        importedCount++;
+      }
+    }
+
+    if (importedCount > 0) {
+      await this.prisma.notification.create({
+        data: {
+          userId,
+          title: 'Historical Re-sync Complete',
+          message: `Ingested ${importedCount} new product drop(s) from the last ${depthHours} hours (${skippedCount} duplicates skipped).`,
+          type: 'success',
+          link: '/catalog',
+        },
+      });
+    }
+
+    return {
+      success: true,
+      imported: importedCount,
+      skipped: skippedCount,
+      depthHours,
+    };
   }
 }

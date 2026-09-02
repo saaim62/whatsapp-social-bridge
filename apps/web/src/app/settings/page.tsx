@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Save, Radio, History, CheckCircle2, QrCode, Link as LinkIcon, Share2 } from "lucide-react";
+import { Save, Radio, History, CheckCircle2, QrCode, Link as LinkIcon, Share2, RefreshCw, AlertCircle } from "lucide-react";
 import { API_URL, fetchWithAuth } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
@@ -29,6 +29,13 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [showQr, setShowQr] = useState(false);
+  const [resyncing, setResyncing] = useState(false);
+  const [resyncResult, setResyncResult] = useState<{
+    success: boolean;
+    message?: string;
+    imported?: number;
+    skipped?: number;
+  } | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -86,6 +93,32 @@ export default function SettingsPage() {
       console.error(err);
     }
     setSaving(false);
+  };
+
+  const handleResyncHistory = async () => {
+    setResyncing(true);
+    setResyncResult(null);
+    try {
+      const res = await fetchWithAuth(`${API_URL}/api/whatsapp/resync-history`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          depthHours: settings.historySyncDepthHours,
+        }),
+      });
+      const data = await res.json();
+      setResyncResult(data);
+      setTimeout(() => {
+        setResyncResult((prev) => (prev === data ? null : prev));
+      }, 8000);
+    } catch (err: any) {
+      setResyncResult({
+        success: false,
+        message: err.message || "Failed to trigger historical resync.",
+      });
+    } finally {
+      setResyncing(false);
+    }
   };
 
   const handleConnectMeta = async () => {
@@ -316,14 +349,14 @@ export default function SettingsPage() {
                <History className="w-6 h-6 text-electric-cyan relative z-10" />
             </div>
             <div className="flex-1">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                 <div>
                   <h3 className="text-lg font-bold text-white">Historical Buffer Depth</h3>
                   <p className="text-sm text-slate-400 mt-1 max-w-md">
-                    Configure retroactive parsing limit when initializing a new node connection.
+                    Configure retroactive parsing limit when initializing a new node connection or on-demand re-sync.
                   </p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <select
                     value={settings.historySyncDepthHours}
                     onChange={async (e) => {
@@ -347,7 +380,7 @@ export default function SettingsPage() {
                         console.error(err);
                       }
                     }}
-                    className="w-full sm:w-64 bg-graphite-darker border border-graphite-border rounded-xl px-4 py-2.5 text-white focus:border-electric-cyan focus:ring-1 focus:ring-electric-cyan transition-all appearance-none cursor-pointer"
+                    className="w-full sm:w-56 bg-graphite-darker border border-graphite-border rounded-xl px-4 py-2.5 text-white focus:border-electric-cyan focus:ring-1 focus:ring-electric-cyan transition-all appearance-none cursor-pointer text-sm"
                   >
                     {DEPTH_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>
@@ -355,10 +388,49 @@ export default function SettingsPage() {
                       </option>
                     ))}
                   </select>
+
+                  <button
+                    type="button"
+                    onClick={handleResyncHistory}
+                    disabled={resyncing}
+                    className="btn-glow px-4 py-2.5 text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${resyncing ? 'animate-spin' : ''}`} />
+                    {resyncing ? "Scanning Buffer..." : "Sync Buffer Now"}
+                  </button>
                 </div>
               </div>
+
+              {resyncResult && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`mt-4 p-3.5 rounded-xl text-xs flex items-center gap-2.5 border ${
+                    resyncResult.success
+                      ? 'bg-electric-emerald/10 border-electric-emerald/30 text-emerald-300'
+                      : 'bg-red-500/10 border-red-500/30 text-red-300'
+                  }`}
+                >
+                  {resyncResult.success ? (
+                    <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-electric-emerald" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 flex-shrink-0 text-red-400" />
+                  )}
+                  <div>
+                    <span className="font-semibold">
+                      {resyncResult.success ? "Retroactive Sync Complete: " : "Notice: "}
+                    </span>
+                    {resyncResult.message || (
+                      resyncResult.imported && resyncResult.imported > 0
+                        ? `Ingested ${resyncResult.imported} new product drop(s) into catalog (${resyncResult.skipped || 0} duplicates skipped).`
+                        : `Catalog is up to date (${resyncResult.skipped || 0} existing products checked, 0 duplicates created).`
+                    )}
+                  </div>
+                </motion.div>
+              )}
+
               <p className="text-xs text-slate-500 mt-3">
-                💡 When you scan a QR code to link a WhatsApp node, DropRoute will ingest and parse all product drops from the past <span className="text-electric-cyan font-bold">{DEPTH_OPTIONS.find(o => o.value === settings.historySyncDepthHours)?.label || `${settings.historySyncDepthHours} hours`}</span>.
+                💡 When you click <strong className="text-slate-400">Sync Buffer Now</strong>, DropRoute parses the past <span className="text-electric-cyan font-bold">{DEPTH_OPTIONS.find(o => o.value === settings.historySyncDepthHours)?.label || `${settings.historySyncDepthHours} hours`}</span> of message drops, automatically skipping any products already in your catalog.
               </p>
             </div>
           </div>
