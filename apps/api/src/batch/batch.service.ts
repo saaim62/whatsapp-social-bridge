@@ -19,6 +19,7 @@ import {
   isMaskableImage,
   normalizeImageFile,
 } from '../ai/image-mask.util';
+import { StorageService } from '../storage/storage.service';
 
 @Injectable()
 export class BatchService implements OnModuleDestroy {
@@ -34,6 +35,7 @@ export class BatchService implements OnModuleDestroy {
     private configService: ConfigService,
     private aiService: AiService,
     private ocrService: OcrService,
+    private storageService: StorageService,
     @InjectQueue('batch-processing') private batchQueue: Queue,
     @InjectQueue('history-sync-queue') private historySyncQueue: Queue,
     @InjectQueue('image-blur') private imageBlurQueue: Queue,
