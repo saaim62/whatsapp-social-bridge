@@ -3,7 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { BatchService } from './batch.service';
 import { BatchController } from './batch.controller';
 import { AiModule } from '../ai/ai.module';
-import { StorageModule } from '../storage/storage.module';
+import { StorageService } from '../storage/storage.service';
 
 @Module({
   imports: [
@@ -17,10 +17,10 @@ import { StorageModule } from '../storage/storage.module';
       name: 'image-blur',
     }),
     AiModule,
-    StorageModule,
   ],
   controllers: [BatchController],
-  providers: [BatchService],
+  providers: [BatchService, StorageService],
   exports: [BatchService],
 })
 export class BatchModule {}
+
