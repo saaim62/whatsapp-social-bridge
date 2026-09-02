@@ -20,11 +20,14 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
+      - name: Create Dummy .env for Prisma Generate & Next.js Build
+        run: echo "DATABASE_URL=postgresql://postgres:password@localhost:5432/whatsapp_bridge?schema=public" > .env
+
+      - name: Generate Prisma Client
+        run: npx prisma generate --schema=apps/api/prisma/schema.prisma
+
       - name: Build API
         run: npm run build -w apps/api
-
-      - name: Create Dummy .env for Next.js Build
-        run: echo "DATABASE_URL=postgresql://dummy" > .env
 
       - name: Build Web
         run: npm run build -w apps/web
