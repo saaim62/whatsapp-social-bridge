@@ -23,13 +23,27 @@ export class SettingsService {
     return settings;
   }
 
-  async updateSettings(userId: string, data: {
-    isSyncActive?: boolean;
-    historySyncDepthHours?: number;
-  }) {
-    return this.prisma.settings.update({
+  async updateSettings(userId: string, data: any) {
+    const isSyncActive = typeof data?.isSyncActive === 'boolean' ? data.isSyncActive : undefined;
+    let historySyncDepthHours: number | undefined = undefined;
+    if (data?.historySyncDepthHours !== undefined && data?.historySyncDepthHours !== null) {
+      const parsed = parseInt(String(data.historySyncDepthHours), 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        historySyncDepthHours = parsed;
+      }
+    }
+
+    return this.prisma.settings.upsert({
       where: { userId },
-      data,
+      create: {
+        userId,
+        isSyncActive: isSyncActive ?? true,
+        historySyncDepthHours: historySyncDepthHours ?? 24,
+      },
+      update: {
+        ...(isSyncActive !== undefined ? { isSyncActive } : {}),
+        ...(historySyncDepthHours !== undefined ? { historySyncDepthHours } : {}),
+      },
     });
   }
 }

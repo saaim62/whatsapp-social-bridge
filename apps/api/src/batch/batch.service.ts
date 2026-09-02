@@ -273,6 +273,35 @@ export class BatchService implements OnModuleDestroy {
     this.activeTimeouts.set(activeBatch.id, timeout);
   }
 
+  async forceCloseActiveBatch(userId: string, senderId: string) {
+    try {
+      const activeBatch = await this.prisma.productBatch.findFirst({
+        where: {
+          status: 'RECEIVED',
+          senderId,
+          userId,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (activeBatch) {
+        if (this.activeTimeouts.has(activeBatch.id)) {
+          clearTimeout(this.activeTimeouts.get(activeBatch.id));
+          this.activeTimeouts.delete(activeBatch.id);
+        }
+
+        await this.prisma.productBatch.update({
+          where: { id: activeBatch.id, userId },
+          data: { status: 'PROCESSING' },
+        });
+        await this.batchQueue.add('process-batch', { batchId: activeBatch.id, userId });
+        this.logger.log(`Force closed active batch ${activeBatch.id} for sender ${senderId}`);
+      }
+    } catch (err) {
+      this.logger.error(`Failed to force close active batch for sender ${senderId}`, err);
+    }
+  }
+
   // Dashboard API
   async getBatches(userId: string) {
     return this.prisma.productBatch.findMany({

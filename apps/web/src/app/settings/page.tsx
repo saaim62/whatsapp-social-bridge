@@ -316,26 +316,50 @@ export default function SettingsPage() {
                <History className="w-6 h-6 text-electric-cyan relative z-10" />
             </div>
             <div className="flex-1">
-              <h3 className="text-lg font-bold text-white">Historical Buffer Depth</h3>
-              <p className="text-sm text-slate-400 mt-1 mb-4 max-w-md">
-                Configure retroactive parsing limit when initializing a new node connection.
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-bold text-white">Historical Buffer Depth</h3>
+                  <p className="text-sm text-slate-400 mt-1 max-w-md">
+                    Configure retroactive parsing limit when initializing a new node connection.
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <select
+                    value={settings.historySyncDepthHours}
+                    onChange={async (e) => {
+                      const newDepth = parseInt(e.target.value, 10);
+                      setSettings((s) => ({
+                        ...s,
+                        historySyncDepthHours: newDepth,
+                      }));
+                      try {
+                        await fetchWithAuth(`${API_URL}/api/settings`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            ...settings,
+                            historySyncDepthHours: newDepth,
+                          }),
+                        });
+                        setSaved(true);
+                        setTimeout(() => setSaved(false), 3000);
+                      } catch (err) {
+                        console.error(err);
+                      }
+                    }}
+                    className="w-full sm:w-64 bg-graphite-darker border border-graphite-border rounded-xl px-4 py-2.5 text-white focus:border-electric-cyan focus:ring-1 focus:ring-electric-cyan transition-all appearance-none cursor-pointer"
+                  >
+                    {DEPTH_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 mt-3">
+                💡 When you scan a QR code to link a WhatsApp node, DropRoute will ingest and parse all product drops from the past <span className="text-electric-cyan font-bold">{DEPTH_OPTIONS.find(o => o.value === settings.historySyncDepthHours)?.label || `${settings.historySyncDepthHours} hours`}</span>.
               </p>
-              <select
-                value={settings.historySyncDepthHours}
-                onChange={(e) =>
-                  setSettings((s) => ({
-                    ...s,
-                    historySyncDepthHours: parseInt(e.target.value),
-                  }))
-                }
-                className="w-full sm:w-64 bg-graphite-darker border border-graphite-border rounded-xl px-4 py-2.5 text-white focus:border-electric-cyan focus:ring-1 focus:ring-electric-cyan transition-all appearance-none"
-              >
-                {DEPTH_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
             </div>
           </div>
         </div>
