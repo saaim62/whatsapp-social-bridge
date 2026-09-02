@@ -43,6 +43,8 @@ export class BatchService implements OnModuleDestroy {
     this.redisClient = new Redis({
       host: this.configService.get('REDIS_HOST', 'localhost'),
       port: this.configService.get('REDIS_PORT', 6379),
+      password: this.configService.get('REDIS_PASSWORD'),
+      tls: this.configService.get('REDIS_HOST')?.includes('upstash') ? {} : undefined,
     });
   }
 
