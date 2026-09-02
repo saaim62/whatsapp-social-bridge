@@ -11,6 +11,9 @@ cd ../..
 echo "Starting backend and frontend services via PM2..."
 pm2 start ecosystem.hf.config.js
 
+# Stream PM2 logs to the console so we can see why it crashes
+pm2 logs &
+
 # Start Caddy reverse proxy to expose port 7860
 echo "Starting Caddy on port 7860..."
 caddy run --config Caddyfile.hf
