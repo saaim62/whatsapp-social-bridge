@@ -5,18 +5,16 @@ import tarfile
 import sys
 import time
 
-try:
-    import spaces
-    @spaces.GPU
-    def dummy_gpu_function():
-        # This is just a dummy function to satisfy Hugging Face's ZeroGPU requirement
-        # so it doesn't kill our Node.js server!
-        pass
-    
-    # We call it once at startup just in case it needs to be executed to register
-    dummy_gpu_function()
-except ImportError:
-    print("Spaces library not found, skipping GPU check bypass")
+import spaces
+
+@spaces.GPU
+def dummy_gpu_function():
+    # This is just a dummy function to satisfy Hugging Face's ZeroGPU requirement
+    # so it doesn't kill our Node.js server!
+    pass
+
+# We call it once at startup just in case it needs to be executed to register
+dummy_gpu_function()
 
 # Define constants
 NODE_VERSION = "v20.11.1"
