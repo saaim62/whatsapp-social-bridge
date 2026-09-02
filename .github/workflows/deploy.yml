@@ -6,10 +6,42 @@ on:
       - main
 
 jobs:
-  deploy:
+  build_and_deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to Server
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build API
+        run: npm run build -w apps/api
+
+      - name: Create Dummy .env for Next.js Build
+        run: echo "DATABASE_URL=postgresql://dummy" > .env
+
+      - name: Build Web
+        run: npm run build -w apps/web
+
+      - name: Compress Build Artifacts
+        run: tar -czf build.tar.gz apps/web/.next apps/api/dist
+
+      - name: Transfer Build Artifacts to Server
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "build.tar.gz"
+          target: "~/whatsapp-social-bridge"
+
+      - name: Restart Server Services
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.SERVER_IP }}
@@ -21,12 +53,12 @@ jobs:
             cd ~/whatsapp-social-bridge
             git reset --hard HEAD
             git pull origin main
-            npm install
+            tar -xzf build.tar.gz
+            rm build.tar.gz
+            npm install --omit=dev
             export $(cat .env | grep -v ^# | xargs)
             npx prisma db push --schema=apps/api/prisma/schema.prisma --accept-data-loss
             npx prisma generate --schema=apps/api/prisma/schema.prisma
-            npm run build -w apps/web
-            npm run build -w apps/api
             pm2 restart all || true
             pm2 start apps/api/dist/main.js --name "whatsapp-api" || pm2 restart whatsapp-api
             pm2 start "npm run start" --name "whatsapp-web" --cwd apps/web || pm2 restart whatsapp-web
