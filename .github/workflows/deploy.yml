@@ -63,6 +63,6 @@ jobs:
             npx prisma db push --schema=apps/api/prisma/schema.prisma --accept-data-loss
             npx prisma generate --schema=apps/api/prisma/schema.prisma
             pm2 restart all || true
-            pm2 start apps/api/dist/main.js --name "whatsapp-api" || pm2 restart whatsapp-api
+            pm2 start apps/api/dist/src/main.js --name "whatsapp-api" || pm2 restart whatsapp-api
             pm2 start "npm run start" --name "whatsapp-web" --cwd apps/web || pm2 restart whatsapp-web
             pm2 save
