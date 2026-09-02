@@ -1,9 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import Redis from 'ioredis';
 import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -20,12 +21,13 @@ import {
 } from '../ai/image-mask.util';
 
 @Injectable()
-export class BatchService {
+export class BatchService implements OnModuleDestroy {
   private readonly logger = new Logger(BatchService.name);
 
   // For MVP, simplistic in-memory lock/debounce
   private activeTimeouts: Map<string, NodeJS.Timeout> = new Map();
   private processingLocks: Map<string, Promise<void>> = new Map();
+  private redisClient: Redis;
 
   constructor(
     private prisma: PrismaService,
@@ -35,7 +37,21 @@ export class BatchService {
     @InjectQueue('batch-processing') private batchQueue: Queue,
     @InjectQueue('history-sync-queue') private historySyncQueue: Queue,
     @InjectQueue('image-blur') private imageBlurQueue: Queue,
-  ) {}
+  ) {
+    this.redisClient = new Redis({
+      host: this.configService.get('REDIS_HOST', 'localhost'),
+      port: this.configService.get('REDIS_PORT', 6379),
+    });
+  }
+
+  onModuleDestroy() {
+    this.redisClient.quit();
+  }
+
+  async isMacWorkerOnline(): Promise<boolean> {
+    const isOnline = await this.redisClient.get('mac_worker_online');
+    return isOnline === 'true';
+  }
 
   async queueHistoryMessage(message: any) {
     await this.historySyncQueue.add('process-history-message', message);
@@ -204,18 +220,21 @@ export class BatchService {
         }
       }
 
+      const isOnline = await this.isMacWorkerOnline();
+      const shouldBlur = !isVideo && isOnline;
+
       const media = await this.prisma.mediaAsset.create({
         data: {
           batchId: activeBatch.id,
           whatsappMediaId: mediaId,
           mimeType: mimeType,
           localPath: localPath,
-          isProcessing: !isVideo,
+          isProcessing: shouldBlur,
           fileSize: fileSize,
         },
       });
 
-      if (localPath && !isVideo) {
+      if (localPath && shouldBlur) {
         await this.imageBlurQueue.add(
           'blur-image',
           { mediaId: media.id, localPath: localPath },
@@ -741,6 +760,44 @@ export class BatchService {
         err.response?.data || err.message,
       );
       return null;
+    }
+  }
+
+  async triggerManualAutoBlur(mediaId: string, userId: string) {
+    try {
+      const isOnline = await this.isMacWorkerOnline();
+      if (!isOnline) {
+        return { success: false, message: 'Macbook worker is offline' };
+      }
+
+      const media = await this.prisma.mediaAsset.findUnique({
+        where: { id: mediaId },
+        include: { batch: true },
+      });
+
+      if (!media || media.batch.userId !== userId) {
+        return { success: false, message: 'Media not found' };
+      }
+      
+      if (!media.localPath || media.mimeType?.startsWith('video/')) {
+        return { success: false, message: 'Media is not a valid image' };
+      }
+
+      await this.prisma.mediaAsset.update({
+        where: { id: mediaId },
+        data: { isProcessing: true },
+      });
+
+      await this.imageBlurQueue.add(
+        'blur-image',
+        { mediaId: media.id, localPath: media.localPath },
+        { jobId: `blur-${media.id}` }
+      );
+
+      return { success: true };
+    } catch (err: any) {
+      this.logger.error(`Error triggering manual auto blur for ${mediaId}`, err);
+      return { success: false, message: 'Failed to trigger auto blur' };
     }
   }
 

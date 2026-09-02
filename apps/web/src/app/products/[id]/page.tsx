@@ -87,11 +87,31 @@ export default function ProductDetailPage() {
   
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameInput, setRenameInput] = useState("");
+  
+  const [isWorkerOnline, setIsWorkerOnline] = useState(false);
 
   useEffect(() => {
     const history = localStorage.getItem("sentEmailsHistory");
     if (history) setEmailHistory(JSON.parse(history));
   }, []);
+
+  const fetchWorkerStatus = useCallback(async () => {
+    try {
+      const res = await fetchWithAuth(`${API_URL}/api/batches/worker-status`);
+      if (res.ok) {
+        const data = await res.json();
+        setIsWorkerOnline(data.isWorkerOnline);
+      }
+    } catch (err) {
+      console.error("Failed to fetch worker status", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchWorkerStatus();
+    const interval = setInterval(fetchWorkerStatus, 15000);
+    return () => clearInterval(interval);
+  }, [fetchWorkerStatus]);
   
   const sensors = useSensors(
     useSensor(MouseSensor, {
@@ -249,11 +269,12 @@ export default function ProductDetailPage() {
   const handleSingleRevert = async (mediaId: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    
+    if (!confirm("Are you sure you want to restore the original unblurred image?")) return;
+    
     setRevertingMediaId(mediaId);
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/batches/media/${mediaId}/revert`, {
-        method: "POST",
-      });
+      const res = await fetchWithAuth(`${API_URL}/api/batches/media/${mediaId}/revert`, { method: "POST" });
       if (res.ok) {
         handleImageUpdated(mediaId);
       } else {
@@ -265,6 +286,33 @@ export default function ProductDetailPage() {
       alert("Error reverting blur");
     } finally {
       setRevertingMediaId(null);
+    }
+  };
+
+  const handleTriggerAutoBlur = async (mediaId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    try {
+      const res = await fetchWithAuth(`${API_URL}/api/batches/media/${mediaId}/trigger-auto-blur`, { method: "POST" });
+      if (res.ok) {
+        // Optimistically update UI to show processing loader
+        setBatch((prev: any) => {
+          if (!prev?.mediaAssets) return prev;
+          return {
+            ...prev,
+            mediaAssets: prev.mediaAssets.map((asset: any) => 
+              asset.id === mediaId ? { ...asset, isProcessing: true } : asset
+            )
+          };
+        });
+      } else {
+        const error = await res.json();
+        alert(error.message || "Failed to trigger auto blur");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to trigger auto blur");
     }
   };
 
@@ -745,7 +793,7 @@ export default function ProductDetailPage() {
                               index={index}
                               isImage={isImage}
                               imageIndex={imageIndex}
-                              isSelected={isSelected}
+                              isSelected={selectedMediaIds.has(asset.id)}
                               mediaSrc={mediaSrc}
                               revertingMediaId={revertingMediaId}
                               onToggleSelect={toggleSelectMedia}
@@ -769,6 +817,8 @@ export default function ProductDetailPage() {
                                 }
                               }}
                               onForceImage={handleForceImage}
+                              isWorkerOnline={isWorkerOnline}
+                              onTriggerAutoBlur={handleTriggerAutoBlur}
                             />
                           );
                         })}
@@ -1325,6 +1375,19 @@ function SortableMediaItem({
                 className="flex-1 py-1.5 px-2 rounded-lg bg-graphite/80 backdrop-blur-md hover:bg-graphite-border text-slate-300 hover:text-white text-xs font-semibold shadow-sm transition-all border border-graphite-border text-center cursor-pointer"
               >
                 Mask Target
+              </button>
+
+              <button
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => onTriggerAutoBlur(asset.id, e)}
+                disabled={!isWorkerOnline}
+                className={`py-1.5 px-2 rounded-lg backdrop-blur-md text-xs font-semibold shadow-sm transition-all border text-center flex-1 cursor-pointer ${
+                  isWorkerOnline 
+                    ? "bg-purple-500/20 hover:bg-purple-500/40 text-purple-400 border-purple-500/30" 
+                    : "bg-graphite/40 text-slate-500 border-graphite-border cursor-not-allowed"
+                }`}
+              >
+                ✨ Auto Blur
               </button>
 
               <button

@@ -115,6 +115,22 @@ export class BatchController {
     }
     return result;
   }
+
+  @Get('worker-status')
+  async getWorkerStatus() {
+    const isOnline = await this.batchService.isMacWorkerOnline();
+    return { isWorkerOnline: isOnline };
+  }
+
+  @Post('media/:mediaId/trigger-auto-blur')
+  async triggerAutoBlur(@Request() req: any, @Param('mediaId') mediaId: string) {
+    const result = await this.batchService.triggerManualAutoBlur(mediaId, req.user.userId);
+    if (!result.success) {
+      throw new HttpException(result.message || 'Failed to trigger blur', HttpStatus.BAD_REQUEST);
+    }
+    return result;
+  }
+
   @Post('media/:mediaId/stop-blur')
   async stopMediaBlur(@Request() req: any, @Param('mediaId') mediaId: string) {
     const result = await this.batchService.stopMediaBlur(mediaId, req.user.userId);

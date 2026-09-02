@@ -45,7 +45,7 @@ import { NotificationModule } from './notification/notification.module';
     PrismaModule,
     WebhookModule,
     BatchModule,
-    ProcessorModule,
+    ProcessorModule.register(),
     SocialModule,
     WhatsappModule,
     AiModule,

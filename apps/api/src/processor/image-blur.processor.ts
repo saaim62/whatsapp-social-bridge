@@ -1,21 +1,50 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { OcrService } from '../ai/ocr.service';
+import { ConfigService } from '@nestjs/config';
+import Redis from 'ioredis';
 import * as fs from 'fs';
 import * as path from 'path';
 const sharp = require('sharp');
 
 @Processor('image-blur')
-export class ImageBlurProcessor extends WorkerHost {
+export class ImageBlurProcessor extends WorkerHost implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ImageBlurProcessor.name);
+  private redisClient: Redis;
+  private heartbeatInterval: NodeJS.Timeout;
 
   constructor(
     private prisma: PrismaService,
     private ocrService: OcrService,
+    private configService: ConfigService,
   ) {
     super();
+    this.redisClient = new Redis({
+      host: this.configService.get('REDIS_HOST', 'localhost'),
+      port: this.configService.get('REDIS_PORT', 6379),
+    });
+  }
+
+  onModuleInit() {
+    this.logger.log('ImageBlurProcessor initialized. Starting heartbeat...');
+    // Emit heartbeat every 10 seconds
+    this.heartbeatInterval = setInterval(async () => {
+      try {
+        await this.redisClient.set('mac_worker_online', 'true', 'EX', 15);
+      } catch (err) {
+        this.logger.error('Failed to emit heartbeat to Redis', err);
+      }
+    }, 10000);
+    // Initial heartbeat
+    this.redisClient.set('mac_worker_online', 'true', 'EX', 15).catch(err => this.logger.error(err));
+  }
+
+  onModuleDestroy() {
+    if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
+    this.redisClient.del('mac_worker_online').catch(() => {});
+    this.redisClient.quit();
   }
 
   async process(job: Job<any, any, string>): Promise<any> {
