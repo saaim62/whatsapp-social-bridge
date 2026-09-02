@@ -28,11 +28,22 @@ export class WhatsappService implements OnModuleInit {
     private readonly prisma: PrismaService,
   ) {}
 
+  private cachedWaVersion: any = null;
+
   async onModuleInit() {
-    const users = await this.prisma.user.findMany();
-    for (const user of users) {
-      this.initializeWhatsApp(user.id);
-    }
+    // Run initialization in background so NestJS can bind to port 3001 immediately
+    setImmediate(async () => {
+      try {
+        const users = await this.prisma.user.findMany();
+        for (const user of users) {
+          this.initializeWhatsApp(user.id).catch(err => {
+            this.logger.error(`Failed to initialize WhatsApp for user ${user.id}:`, err);
+          });
+        }
+      } catch (err) {
+        this.logger.error('Failed to load users for WhatsApp init:', err);
+      }
+    });
   }
 
   getQrCodeUrl(userId: string) {
@@ -83,7 +94,15 @@ export class WhatsappService implements OnModuleInit {
       fs.mkdirSync('./sessions');
     }
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
-    const { version, isLatest } = await fetchLatestWaWebVersion();
+
+    if (!this.cachedWaVersion) {
+      try {
+        this.cachedWaVersion = await fetchLatestWaWebVersion();
+      } catch (err) {
+        this.cachedWaVersion = { version: [2, 3000, 1046623424], isLatest: true };
+      }
+    }
+    const { version, isLatest } = this.cachedWaVersion;
     this.logger.log(`Using WhatsApp Web version v${version.join('.')}, isLatest: ${isLatest}`);
 
     const client = makeWASocket({
