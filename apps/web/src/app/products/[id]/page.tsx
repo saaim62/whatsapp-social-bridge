@@ -1250,6 +1250,8 @@ function SortableMediaItem({
   onSingleRevert,
   onStopBlur,
   onForceImage,
+  onTriggerAutoBlur,
+  isWorkerOnline,
 }: any) {
   const {
     attributes,
