@@ -40,11 +40,14 @@ export class BatchService implements OnModuleDestroy {
     @InjectQueue('history-sync-queue') private historySyncQueue: Queue,
     @InjectQueue('image-blur') private imageBlurQueue: Queue,
   ) {
+    const rawHost = this.configService.get('REDIS_HOST', 'localhost');
+    const host = rawHost.replace(/^https?:\/\//, '').replace(/^redis[s]?:\/\//, '').split(':')[0].split('/')[0];
+    
     this.redisClient = new Redis({
-      host: this.configService.get('REDIS_HOST', 'localhost'),
+      host,
       port: this.configService.get('REDIS_PORT', 6379),
       password: this.configService.get('REDIS_PASSWORD'),
-      tls: this.configService.get('REDIS_HOST')?.includes('upstash') ? {} : undefined,
+      tls: host.includes('upstash') ? { servername: host } : undefined,
     });
     this.redisClient.on('error', (err) => {
       console.error('[Redis Client Error]', err.message);
