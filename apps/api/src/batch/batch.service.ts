@@ -48,6 +48,12 @@ export class BatchService implements OnModuleDestroy {
     this.redisClient.quit();
   }
 
+  private getLocalPathFromMedia(localPathUrl: string): string {
+    if (!localPathUrl) return '';
+    const fileName = localPathUrl.split('/').pop() || '';
+    return path.join(process.cwd(), 'uploads', fileName);
+  }
+
   async isMacWorkerOnline(): Promise<boolean> {
     const isOnline = await this.redisClient.get('mac_worker_online');
     return isOnline === 'true';
@@ -71,7 +77,7 @@ export class BatchService implements OnModuleDestroy {
       } catch (err) {
         this.logger.error(`Error processing message in lock chain for ${lockKey}`, err);
       }
-    }).catch(() => {});
+    }).catch(() => { });
 
     this.processingLocks.set(lockKey, nextLock);
     await nextLock;
@@ -212,9 +218,13 @@ export class BatchService implements OnModuleDestroy {
       let fileSize = 0;
       if (localPath) {
         try {
-          const absolutePath = path.resolve(process.cwd(), localPath);
-          const stats = fs.statSync(absolutePath);
-          fileSize = stats.size;
+          const absolutePath = this.getLocalPathFromMedia(localPath);
+          if (fs.existsSync(absolutePath)) {
+            const stats = fs.statSync(absolutePath);
+            fileSize = stats.size;
+          } else {
+            this.logger.warn(`Could not determine file size for ${localPath}`);
+          }
         } catch (e) {
           this.logger.warn(`Could not determine file size for ${localPath}`);
         }
@@ -365,18 +375,18 @@ export class BatchService implements OnModuleDestroy {
   }
 
   async publishBatch(id: string, userId: string, targets?: string[]) {
-    const batch = await this.prisma.productBatch.findUnique({ where: { id, userId }});
+    const batch = await this.prisma.productBatch.findUnique({ where: { id, userId } });
     if (!batch) return { success: false, message: 'Batch not found' };
-    
+
     await this.batchQueue.add('publish-batch', { batchId: id, userId, targets });
     return { success: true };
   }
 
   async publishBatchesBulk(ids: string[], userId: string) {
     const batches = await this.prisma.productBatch.findMany({
-      where: { 
+      where: {
         id: { in: ids },
-        userId 
+        userId
       }
     });
 
@@ -386,11 +396,11 @@ export class BatchService implements OnModuleDestroy {
 
     // 1-minute delay between each publish
     const delayIntervalMs = 60000;
-    
+
     for (let i = 0; i < batches.length; i++) {
       const batch = batches[i];
       await this.batchQueue.add(
-        'publish-batch', 
+        'publish-batch',
         { batchId: batch.id, userId },
         { delay: i * delayIntervalMs }
       );
@@ -420,14 +430,14 @@ export class BatchService implements OnModuleDestroy {
           where: { id: batch.generatedContent.id }
         });
       }
-      
+
       await tx.productBatch.update({
         where: { id },
         data: {
           extractedData: Prisma.DbNull
         }
       });
-      
+
       await tx.mediaAsset.updateMany({
         where: { batchId: id },
         data: { ocrConfidence: null }
@@ -480,7 +490,7 @@ export class BatchService implements OnModuleDestroy {
     // Delete physical files
     for (const media of batch.mediaAssets) {
       if (media.localPath) {
-        const absolutePath = path.join(process.cwd(), media.localPath.replace(/^api\//, ''));
+        const absolutePath = this.getLocalPathFromMedia(media.localPath);
         if (fs.existsSync(absolutePath)) {
           try {
             fs.unlinkSync(absolutePath);
@@ -509,9 +519,9 @@ export class BatchService implements OnModuleDestroy {
 
   async deleteBatchesBulk(ids: string[], userId: string) {
     const batches = await this.prisma.productBatch.findMany({
-      where: { 
+      where: {
         id: { in: ids },
-        userId 
+        userId
       },
       include: { mediaAssets: true },
     });
@@ -524,17 +534,17 @@ export class BatchService implements OnModuleDestroy {
     for (const batch of batches) {
       for (const media of batch.mediaAssets) {
         if (media.localPath) {
-          const absolutePath = path.join(process.cwd(), media.localPath.replace(/^api\//, ''));
+          const absolutePath = this.getLocalPathFromMedia(media.localPath);
           if (fs.existsSync(absolutePath)) {
             try {
               fs.unlinkSync(absolutePath);
               this.logger.log(`Deleted physical file: ${absolutePath}`);
-            } catch (err) {}
+            } catch (err) { }
           }
           const ext = path.extname(absolutePath);
           const originalPath = absolutePath.replace(ext, `_original${ext}`);
           if (fs.existsSync(originalPath)) {
-            try { fs.unlinkSync(originalPath); } catch (err) {}
+            try { fs.unlinkSync(originalPath); } catch (err) { }
           }
         }
       }
@@ -559,7 +569,7 @@ export class BatchService implements OnModuleDestroy {
 
     // 3. Delete physical file
     if (media.localPath) {
-      const absolutePath = path.join(process.cwd(), media.localPath.replace(/^api\//, ''));
+      const absolutePath = this.getLocalPathFromMedia(media.localPath);
       if (fs.existsSync(absolutePath)) {
         try {
           fs.unlinkSync(absolutePath);
@@ -589,16 +599,16 @@ export class BatchService implements OnModuleDestroy {
       include: { batch: true },
     });
     if (!media || media.batch.userId !== userId) return { success: false, message: 'Media not found' };
-    
+
     if (media.localPath && media.mimeType?.startsWith('video/')) {
-      const absolutePath = path.join(process.cwd(), media.localPath.replace(/^api\//, ''));
+      const absolutePath = this.getLocalPathFromMedia(media.localPath);
       if (fs.existsSync(absolutePath)) {
         const newLocalPath = media.localPath.replace(/\.(mp4|mov|webm)$/i, '.jpeg');
-        const newAbsolutePath = path.join(process.cwd(), newLocalPath.replace(/^api\//, ''));
-        
+        const newAbsolutePath = this.getLocalPathFromMedia(newLocalPath);
+
         try {
           await execAsync(`ffmpeg -i "${absolutePath}" -vframes 1 "${newAbsolutePath}"`);
-          
+
           await this.prisma.mediaAsset.update({
             where: { id: mediaId },
             data: {
@@ -606,13 +616,13 @@ export class BatchService implements OnModuleDestroy {
               mimeType: 'image/jpeg'
             }
           });
-          
+
           try {
             fs.unlinkSync(absolutePath);
           } catch (err) {
             this.logger.error(`Failed to delete old video file: ${absolutePath}`, err);
           }
-          
+
           return { success: true };
         } catch (err) {
           this.logger.error(`Failed to force image using ffmpeg for ${mediaId}`, err);
@@ -620,7 +630,7 @@ export class BatchService implements OnModuleDestroy {
         }
       }
     }
-    
+
     return { success: false, message: 'Not a valid video asset' };
   }
 
@@ -632,14 +642,14 @@ export class BatchService implements OnModuleDestroy {
 
     // Update in transaction to ensure consistency
     await this.prisma.$transaction(
-      orderedMediaIds.map((id, index) => 
+      orderedMediaIds.map((id, index) =>
         this.prisma.mediaAsset.updateMany({
           where: { id, batchId },
           data: { sortOrder: index }
         })
       )
     );
-    
+
     return { success: true };
   }
 
@@ -656,7 +666,7 @@ export class BatchService implements OnModuleDestroy {
       return { success: false, message: 'Media or local file not found' };
     }
 
-    const absolutePath = path.join(process.cwd(), media.localPath.replace(/^api\//, ''));
+    const absolutePath = this.getLocalPathFromMedia(media.localPath);
     if (!fs.existsSync(absolutePath)) {
       return { success: false, message: 'File does not exist on disk' };
     }
@@ -666,14 +676,14 @@ export class BatchService implements OnModuleDestroy {
 
     try {
       let imageBuffer = fs.readFileSync(absolutePath);
-      
+
       // Save backup for reverting later if not exists
       const ext = path.extname(absolutePath);
       const originalPath = absolutePath.replace(ext, `_original${ext}`);
       if (!fs.existsSync(originalPath)) {
-         fs.writeFileSync(originalPath, imageBuffer);
+        fs.writeFileSync(originalPath, imageBuffer);
       }
-      
+
       for (const box of boxes) {
         const metadata = await sharp(imageBuffer).metadata();
 
@@ -721,10 +731,10 @@ export class BatchService implements OnModuleDestroy {
       return { success: false, message: 'Media or local file not found' };
     }
 
-    const absolutePath = path.join(process.cwd(), media.localPath.replace(/^api\//, ''));
+    const absolutePath = this.getLocalPathFromMedia(media.localPath);
     const ext = path.extname(absolutePath);
     const originalPath = absolutePath.replace(ext, `_original${ext}`);
-    
+
     if (fs.existsSync(originalPath)) {
       try {
         fs.copyFileSync(originalPath, absolutePath);
@@ -781,8 +791,17 @@ export class BatchService implements OnModuleDestroy {
         writer.on('error', reject);
       });
 
-      this.logger.log(`Successfully downloaded WhatsApp media: ${localPath}`);
-      return localPath;
+      let finalPath = localPath;
+      try {
+        const buffer = fs.readFileSync(absolutePath);
+        finalPath = await this.storageService.uploadBuffer(buffer, fileName, mimeType);
+        this.logger.log(`Uploaded downloaded WhatsApp media to R2: ${finalPath}`);
+      } catch (uploadErr) {
+        this.logger.error('Failed to upload downloaded media to R2, using local path', uploadErr);
+      }
+
+      this.logger.log(`Successfully downloaded WhatsApp media: ${finalPath}`);
+      return finalPath;
     } catch (err: any) {
       this.logger.error(
         `Failed to download WhatsApp media ${mediaId}`,
@@ -807,7 +826,7 @@ export class BatchService implements OnModuleDestroy {
       if (!media || media.batch.userId !== userId) {
         return { success: false, message: 'Media not found' };
       }
-      
+
       if (!media.localPath || media.mimeType?.startsWith('video/')) {
         return { success: false, message: 'Media is not a valid image' };
       }
@@ -849,7 +868,7 @@ export class BatchService implements OnModuleDestroy {
           this.logger.log(`Removed waiting blur job for media ${mediaId}`);
         }
       }
-      
+
       // Fallback: iterate over waiting just in case it was queued without jobId
       const waitingJobs = await this.imageBlurQueue.getWaiting();
       for (const wJob of waitingJobs) {
@@ -934,7 +953,7 @@ export class BatchService implements OnModuleDestroy {
       where: { email: { in: targetEmails }, isBlocked: false }
     });
     if (users.length === 0) return { success: false, message: 'No valid target users found' };
-    
+
     for (const batchId of batchIds) {
       await this.sendBatchToUsersInternal(batchId, fromUserId, users);
     }
@@ -946,7 +965,7 @@ export class BatchService implements OnModuleDestroy {
       where: { email: { in: targetEmails }, isBlocked: false }
     });
     if (users.length === 0) return { success: false, message: 'No valid target users found' };
-    
+
     const newBatchIds = await this.sendBatchToUsersInternal(batchId, fromUserId, users);
     return { success: true, newBatchIds };
   }
@@ -988,13 +1007,13 @@ export class BatchService implements OnModuleDestroy {
       for (const asset of sourceBatch.mediaAssets) {
         let newLocalPath: string | null = null;
         if (asset.localPath) {
-          const absolutePath = path.join(process.cwd(), asset.localPath.replace(/^api\//, ''));
+          const absolutePath = this.getLocalPathFromMedia(asset.localPath);
           if (fs.existsSync(absolutePath)) {
             const ext = path.extname(absolutePath);
             const newFileName = `${Date.now()}_${Math.random().toString(36).substring(7)}${ext}`;
             newLocalPath = `api/uploads/${newFileName}`;
             const newAbsolutePath = path.join(process.cwd(), 'uploads', newFileName);
-            
+
             fs.copyFileSync(absolutePath, newAbsolutePath);
 
             const originalPath = absolutePath.replace(ext, `_original${ext}`);

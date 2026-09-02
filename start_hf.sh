@@ -1,0 +1,16 @@
+#!/bin/bash
+set -e
+
+# Run Prisma database migrations to ensure the Neon database is up to date
+echo "Pushing database schema to Neon..."
+cd apps/api
+npx prisma db push --accept-data-loss
+cd ../..
+
+# Start all Node services (Next.js, NestJS)
+echo "Starting backend and frontend services via PM2..."
+pm2 start ecosystem.hf.config.js
+
+# Start Caddy reverse proxy to expose port 7860
+echo "Starting Caddy on port 7860..."
+caddy run --config Caddyfile.hf

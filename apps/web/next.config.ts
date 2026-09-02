@@ -9,6 +9,14 @@ const nextConfig: NextConfig = {
         hostname: 'api-droproute.duckdns.org',
         pathname: '/api/uploads/**',
       },
+      {
+        protocol: 'https',
+        hostname: '*.r2.dev',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.r2.cloudflarestorage.com',
+      },
     ],
   },
   async rewrites() {
