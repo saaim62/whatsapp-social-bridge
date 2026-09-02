@@ -15,8 +15,10 @@ import { SourcesModule } from './sources/sources.module';
 import { AuthModule } from './auth/auth.module';
 import { AdminModule } from './admin/admin.module';
 import { NotificationModule } from './notification/notification.module';
+import { AppController } from './app.controller';
 
 @Module({
+  controllers: [AppController],
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
