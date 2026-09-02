@@ -16,11 +16,18 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
             cd ~/whatsapp-social-bridge
             git reset --hard HEAD
             git pull origin main
             npm install
-            npx dotenv -e .env -- prisma db push --schema=apps/api/prisma/schema.prisma --accept-data-loss
-            npx dotenv -e .env -- prisma generate --schema=apps/api/prisma/schema.prisma
-            npm run build
-            pm2 restart all
+            export $(cat .env | grep -v ^# | xargs)
+            npx prisma db push --schema=apps/api/prisma/schema.prisma --accept-data-loss
+            npx prisma generate --schema=apps/api/prisma/schema.prisma
+            npm run build -w apps/web
+            npm run build -w apps/api
+            pm2 restart all || true
+            pm2 start apps/api/dist/main.js --name "whatsapp-api" || pm2 restart whatsapp-api
+            pm2 start "npm run start" --name "whatsapp-web" --cwd apps/web || pm2 restart whatsapp-web
+            pm2 save
