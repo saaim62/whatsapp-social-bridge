@@ -15,6 +15,7 @@ interface Box {
 export interface MediaItem {
   id: string;
   localPath: string;
+  originalUrl?: string;
   mimeType?: string;
 }
 
@@ -213,7 +214,9 @@ export function ImageMaskModal({
     }
   };
 
-  const imageUrl = `${API_URL}/${currentMedia.localPath}${currentTimestamp ? `?t=${currentTimestamp}` : ""}`;
+  const imageUrl = currentMedia.originalUrl 
+    ? `${currentMedia.originalUrl}${currentTimestamp ? `?t=${currentTimestamp}` : ""}`
+    : `${API_URL}/${currentMedia.localPath}${currentTimestamp ? `?t=${currentTimestamp}` : ""}`;
 
   return (
     <AnimatePresence>

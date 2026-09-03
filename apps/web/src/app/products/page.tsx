@@ -370,16 +370,16 @@ export default function ProductsPage() {
                           <Loader2 className="w-5 h-5 text-electric-cyan animate-spin" />
                         </div>
                       )}
-                      {batch.mediaAssets?.[0]?.localPath ? (
+                      {batch.mediaAssets?.[0]?.originalUrl || batch.mediaAssets?.[0]?.localPath ? (
                         batch.mediaAssets[0].mimeType?.startsWith("video/") ? (
                           <video
-                            src={`${API_URL}/${batch.mediaAssets[0].localPath}`}
+                            src={batch.mediaAssets[0].originalUrl || `${API_URL}/${batch.mediaAssets[0].localPath}`}
                             className="w-full h-full object-cover"
                             muted loop playsInline preload="metadata"
                           />
                         ) : (
                           <Image
-                            src={`${API_URL}/${batch.mediaAssets[0].localPath}`}
+                            src={batch.mediaAssets[0].originalUrl || `${API_URL}/${batch.mediaAssets[0].localPath}`}
                             alt=""
                             fill
                             className="object-cover group-hover:scale-110 transition-transform duration-700"

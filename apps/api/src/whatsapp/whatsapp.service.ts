@@ -6,6 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { SourcesService } from '../sources/sources.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
 
 @Injectable()
 export class WhatsappService implements OnModuleInit {
@@ -26,6 +27,7 @@ export class WhatsappService implements OnModuleInit {
     @Inject(forwardRef(() => SourcesService))
     private readonly sourcesService: SourcesService,
     private readonly prisma: PrismaService,
+    private readonly storageService: StorageService,
   ) { }
 
   private cachedWaVersion: any = null;
@@ -617,6 +619,15 @@ export class WhatsappService implements OnModuleInit {
         fs.writeFileSync(absolutePath, buffer);
         localPath = relPath;
         this.logger.log(`Downloaded media to ${localPath}`);
+
+        try {
+          const r2Url = await this.storageService.uploadBuffer(buffer, fileName, mimeType);
+          this.logger.log(`Uploaded media to R2: ${r2Url}`);
+          // Pass the R2 URL to batch service via payload
+          (msg as any)._originalUrl = r2Url;
+        } catch (r2Err) {
+          this.logger.error('Failed to upload media to R2', r2Err);
+        }
       } catch (err) {
         this.logger.error('Failed to download media from Baileys', err);
       }
@@ -628,7 +639,9 @@ export class WhatsappService implements OnModuleInit {
       senderName: senderName,
       timestamp: msg.messageTimestamp?.toString() || Date.now().toString(),
       type: isMedia ? 'image' : 'text', // BatchService uses 'image' to detect media, so we keep it for now
-      userId: userId,
+      _localPath: localPath,
+      _originalUrl: (msg as any)._originalUrl || null,
+      text: !isMedia ? { body: caption } : undefined,
     };
 
     if (payload.type === 'image') {

@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import * as fs from 'fs';
 import * as path from 'path';
+import { StorageService } from '../storage/storage.service';
 const sharp = require('sharp');
 
 @Processor('image-blur')
@@ -19,6 +20,7 @@ export class ImageBlurProcessor extends WorkerHost implements OnModuleInit, OnMo
     private prisma: PrismaService,
     private ocrService: OcrService,
     private configService: ConfigService,
+    private storageService: StorageService,
   ) {
     super();
     this.redisClient = new Redis({
@@ -172,6 +174,21 @@ export class ImageBlurProcessor extends WorkerHost implements OnModuleInit, OnMo
 
         fs.writeFileSync(absolutePath, imageBuffer);
         this.logger.log(`Automatically processed logos for media ${mediaId}`);
+
+        // Re-upload the blurred image to R2
+        try {
+          const fileName = path.basename(absolutePath);
+          const mimeType = fileName.endsWith('.png') ? 'image/png' : 'image/jpeg';
+          const r2Url = await this.storageService.uploadBuffer(imageBuffer, fileName, mimeType);
+          this.logger.log(`Re-uploaded blurred image to R2: ${r2Url}`);
+          
+          await this.prisma.mediaAsset.update({
+            where: { id: mediaId },
+            data: { originalUrl: r2Url },
+          });
+        } catch (r2Err) {
+          this.logger.error(`Failed to re-upload blurred image to R2`, r2Err);
+        }
       } catch (err) {
         this.logger.error(`Failed to apply auto-blur on media ${mediaId}`, err);
         throw err;

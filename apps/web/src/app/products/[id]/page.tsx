@@ -782,9 +782,9 @@ export default function ProductDetailPage() {
                             : -1;
                           const isSelected = selectedMediaIds.has(asset.id);
                           const timestamp = mediaTimestamps[asset.id] || 0;
-                          const mediaSrc = `${API_URL}/${asset.localPath}${
-                            timestamp ? `?t=${timestamp}` : ""
-                          }`;
+                          const mediaSrc = asset.originalUrl 
+                            ? `${asset.originalUrl}${timestamp ? `?t=${timestamp}` : ""}`
+                            : `${API_URL}/${asset.localPath}${timestamp ? `?t=${timestamp}` : ""}`;
 
                           return (
                             <SortableMediaItem

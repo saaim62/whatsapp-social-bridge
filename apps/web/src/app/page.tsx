@@ -211,9 +211,9 @@ export default function DashboardPage() {
                   <div className="absolute left-0 top-0 bottom-0 w-1 bg-electric-cyan opacity-0 group-hover:opacity-100 transition-opacity" />
                   
                   <div className="w-14 h-14 rounded-xl bg-graphite border border-graphite-border overflow-hidden shrink-0 relative">
-                    {batch.mediaAssets?.[0]?.localPath ? (
+                    {batch.mediaAssets?.[0]?.originalUrl || batch.mediaAssets?.[0]?.localPath ? (
                       <Image
-                        src={`${API_URL}/${batch.mediaAssets[0].localPath}`}
+                        src={batch.mediaAssets[0].originalUrl || `${API_URL}/${batch.mediaAssets[0].localPath}`}
                         alt=""
                         fill
                         className="object-cover group-hover:scale-110 transition-transform duration-700"

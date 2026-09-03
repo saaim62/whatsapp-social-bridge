@@ -37,14 +37,10 @@ import { AppController } from './app.controller';
     BullModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => {
-        const rawHost = configService.get('REDIS_HOST', 'localhost');
-        const host = rawHost.replace(/^https?:\/\//, '').replace(/^redis[s]?:\/\//, '').split(':')[0].split('/')[0];
         return {
           connection: {
-            host,
-            port: configService.get('REDIS_PORT', 6379),
-            password: configService.get('REDIS_PASSWORD'),
-            tls: host.includes('upstash') ? { servername: host } : undefined,
+            host: '127.0.0.1',
+            port: 6379,
           }
         };
       },

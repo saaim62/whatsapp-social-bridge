@@ -40,14 +40,9 @@ export class BatchService implements OnModuleDestroy {
     @InjectQueue('history-sync-queue') private historySyncQueue: Queue,
     @InjectQueue('image-blur') private imageBlurQueue: Queue,
   ) {
-    const rawHost = this.configService.get('REDIS_HOST', 'localhost');
-    const host = rawHost.replace(/^https?:\/\//, '').replace(/^redis[s]?:\/\//, '').split(':')[0].split('/')[0];
-    
     this.redisClient = new Redis({
-      host,
-      port: this.configService.get('REDIS_PORT', 6379),
-      password: this.configService.get('REDIS_PASSWORD'),
-      tls: host.includes('upstash') ? { servername: host } : undefined,
+      host: '127.0.0.1',
+      port: 6379,
     });
     this.redisClient.on('error', (err) => {
       console.error('[Redis Client Error]', err.message);
@@ -249,6 +244,7 @@ export class BatchService implements OnModuleDestroy {
           whatsappMediaId: mediaId,
           mimeType: mimeType,
           localPath: localPath,
+          originalUrl: message._originalUrl || null,
           isProcessing: shouldBlur,
           fileSize: fileSize,
         },
@@ -1040,6 +1036,7 @@ export class BatchService implements OnModuleDestroy {
             whatsappMediaId: asset.whatsappMediaId,
             mimeType: asset.mimeType,
             localPath: newLocalPath || asset.localPath,
+            originalUrl: asset.originalUrl,
             isProcessing: asset.isProcessing,
             fileSize: asset.fileSize,
             sortOrder: asset.sortOrder,
