@@ -50,11 +50,13 @@ export class EmailService {
     this.logger.log(`${url}`);
     this.logger.log(`\n======================================================\n\n`);
 
+    const from = process.env.SMTP_FROM || process.env.SMTP_USER || '"DropRoute" <noreply@droproute.com>';
+
     // Fire and forget so we don't block the UI
     this.transporter.sendMail({
-      from: '"DropRoute" <noreply@droproute.com>',
+      from,
       to: email,
-      subject: 'Verify your DropRoute Account',
+      subject: 'Verify your Account',
       html: `<p>Please click <a href="${url}">here</a> to verify your account.</p>`,
     }).then(info => {
       this.logger.log(`Ethereal Email Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
@@ -73,11 +75,13 @@ export class EmailService {
     this.logger.log(`${url}`);
     this.logger.log(`\n======================================================\n\n`);
 
+    const from = process.env.SMTP_FROM || process.env.SMTP_USER || '"DropRoute" <noreply@droproute.com>';
+
     // Fire and forget so we don't block the UI
     this.transporter.sendMail({
-      from: '"DropRoute" <noreply@droproute.com>',
+      from,
       to: email,
-      subject: 'Reset your DropRoute Password',
+      subject: 'Reset your Password',
       html: `<p>Please click <a href="${url}">here</a> to reset your password.</p>`,
     }).then(info => {
       this.logger.log(`Ethereal Email Preview URL: ${nodemailer.getTestMessageUrl(info)}`);

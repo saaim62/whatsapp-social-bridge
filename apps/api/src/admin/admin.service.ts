@@ -40,20 +40,34 @@ export class AdminService {
     `;
 
     // OS level disk stats for uploads directory
-    let serverStorageTotalBytes = 0;
-    let serverStorageFreeBytes = 0;
+    // Calculate actual size of uploads directory instead of reading the entire node's 7TB disk
+    let serverStorageConsumedBytes = 0;
+    const serverStorageTotalBytes = 50n * 1024n * 1024n * 1024n; // 50 GB (Hugging Face Free Tier Limit)
+    
     try {
       const uploadsDir = path.join(process.cwd(), 'uploads');
       if (!fs.existsSync(uploadsDir)) {
         fs.mkdirSync(uploadsDir, { recursive: true });
       }
-      const stat = fs.statfsSync(uploadsDir);
-      serverStorageTotalBytes = stat.bsize * stat.blocks;
-      serverStorageFreeBytes = stat.bsize * stat.bfree;
+      
+      const getDirSize = (dirPath: string): number => {
+        let size = 0;
+        const files = fs.readdirSync(dirPath);
+        for (let i = 0; i < files.length; i++) {
+          const filePath = path.join(dirPath, files[i]);
+          const stats = fs.statSync(filePath);
+          if (stats.isFile()) size += stats.size;
+          else if (stats.isDirectory()) size += getDirSize(filePath);
+        }
+        return size;
+      };
+      
+      serverStorageConsumedBytes = getDirSize(uploadsDir);
     } catch (err) {
       console.error("Failed to read server disk stats", err);
     }
-    const serverStorageConsumedBytes = serverStorageTotalBytes - serverStorageFreeBytes;
+    
+    const serverStorageFreeBytes = Number(serverStorageTotalBytes) - serverStorageConsumedBytes;
 
     return {
       totalUsers,
