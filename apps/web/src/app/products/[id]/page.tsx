@@ -524,17 +524,29 @@ export default function ProductDetailPage() {
     }
   };
 
+  const [convertingMediaId, setConvertingMediaId] = useState<string | null>(null);
+
   const handleForceImage = async (mediaId: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    setConvertingMediaId(mediaId);
     try {
-      await fetchWithAuth(`${API_URL}/api/batches/media/${mediaId}/force-image`, {
+      const res = await fetchWithAuth(`${API_URL}/api/batches/media/${mediaId}/force-image`, {
         method: "POST"
       });
-      await fetchBatchData();
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        setMediaTimestamps((prev) => ({ ...prev, [mediaId]: Date.now() }));
+        await fetchBatchData();
+        alert("Converted video frame to image successfully!");
+      } else {
+        alert(`Failed to convert: ${data?.message || 'Server error'}`);
+      }
     } catch (err) {
       console.error(err);
       alert("Failed to force image conversion");
+    } finally {
+      setConvertingMediaId(null);
     }
   };
 
@@ -817,6 +829,7 @@ export default function ProductDetailPage() {
                                 }
                               }}
                               onForceImage={handleForceImage}
+                              convertingMediaId={convertingMediaId}
                               isWorkerOnline={isWorkerOnline}
                               onTriggerAutoBlur={handleTriggerAutoBlur}
                             />
@@ -1250,6 +1263,7 @@ function SortableMediaItem({
   onSingleRevert,
   onStopBlur,
   onForceImage,
+  convertingMediaId,
   onTriggerAutoBlur,
   isWorkerOnline,
 }: any) {
@@ -1318,6 +1332,7 @@ function SortableMediaItem({
           src={mediaSrc}
           alt=""
           fill
+          unoptimized
           className="object-cover pointer-events-none"
         />
       )}
@@ -1409,9 +1424,11 @@ function SortableMediaItem({
             <button
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => onForceImage(asset.id, e)}
-              className="w-full py-1.5 px-2 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/40 backdrop-blur-md text-indigo-400 hover:text-white text-xs font-semibold shadow-sm transition-all border border-indigo-500/30 text-center cursor-pointer"
+              disabled={convertingMediaId === asset.id}
+              className="w-full py-1.5 px-2 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/40 backdrop-blur-md text-indigo-400 hover:text-white text-xs font-semibold shadow-sm transition-all border border-indigo-500/30 text-center cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
             >
-              Treat as Image (Override)
+              {convertingMediaId === asset.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {convertingMediaId === asset.id ? "Extracting Frame..." : "Treat as Image (Override)"}
             </button>
           </div>
         )}

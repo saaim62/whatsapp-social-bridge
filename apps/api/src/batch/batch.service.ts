@@ -60,8 +60,7 @@ export class BatchService implements OnModuleDestroy {
   }
 
   async isMacWorkerOnline(): Promise<boolean> {
-    const isOnline = await this.redisClient.get('mac_worker_online');
-    return isOnline === 'true';
+    return true; // Server-side image blur processor is active
   }
 
   async queueHistoryMessage(message: any) {
@@ -235,8 +234,7 @@ export class BatchService implements OnModuleDestroy {
         }
       }
 
-      const isOnline = await this.isMacWorkerOnline();
-      const shouldBlur = !isVideo && isOnline;
+      const shouldBlur = !isVideo;
 
       const media = await this.prisma.mediaAsset.create({
         data: {
@@ -615,38 +613,82 @@ export class BatchService implements OnModuleDestroy {
     });
     if (!media || media.batch.userId !== userId) return { success: false, message: 'Media not found' };
 
-    if (media.localPath && media.mimeType?.startsWith('video/')) {
-      const absolutePath = this.getLocalPathFromMedia(media.localPath);
-      if (fs.existsSync(absolutePath)) {
-        const newLocalPath = media.localPath.replace(/\.(mp4|mov|webm)$/i, '.jpeg');
-        const newAbsolutePath = this.getLocalPathFromMedia(newLocalPath);
+    const isVideo = media.mimeType?.startsWith('video/') ||
+      media.originalUrl?.toLowerCase().includes('.mp4') ||
+      media.localPath?.toLowerCase().includes('.mp4');
 
+    if (!isVideo) {
+      return { success: false, message: 'Asset is not a video' };
+    }
+
+    let absolutePath = media.localPath ? this.getLocalPathFromMedia(media.localPath) : null;
+    if (!absolutePath || !fs.existsSync(absolutePath)) {
+      if (media.originalUrl) {
         try {
-          await execAsync(`ffmpeg -i "${absolutePath}" -vframes 1 "${newAbsolutePath}"`);
-
-          await this.prisma.mediaAsset.update({
-            where: { id: mediaId },
-            data: {
-              localPath: newLocalPath,
-              mimeType: 'image/jpeg'
-            }
-          });
-
-          try {
-            fs.unlinkSync(absolutePath);
-          } catch (err) {
-            this.logger.error(`Failed to delete old video file: ${absolutePath}`, err);
+          const res = await fetch(media.originalUrl);
+          if (res.ok) {
+            const buf = Buffer.from(await res.arrayBuffer());
+            const fallbackPath = path.join(process.cwd(), 'uploads', `${media.id}.mp4`);
+            fs.writeFileSync(fallbackPath, buf);
+            absolutePath = fallbackPath;
           }
-
-          return { success: true };
-        } catch (err) {
-          this.logger.error(`Failed to force image using ffmpeg for ${mediaId}`, err);
-          return { success: false, message: 'Failed to convert video to image' };
+        } catch (e: any) {
+          this.logger.error(`Could not download video from R2 for forceImage: ${e.message}`);
         }
       }
     }
 
-    return { success: false, message: 'Not a valid video asset' };
+    if (!absolutePath || !fs.existsSync(absolutePath)) {
+      return { success: false, message: 'Video file could not be retrieved from disk or R2' };
+    }
+
+    const newLocalPath = (media.localPath || `api/uploads/${media.id}.mp4`).replace(/\.(mp4|mov|webm)$/i, '.jpeg');
+    const newAbsolutePath = this.getLocalPathFromMedia(newLocalPath);
+
+    try {
+      try {
+        await execAsync(`ffmpeg -y -ss 00:00:00.500 -i "${absolutePath}" -vframes 1 "${newAbsolutePath}"`);
+      } catch (ffErr) {
+        await execAsync(`ffmpeg -y -i "${absolutePath}" -vframes 1 "${newAbsolutePath}"`);
+      }
+
+      if (!fs.existsSync(newAbsolutePath)) {
+        return { success: false, message: 'ffmpeg failed to generate image frame' };
+      }
+
+      const imgBuffer = fs.readFileSync(newAbsolutePath);
+      const fileName = path.basename(newAbsolutePath);
+
+      // Upload newly extracted image frame to Cloudflare R2
+      const newR2Url = await this.storageService.uploadBuffer(imgBuffer, fileName, 'image/jpeg');
+
+      // Delete old video from Cloudflare R2
+      if (media.originalUrl) {
+        await this.storageService.deleteFile(media.originalUrl).catch(() => {});
+      }
+
+      await this.prisma.mediaAsset.update({
+        where: { id: mediaId },
+        data: {
+          localPath: newLocalPath,
+          originalUrl: newR2Url,
+          mimeType: 'image/jpeg',
+          fileSize: imgBuffer.length,
+        }
+      });
+
+      // Cleanup old local video file if different
+      try {
+        if (absolutePath !== newAbsolutePath && fs.existsSync(absolutePath)) {
+          fs.unlinkSync(absolutePath);
+        }
+      } catch (err) { }
+
+      return { success: true, originalUrl: newR2Url };
+    } catch (err: any) {
+      this.logger.error(`Failed to force image using ffmpeg for ${mediaId}`, err);
+      return { success: false, message: err.message || 'Failed to convert video to image' };
+    }
   }
 
   async reorderMedia(batchId: string, orderedMediaIds: string[], userId: string) {

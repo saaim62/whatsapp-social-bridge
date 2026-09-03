@@ -210,21 +210,46 @@ export default function DashboardPage() {
                 >
                   <div className="absolute left-0 top-0 bottom-0 w-1 bg-electric-cyan opacity-0 group-hover:opacity-100 transition-opacity" />
                   
-                  <div className="w-14 h-14 rounded-xl bg-graphite border border-graphite-border overflow-hidden shrink-0 relative">
-                    {batch.mediaAssets?.[0]?.originalUrl || batch.mediaAssets?.[0]?.localPath ? (
-                      <Image
-                        src={batch.mediaAssets[0].originalUrl || `${API_URL}/${batch.mediaAssets[0].localPath}`}
-                        alt=""
-                        fill
-                        className="object-cover group-hover:scale-110 transition-transform duration-700"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Zap className="w-5 h-5 text-slate-500" />
+                  {(() => {
+                    const isVid = (m: any) => m?.mimeType?.startsWith('video/') || m?.originalUrl?.endsWith('.mp4') || m?.localPath?.endsWith('.mp4');
+                    const thumbMedia = batch.mediaAssets?.find((m: any) => !isVid(m)) || batch.mediaAssets?.[0];
+                    const mediaSrc = thumbMedia?.originalUrl || (thumbMedia?.localPath ? `${API_URL}/${thumbMedia.localPath}` : null);
+                    const isVideo = isVid(thumbMedia);
+
+                    return (
+                      <div className="w-14 h-14 rounded-xl bg-graphite border border-graphite-border overflow-hidden shrink-0 relative">
+                        {mediaSrc ? (
+                          isVideo ? (
+                            <div className="w-full h-full relative">
+                              <video
+                                src={mediaSrc}
+                                className="w-full h-full object-cover"
+                                muted
+                                playsInline
+                                preload="metadata"
+                              />
+                              <div className="absolute bottom-1 right-1 bg-black/70 rounded px-1 text-[9px] text-white font-mono">
+                                MP4
+                              </div>
+                            </div>
+                          ) : (
+                            <Image
+                              src={mediaSrc}
+                              alt=""
+                              fill
+                              unoptimized
+                              className="object-cover group-hover:scale-110 transition-transform duration-700"
+                            />
+                          )
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Zap className="w-5 h-5 text-slate-500" />
+                          </div>
+                        )}
+                        <div className="absolute inset-0 ring-1 ring-inset ring-white/10 rounded-xl pointer-events-none" />
                       </div>
-                    )}
-                    <div className="absolute inset-0 ring-1 ring-inset ring-white/10 rounded-xl" />
-                  </div>
+                    );
+                  })()}
                   
                   <div className="flex-1 min-w-0">
                     <p className="font-heading text-lg font-bold text-slate-200 group-hover:text-electric-cyan transition-colors truncate">

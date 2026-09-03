@@ -59,10 +59,23 @@ export class BatchProcessor extends WorkerHost {
         );
       }
 
-      // Fallbacks if AI couldn't extract or no text was provided
-      if (!extractedData.product_name)
-        extractedData.product_name = 'Unknown Product (No text provided)';
-      if (!extractedData.price) extractedData.price = 'Price not specified';
+      // Fallbacks: NEVER set "Unknown Product (No text provided)" if rawText exists!
+      if (!extractedData.product_name || extractedData.product_name.includes('Unknown Product')) {
+        const heuristic = this.aiService.heuristicExtractProductDetails(batch.rawText || '');
+        if (heuristic.product_name) {
+          extractedData.product_name = heuristic.product_name;
+        } else if (batch.rawText && batch.rawText.trim().length > 0) {
+          extractedData.product_name = batch.rawText.trim().split('\n')[0].substring(0, 50);
+        } else {
+          extractedData.product_name = `Product [${batchId.substring(0, 8)}]`;
+        }
+      }
+      if (!extractedData.price || extractedData.price === 'Price not specified') {
+        const heuristic = this.aiService.heuristicExtractProductDetails(batch.rawText || '');
+        if (heuristic.price) {
+          extractedData.price = heuristic.price;
+        }
+      }
 
       // 2. Generate Content
       const generatedCaptions =

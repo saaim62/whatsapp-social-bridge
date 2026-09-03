@@ -23,17 +23,85 @@ export class AiService {
     }
   }
 
-  async extractProductDetails(rawText: string): Promise<any> {
-    if (!this.model) {
-      return {
-        productName: 'Mock Product',
-        price: 'Rs. 1000',
-        sizes: ['40', '41'],
-      };
+  heuristicExtractProductDetails(rawText: string): { product_name: string | null; price: string | null; features: string[] } {
+    if (!rawText || !rawText.trim()) {
+      return { product_name: null, price: null, features: [] };
     }
 
-    try {
-      const prompt = `Extract product details from the following WhatsApp message.
+    const lines = rawText
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l.length > 0);
+
+    let productName: string | null = null;
+    let price: string | null = null;
+    const features: string[] = [];
+
+    const ignoreRegex = /^(assalam|hello|hi|welcome|join|dear|sir|ye |hamara|http|jazak)/i;
+    const buzzwordOnly = /^(new arrival|restock|best quality|official model|original video|quantity available|stock alert|ready stock|exclusive|hot item)[\s.!:;~]*$/i;
+
+    for (const line of lines) {
+      if (ignoreRegex.test(line)) continue;
+
+      // Price extraction
+      if (!price) {
+        const p1 = line.match(/\b(?:price|cost|pkr|inr)\b\s*[:=-]?\s*(?:rs\.?)?\s*([\d,]+)/i);
+        if (p1) {
+          const num = parseInt(p1[1].replace(/,/g, ''), 10);
+          if (num > 0) price = `Rs. ${num.toLocaleString()}`;
+        } else {
+          const p2 = line.match(/(?:^|\s)(?:rs\.?\s*)?([\d,]{3,7})\s*(?:\/=|\/-|\/)/i);
+          if (p2) {
+            const num = parseInt(p2[1].replace(/,/g, ''), 10);
+            if (num > 0) price = `Rs. ${num.toLocaleString()}`;
+          }
+        }
+      }
+
+      // Feature extraction (colors, sizes, movement, etc.)
+      if (/^(colour|color|size|quality|movement|strap|material|dial|case|finish)s?\s*[:=-]/i.test(line)) {
+        features.push(line);
+        continue;
+      }
+
+      // Product name extraction
+      if (!productName && !buzzwordOnly.test(line) && !line.startsWith('http')) {
+        let cleaned = line
+          .replace(/^(new arrival|restock|hot item|exclusive|best quality)[\s.!:;~-]*/i, '')
+          .replace(/[\s.!:;~]+$/, '')
+          .trim();
+
+        if (/^\d+$/.test(cleaned) && lines.length > 1) {
+          continue;
+        }
+        if (cleaned.length >= 3) {
+          productName = cleaned;
+        }
+      }
+    }
+
+    return { product_name: productName, price, features };
+  }
+
+  async extractProductDetails(rawText: string): Promise<any> {
+    const fallback = this.heuristicExtractProductDetails(rawText);
+
+    if (!this.genAI) {
+      return fallback;
+    }
+
+    const candidateModels = [
+      'gemini-3.5-flash-lite',
+      'gemini-2.5-flash-lite',
+      'gemini-flash-lite-latest',
+      'gemini-3.1-flash-lite',
+      'gemini-flash-latest'
+    ];
+
+    for (const modelName of candidateModels) {
+      try {
+        const model = this.genAI.getGenerativeModel({ model: modelName });
+        const prompt = `Extract product details from the following WhatsApp message.
 CRITICAL INSTRUCTION: Do NOT include any luxury brand names or altered spellings of brands (no Rolex, roolax, Omega, Casio, etc.). Focus exclusively on material, movement, size, color, and build quality.
 
 Return ONLY a JSON object with the following schema:
@@ -46,18 +114,28 @@ In the "features" array, include all specific watch or product specifications li
 If a field is missing, leave it as null or empty array.
 Message:
 ${rawText}`;
-      const result = await this.model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-        },
-      });
-      const responseText = result.response.text();
-      return JSON.parse(responseText);
-    } catch (e) {
-      this.logger.error('Failed to extract product details', e);
-      return {};
+
+        const result = await model.generateContent({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+          },
+        });
+        const responseText = result.response.text();
+        const parsed = JSON.parse(responseText);
+
+        return {
+          product_name: parsed.product_name || fallback.product_name || 'Product',
+          price: parsed.price || fallback.price || 'Price not specified',
+          features: Array.isArray(parsed.features) && parsed.features.length > 0 ? parsed.features : fallback.features,
+        };
+      } catch (e: any) {
+        this.logger.warn(`Model ${modelName} extraction error: ${e.message}. Trying next candidate...`);
+      }
     }
+
+    this.logger.warn('All generative models failed. Falling back to heuristic extraction.');
+    return fallback;
   }
 
   async generateCaptions(extractedData: any): Promise<{

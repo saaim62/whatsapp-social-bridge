@@ -121,6 +121,7 @@ export class StorageService implements OnModuleInit {
         Key: filename,
         Body: buffer,
         ContentType: mimeType,
+        CacheControl: 'public, max-age=0, must-revalidate',
       });
 
       await account.client.send(command);

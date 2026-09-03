@@ -370,26 +370,45 @@ export default function ProductsPage() {
                           <Loader2 className="w-5 h-5 text-electric-cyan animate-spin" />
                         </div>
                       )}
-                      {batch.mediaAssets?.[0]?.originalUrl || batch.mediaAssets?.[0]?.localPath ? (
-                        batch.mediaAssets[0].mimeType?.startsWith("video/") ? (
-                          <video
-                            src={batch.mediaAssets[0].originalUrl || `${API_URL}/${batch.mediaAssets[0].localPath}`}
-                            className="w-full h-full object-cover"
-                            muted loop playsInline preload="metadata"
-                          />
-                        ) : (
+                      {(() => {
+                        const isVid = (m: any) => m?.mimeType?.startsWith('video/') || m?.originalUrl?.endsWith('.mp4') || m?.localPath?.endsWith('.mp4');
+                        const thumbMedia = batch.mediaAssets?.find((m: any) => !isVid(m)) || batch.mediaAssets?.[0];
+                        const mediaSrc = thumbMedia?.originalUrl || (thumbMedia?.localPath ? `${API_URL}/${thumbMedia.localPath}` : null);
+                        const isVideo = isVid(thumbMedia);
+
+                        if (!mediaSrc) {
+                          return (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <ImageIcon className="w-5 h-5 text-slate-600" />
+                            </div>
+                          );
+                        }
+
+                        if (isVideo) {
+                          return (
+                            <div className="w-full h-full relative">
+                              <video
+                                src={mediaSrc}
+                                className="w-full h-full object-cover"
+                                muted loop playsInline preload="metadata"
+                              />
+                              <div className="absolute bottom-1 right-1 bg-black/70 rounded px-1 text-[9px] text-white font-mono">
+                                MP4
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        return (
                           <Image
-                            src={batch.mediaAssets[0].originalUrl || `${API_URL}/${batch.mediaAssets[0].localPath}`}
+                            src={mediaSrc}
                             alt=""
                             fill
+                            unoptimized
                             className="object-cover group-hover:scale-110 transition-transform duration-700"
                           />
-                        )
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <ImageIcon className="w-5 h-5 text-slate-600" />
-                        </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   </td>
                   <td className="px-6 py-4 max-w-[200px] group/rename relative">

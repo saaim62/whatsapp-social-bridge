@@ -134,8 +134,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               Authorize Payment
             </button>
             <button 
-              onClick={() => signOut()}
-              className="mt-6 text-slate-500 hover:text-white text-sm transition-colors"
+              onClick={async () => {
+                await signOut({ redirect: false });
+                window.location.href = "/login";
+              }}
+              className="mt-6 text-slate-500 hover:text-white text-sm transition-colors cursor-pointer"
             >
               Terminate Session
             </button>
@@ -234,8 +237,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
              </div>
           </div>
           <button
-            onClick={() => signOut({ callbackUrl: "/login" })}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-colors text-sm font-medium border border-red-500/10 hover:border-red-500/30"
+            onClick={async () => {
+              await signOut({ redirect: false });
+              window.location.href = "/login";
+            }}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-colors text-sm font-medium border border-red-500/10 hover:border-red-500/30 cursor-pointer"
           >
             <LogOut className="w-4 h-4" />
             Terminate Session
