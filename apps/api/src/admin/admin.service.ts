@@ -1,11 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
 @Injectable()
 export class AdminService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private storageService: StorageService,
+  ) {}
 
   async getDashboardStats() {
     // Top-level stats
@@ -68,6 +72,7 @@ export class AdminService {
     }
     
     const serverStorageFreeBytes = Number(serverStorageTotalBytes) - serverStorageConsumedBytes;
+    const r2Accounts = await this.storageService.getStorageStats();
 
     return {
       totalUsers,
@@ -78,6 +83,7 @@ export class AdminService {
       serverStorageTotalBytes: Number(serverStorageTotalBytes),
       serverStorageConsumedBytes,
       serverStorageFreeBytes,
+      r2Accounts,
       activeUsersByDay: activeUsersByDay.map(row => ({
         date: row.date,
         count: Number(row.count)

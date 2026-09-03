@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { 
   Users, HardDrive, Activity, Archive, ArrowRight,
-  TrendingUp, Clock
+  TrendingUp, Clock, Cloud
 } from "lucide-react";
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -171,6 +171,52 @@ export default function AdminDashboard() {
           </motion.div>
         ))}
       </div>
+
+      {/* Cloudflare R2 Cloud Storage */}
+      {stats?.r2Accounts && stats.r2Accounts.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {stats.r2Accounts.map((acc: any, i: number) => {
+            const usagePercent = acc.limitBytes ? (acc.usageBytes / acc.limitBytes) * 100 : 0;
+            return (
+              <motion.div
+                key={acc.id || i}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 + i * 0.05 }}
+                className="glass-card rounded-2xl border border-sky-500/20 p-5 bg-sky-950/10 hover:border-sky-500/40 transition-all"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-xl bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                      <Cloud className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-white uppercase tracking-wider">Cloudflare R2 Account {i + 1}</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono font-semibold">Active</span>
+                      </div>
+                      <p className="text-xs text-slate-400 font-mono mt-0.5">Bucket: {acc.bucketName}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-lg font-bold font-heading text-white">{formatBytes(acc.usageBytes || 0)}</div>
+                    <div className="text-[10px] text-slate-500 font-medium">of {formatBytes(acc.limitBytes)}</div>
+                  </div>
+                </div>
+                <div className="mt-3.5 w-full bg-graphite-darker rounded-full h-2 overflow-hidden border border-graphite-border">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-sky-400 to-blue-500 transition-all duration-1000"
+                    style={{ width: `${Math.min(100, Math.max(2, usagePercent))}%` }}
+                  />
+                </div>
+                {acc.publicUrl && (
+                  <p className="text-[10px] text-slate-500 font-mono mt-2 truncate">CDN: {acc.publicUrl}</p>
+                )}
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
