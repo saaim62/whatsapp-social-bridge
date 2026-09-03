@@ -53,16 +53,20 @@ export class EmailService {
     const from = process.env.SMTP_FROM || process.env.SMTP_USER || '"DropRoute" <noreply@droproute.com>';
 
     // Fire and forget so we don't block the UI
-    this.transporter.sendMail({
-      from,
-      to: email,
-      subject: 'Verify your Account',
-      html: `<p>Please click <a href="${url}">here</a> to verify your account.</p>`,
-    }).then(info => {
-      this.logger.log(`Ethereal Email Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
-    }).catch(e => {
-      this.logger.error('Failed to send verification email', e);
-    });
+    setTimeout(() => {
+      console.log('[EmailService] Executing background sendMail for verification...');
+      this.transporter.sendMail({
+        from,
+        to: email,
+        subject: 'Verify your Account',
+        html: `<p>Please click <a href="${url}">here</a> to verify your account.</p>`,
+      }).then(info => {
+        this.logger.log(`Ethereal Email Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
+        console.log('[EmailService] Verification sendMail completed successfully.');
+      }).catch(e => {
+        this.logger.error('Failed to send verification email', e);
+      });
+    }, 0);
   }
 
   async sendPasswordResetEmail(email: string, token: string) {
@@ -78,15 +82,19 @@ export class EmailService {
     const from = process.env.SMTP_FROM || process.env.SMTP_USER || '"DropRoute" <noreply@droproute.com>';
 
     // Fire and forget so we don't block the UI
-    this.transporter.sendMail({
-      from,
-      to: email,
-      subject: 'Reset your Password',
-      html: `<p>Please click <a href="${url}">here</a> to reset your password.</p>`,
-    }).then(info => {
-      this.logger.log(`Ethereal Email Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
-    }).catch(e => {
-      this.logger.error('Failed to send reset email', e);
-    });
+    setTimeout(() => {
+      console.log('[EmailService] Executing background sendMail for reset password...');
+      this.transporter.sendMail({
+        from,
+        to: email,
+        subject: 'Reset your Password',
+        html: `<p>Please click <a href="${url}">here</a> to reset your password.</p>`,
+      }).then(info => {
+        this.logger.log(`Ethereal Email Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
+        console.log('[EmailService] Reset password sendMail completed successfully.');
+      }).catch(e => {
+        this.logger.error('Failed to send reset email', e);
+      });
+    }, 0);
   }
 }

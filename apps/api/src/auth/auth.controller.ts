@@ -16,9 +16,17 @@ export class AuthController {
 
   @Post('register')
   async register(@Body() body) {
+    console.log('[Register] Starting register process for', body.email);
     const user = await this.authService.register(body.email, body.password, body.name, body.city, body.country);
+    console.log('[Register] User created in database:', user.id);
+    
     // Send verification email
-    await this.emailService.sendVerificationEmail(user.email, user.verificationToken as string);
+    console.log('[Register] Triggering verification email...');
+    // We intentionally don't await this to avoid any potential event loop blocking
+    this.emailService.sendVerificationEmail(user.email, user.verificationToken as string).catch(e => {
+      console.error('[Register] Error triggering email', e);
+    });
+    console.log('[Register] Returning success response');
     return { message: 'Registration successful. Please check your email to verify your account.' };
   }
 
@@ -29,10 +37,16 @@ export class AuthController {
 
   @Post('forgot-password')
   async forgotPassword(@Body('email') email: string) {
+    console.log('[ForgotPassword] Starting forgot password process for', email);
     const token = await this.authService.generatePasswordResetToken(email);
+    console.log('[ForgotPassword] Token generated?', !!token);
     if (token) {
-      await this.emailService.sendPasswordResetEmail(email, token);
+      console.log('[ForgotPassword] Triggering reset email...');
+      this.emailService.sendPasswordResetEmail(email, token).catch(e => {
+        console.error('[ForgotPassword] Error triggering reset email', e);
+      });
     }
+    console.log('[ForgotPassword] Returning success response');
     return { message: 'If an account with that email exists, we sent a password reset link.' };
   }
 
