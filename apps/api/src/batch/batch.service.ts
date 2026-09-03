@@ -493,38 +493,28 @@ export class BatchService implements OnModuleDestroy {
       return { success: false, message: 'Batch not found' };
     }
 
-    // Delete physical files and Cloudflare R2 files
-    for (const media of batch.mediaAssets) {
-      if (media.originalUrl) {
-        await this.storageService.deleteFile(media.originalUrl);
-      }
-      if (media.localPath) {
-        await this.storageService.deleteFile(media.localPath);
-
-        const absolutePath = this.getLocalPathFromMedia(media.localPath);
-        if (fs.existsSync(absolutePath)) {
-          try {
-            fs.unlinkSync(absolutePath);
-            this.logger.log(`Deleted physical file: ${absolutePath}`);
-          } catch (err) {
-            this.logger.error(`Failed to delete file: ${absolutePath}`, err);
-          }
-        }
-
-        const ext = path.extname(absolutePath);
-        const originalPath = absolutePath.replace(ext, `_original${ext}`);
-        if (fs.existsSync(originalPath)) {
-          try {
-            fs.unlinkSync(originalPath);
-            this.logger.log(`Deleted physical original file: ${originalPath}`);
-          } catch (err) {
-            this.logger.error(`Failed to delete original file: ${originalPath}`, err);
-          }
-        }
-      }
-    }
-
+    // 1. Delete from DB immediately so UI responds in milliseconds
     await this.prisma.productBatch.delete({ where: { id } });
+
+    // 2. Perform R2 and disk deletions asynchronously in background
+    setImmediate(async () => {
+      for (const media of batch.mediaAssets) {
+        const r2Target = media.originalUrl || media.localPath;
+        if (r2Target) {
+          await this.storageService.deleteFile(r2Target).catch(() => {});
+        }
+        if (media.localPath) {
+          try {
+            const absolutePath = this.getLocalPathFromMedia(media.localPath);
+            if (fs.existsSync(absolutePath)) fs.unlinkSync(absolutePath);
+            const ext = path.extname(absolutePath);
+            const originalPath = absolutePath.replace(ext, `_original${ext}`);
+            if (fs.existsSync(originalPath)) fs.unlinkSync(originalPath);
+          } catch (err) { }
+        }
+      }
+    });
+
     return { success: true };
   }
 
@@ -541,35 +531,47 @@ export class BatchService implements OnModuleDestroy {
       return { success: false, message: 'No valid batches found' };
     }
 
-    // Delete physical files and Cloudflare R2 files
-    for (const batch of batches) {
-      for (const media of batch.mediaAssets) {
-        if (media.originalUrl) {
-          await this.storageService.deleteFile(media.originalUrl);
-        }
-        if (media.localPath) {
-          await this.storageService.deleteFile(media.localPath);
-
-          const absolutePath = this.getLocalPathFromMedia(media.localPath);
-          if (fs.existsSync(absolutePath)) {
-            try {
-              fs.unlinkSync(absolutePath);
-              this.logger.log(`Deleted physical file: ${absolutePath}`);
-            } catch (err) { }
-          }
-          const ext = path.extname(absolutePath);
-          const originalPath = absolutePath.replace(ext, `_original${ext}`);
-          if (fs.existsSync(originalPath)) {
-            try { fs.unlinkSync(originalPath); } catch (err) { }
-          }
-        }
-      }
-    }
-
-    // Delete all valid IDs from DB
+    // 1. Delete all valid IDs from DB immediately so UI responds in milliseconds
     await this.prisma.productBatch.deleteMany({
       where: {
         id: { in: batches.map(b => b.id) }
+      }
+    });
+
+    // 2. Perform R2 and disk deletions asynchronously in background
+    setImmediate(async () => {
+      const r2Keys = new Set<string>();
+      const diskPaths = new Set<string>();
+
+      for (const batch of batches) {
+        for (const media of batch.mediaAssets) {
+          if (media.originalUrl) {
+            r2Keys.add(media.originalUrl);
+          } else if (media.localPath) {
+            r2Keys.add(media.localPath);
+          }
+          if (media.localPath) {
+            diskPaths.add(media.localPath);
+          }
+        }
+      }
+
+      // Concurrently delete from Cloudflare R2 in chunks of 15
+      const keysArray = Array.from(r2Keys);
+      for (let i = 0; i < keysArray.length; i += 15) {
+        const chunk = keysArray.slice(i, i + 15);
+        await Promise.all(chunk.map(key => this.storageService.deleteFile(key).catch(() => {})));
+      }
+
+      // Delete disk files
+      for (const localPath of diskPaths) {
+        try {
+          const absolutePath = this.getLocalPathFromMedia(localPath);
+          if (fs.existsSync(absolutePath)) fs.unlinkSync(absolutePath);
+          const ext = path.extname(absolutePath);
+          const originalPath = absolutePath.replace(ext, `_original${ext}`);
+          if (fs.existsSync(originalPath)) fs.unlinkSync(originalPath);
+        } catch (err) { }
       }
     });
 
@@ -583,35 +585,26 @@ export class BatchService implements OnModuleDestroy {
     });
     if (!media || media.batch.userId !== userId) return { success: false, message: 'Media not found' };
 
-    // 1. Delete from Cloudflare R2
-    if (media.originalUrl) {
-      await this.storageService.deleteFile(media.originalUrl);
-    }
-    if (media.localPath) {
-      await this.storageService.deleteFile(media.localPath);
-
-      // 2. Delete physical files
-      const absolutePath = this.getLocalPathFromMedia(media.localPath);
-      if (fs.existsSync(absolutePath)) {
-        try {
-          fs.unlinkSync(absolutePath);
-        } catch (err) {
-          this.logger.error(`Failed to delete file: ${absolutePath}`, err);
-        }
-      }
-
-      const ext = path.extname(absolutePath);
-      const originalPath = absolutePath.replace(ext, `_original${ext}`);
-      if (fs.existsSync(originalPath)) {
-        try {
-          fs.unlinkSync(originalPath);
-        } catch (err) {
-          this.logger.error(`Failed to delete original file: ${originalPath}`, err);
-        }
-      }
-    }
-
+    // 1. Delete from DB immediately
     await this.prisma.mediaAsset.delete({ where: { id: mediaId } });
+
+    // 2. Cleanup R2 and disk asynchronously
+    setImmediate(async () => {
+      const r2Target = media.originalUrl || media.localPath;
+      if (r2Target) {
+        await this.storageService.deleteFile(r2Target).catch(() => {});
+      }
+      if (media.localPath) {
+        try {
+          const absolutePath = this.getLocalPathFromMedia(media.localPath);
+          if (fs.existsSync(absolutePath)) fs.unlinkSync(absolutePath);
+          const ext = path.extname(absolutePath);
+          const originalPath = absolutePath.replace(ext, `_original${ext}`);
+          if (fs.existsSync(originalPath)) fs.unlinkSync(originalPath);
+        } catch (err) { }
+      }
+    });
+
     return { success: true };
   }
 
