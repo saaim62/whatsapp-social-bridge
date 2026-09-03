@@ -636,6 +636,7 @@ export class WhatsappService implements OnModuleInit {
     const payload: any = {
       id: messageId,
       from: jid,
+      userId: userId,
       senderName: senderName,
       timestamp: msg.messageTimestamp?.toString() || Date.now().toString(),
       type: isMedia ? 'image' : 'text', // BatchService uses 'image' to detect media, so we keep it for now
