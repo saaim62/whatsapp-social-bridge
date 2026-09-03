@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import Redis from 'ioredis';
+import * as path from 'path';
 
 interface R2Account {
   id: string;
@@ -162,32 +163,40 @@ export class StorageService implements OnModuleInit {
     return stats;
   }
 
-  async deleteFile(filename: string): Promise<void> {
+  async deleteFile(fileOrUrl: string): Promise<void> {
+    if (!fileOrUrl) return;
+    const filename = path.basename(fileOrUrl.split('?')[0]);
+    if (!filename) return;
+
     let accountId: string | null = null;
     try {
       accountId = await this.redisClient.get(`r2_file_account:${filename}`);
     } catch (e) { }
 
-    const account = accountId ? this.accounts.find(a => a.id === accountId) : this.accounts[0];
-    if (!account) return;
+    const targetAccounts = accountId
+      ? this.accounts.filter(a => a.id === accountId)
+      : this.accounts;
 
-    try {
-      const command = new DeleteObjectCommand({
-        Bucket: account.bucketName,
-        Key: filename,
-      });
-      await account.client.send(command);
-
+    for (const account of targetAccounts) {
       try {
-        const sizeStr = await this.redisClient.get(`r2_file_size:${filename}`);
-        if (sizeStr) {
-          await this.decrementAccountUsage(account.id, parseInt(sizeStr, 10));
-        }
-        await this.redisClient.del(`r2_file_account:${filename}`);
-        await this.redisClient.del(`r2_file_size:${filename}`);
-      } catch (e) { }
-    } catch (error) {
-      this.logger.error(`Failed to delete ${filename} from R2 account ${account.id}`, error);
+        const command = new DeleteObjectCommand({
+          Bucket: account.bucketName,
+          Key: filename,
+        });
+        await account.client.send(command);
+        this.logger.log(`Deleted ${filename} from Cloudflare R2 bucket: ${account.bucketName}`);
+
+        try {
+          const sizeStr = await this.redisClient.get(`r2_file_size:${filename}`);
+          if (sizeStr) {
+            await this.decrementAccountUsage(account.id, parseInt(sizeStr, 10));
+          }
+          await this.redisClient.del(`r2_file_account:${filename}`);
+          await this.redisClient.del(`r2_file_size:${filename}`);
+        } catch (e) { }
+      } catch (error) {
+        this.logger.error(`Failed to delete ${filename} from R2 account ${account.id}`, error);
+      }
     }
   }
 }

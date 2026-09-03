@@ -493,9 +493,14 @@ export class BatchService implements OnModuleDestroy {
       return { success: false, message: 'Batch not found' };
     }
 
-    // Delete physical files
+    // Delete physical files and Cloudflare R2 files
     for (const media of batch.mediaAssets) {
+      if (media.originalUrl) {
+        await this.storageService.deleteFile(media.originalUrl);
+      }
       if (media.localPath) {
+        await this.storageService.deleteFile(media.localPath);
+
         const absolutePath = this.getLocalPathFromMedia(media.localPath);
         if (fs.existsSync(absolutePath)) {
           try {
@@ -536,10 +541,15 @@ export class BatchService implements OnModuleDestroy {
       return { success: false, message: 'No valid batches found' };
     }
 
-    // Delete physical files
+    // Delete physical files and Cloudflare R2 files
     for (const batch of batches) {
       for (const media of batch.mediaAssets) {
+        if (media.originalUrl) {
+          await this.storageService.deleteFile(media.originalUrl);
+        }
         if (media.localPath) {
+          await this.storageService.deleteFile(media.localPath);
+
           const absolutePath = this.getLocalPathFromMedia(media.localPath);
           if (fs.existsSync(absolutePath)) {
             try {
@@ -573,8 +583,14 @@ export class BatchService implements OnModuleDestroy {
     });
     if (!media || media.batch.userId !== userId) return { success: false, message: 'Media not found' };
 
-    // 3. Delete physical file
+    // 1. Delete from Cloudflare R2
+    if (media.originalUrl) {
+      await this.storageService.deleteFile(media.originalUrl);
+    }
     if (media.localPath) {
+      await this.storageService.deleteFile(media.localPath);
+
+      // 2. Delete physical files
       const absolutePath = this.getLocalPathFromMedia(media.localPath);
       if (fs.existsSync(absolutePath)) {
         try {
@@ -721,6 +737,19 @@ export class BatchService implements OnModuleDestroy {
       }
 
       fs.writeFileSync(absolutePath, imageBuffer);
+
+      try {
+        const fileName = path.basename(absolutePath);
+        const mimeType = media.mimeType || 'image/jpeg';
+        const r2Url = await this.storageService.uploadBuffer(imageBuffer, fileName, mimeType);
+        await this.prisma.mediaAsset.update({
+          where: { id: mediaId },
+          data: { originalUrl: r2Url },
+        });
+      } catch (r2Err: any) {
+        this.logger.warn(`Could not sync newly masked image to R2: ${r2Err.message}`);
+      }
+
       return { success: true, message: 'Logos masked successfully' };
     } catch (e: any) {
       this.logger.error(`Failed to mask logo for media ${mediaId}`, e);
@@ -744,6 +773,20 @@ export class BatchService implements OnModuleDestroy {
     if (fs.existsSync(originalPath)) {
       try {
         fs.copyFileSync(originalPath, absolutePath);
+
+        try {
+          const revertedBuf = fs.readFileSync(absolutePath);
+          const fileName = path.basename(absolutePath);
+          const mimeType = media.mimeType || 'image/jpeg';
+          const r2Url = await this.storageService.uploadBuffer(revertedBuf, fileName, mimeType);
+          await this.prisma.mediaAsset.update({
+            where: { id: mediaId },
+            data: { originalUrl: r2Url },
+          });
+        } catch (r2Err: any) {
+          this.logger.warn(`Could not sync reverted image to R2: ${r2Err.message}`);
+        }
+
         return { success: true, message: 'Image reverted to original successfully' };
       } catch (e: any) {
         this.logger.error(`Failed to revert logo for media ${mediaId}`, e);
