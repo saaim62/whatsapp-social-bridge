@@ -75,7 +75,7 @@ export class AdminService {
       activePipelines,
       totalMediaCount: mediaAgg._count.id || 0,
       totalStorageBytes: mediaAgg._sum.fileSize || 0,
-      serverStorageTotalBytes,
+      serverStorageTotalBytes: Number(serverStorageTotalBytes),
       serverStorageConsumedBytes,
       serverStorageFreeBytes,
       activeUsersByDay: activeUsersByDay.map(row => ({

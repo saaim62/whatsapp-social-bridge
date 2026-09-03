@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+# Start local Redis server for free background jobs
+echo "Starting local Redis server..."
+redis-server --daemonize yes || echo "Redis server failed to start, it might already be running"
+
 # Run Prisma database migrations to ensure the Neon database is up to date
 echo "Pushing database schema to Neon..."
 cd apps/api
