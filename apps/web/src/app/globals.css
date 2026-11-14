@@ -24,14 +24,14 @@
   --color-gold-600: #a87f16;
   --color-gold-dim: rgba(217, 165, 33, 0.18);
 
-  /* Brand IS gold — the cinematic identity. Every brand-* usage
+  /* Brand IS gold — the app's identity. Every brand-* usage
      across the app picks this ramp up automatically. */
   --color-brand-400: #e8c15a;
   --color-brand-500: #d9a521;
   --color-brand-600: #a87f16;
   
-  --color-surface-glass: rgba(18, 18, 20, 0.6);
-  --color-surface-glass-hover: rgba(28, 28, 31, 0.8);
+  --color-surface-glass: rgba(14, 14, 16, 0.55);
+  --color-surface-glass-hover: rgba(24, 24, 27, 0.65);
 }
 
 @layer base {
@@ -45,16 +45,12 @@
 
   body {
     @apply bg-obsidian text-slate-200 font-sans antialiased;
+    /* One warm breath of light at the top, a whisper of grain.
+       No coloured glows competing with the glass. */
     background-image:
-      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(217, 165, 33, 0.05), transparent),
-      radial-gradient(ellipse 60% 40% at 100% 0%, rgba(0, 240, 255, 0.03), transparent),
-      radial-gradient(ellipse 50% 50% at 0% 100%, rgba(0, 255, 163, 0.02), transparent);
+      url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.025'/%3E%3C/svg%3E"),
+      radial-gradient(ellipse 90% 55% at 50% -20%, rgba(217, 165, 33, 0.05), transparent);
     background-attachment: fixed;
-    /* Noise texture overlay for premium feel */
-    background-image: 
-      url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E"),
-      radial-gradient(circle at 50% 0%, rgba(0,240,255,0.05) 0%, transparent 50%),
-      radial-gradient(circle at 100% 50%, rgba(139,92,246,0.05) 0%, transparent 50%);
   }
 
   ::selection {
@@ -63,46 +59,42 @@
 }
 
 @layer components {
-  /* Cinematic glass system — deep shadows, an inset top light so every
-     surface reads as a lit slab, and a hairline gold-tinted edge. */
+  /* The glass system — frosted panes floating over the 3D studio.
+     Real translucency (the scene blurs through), a lit top edge,
+     a deep soft shadow beneath. Restraint is the luxury. */
   .glass-panel {
-    @apply bg-surface-glass backdrop-blur-xl border border-white/[0.07];
+    @apply backdrop-blur-2xl backdrop-saturate-150 border border-white/[0.09];
+    background: linear-gradient(160deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018) 42%, rgba(0, 0, 0, 0.12));
+    background-color: var(--color-surface-glass);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.06),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.4),
-      0 30px 80px -24px rgba(0, 0, 0, 0.9);
+      inset 0 1px 0 rgba(255, 255, 255, 0.09),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.35),
+      0 32px 80px -28px rgba(0, 0, 0, 0.9);
   }
 
   .glass-card {
-    @apply bg-graphite-light/50 backdrop-blur-md border border-white/[0.07] rounded-2xl overflow-hidden transition-all duration-300;
+    @apply backdrop-blur-xl backdrop-saturate-150 border border-white/[0.08] rounded-2xl overflow-hidden transition-all duration-300;
+    background: linear-gradient(165deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012) 45%, rgba(0, 0, 0, 0.1));
+    background-color: rgba(16, 16, 18, 0.48);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.05),
-      0 24px 60px -20px rgba(0, 0, 0, 0.85);
+      inset 0 1px 0 rgba(255, 255, 255, 0.07),
+      0 24px 55px -22px rgba(0, 0, 0, 0.85);
   }
 
   .glass-card-hover {
-    @apply bg-graphite-light/50 backdrop-blur-md border border-white/[0.07] rounded-2xl overflow-hidden transition-all duration-300 hover:bg-graphite-lighter/60 hover:border-gold-500/25 hover:-translate-y-0.5;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.05),
-      0 24px 60px -20px rgba(0, 0, 0, 0.85);
-  }
-  .glass-card-hover:hover {
+    @apply backdrop-blur-xl backdrop-saturate-150 border border-white/[0.08] rounded-2xl overflow-hidden transition-all duration-300 hover:border-gold-500/30 hover:-translate-y-0.5;
+    background: linear-gradient(165deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012) 45%, rgba(0, 0, 0, 0.1));
+    background-color: rgba(16, 16, 18, 0.48);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.07),
-      0 30px 70px -20px rgba(0, 0, 0, 0.9),
-      0 0 32px rgba(217, 165, 33, 0.07);
+      0 24px 55px -22px rgba(0, 0, 0, 0.85);
   }
-
-  /* Perspective floor grid for the cinematic scene backdrop. */
-  .scene-floor {
-    background-image:
-      linear-gradient(rgba(232, 193, 90, 0.35) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(232, 193, 90, 0.35) 1px, transparent 1px);
-    background-size: 46px 46px;
-    transform: perspective(750px) rotateX(63deg);
-    transform-origin: bottom;
-    -webkit-mask-image: linear-gradient(to top, black 25%, transparent 90%);
-    mask-image: linear-gradient(to top, black 25%, transparent 90%);
+  .glass-card-hover:hover {
+    background-color: rgba(22, 22, 25, 0.58);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      0 32px 70px -22px rgba(0, 0, 0, 0.92),
+      0 0 28px rgba(217, 165, 33, 0.05);
   }
 
   .text-gradient-gold {
@@ -130,19 +122,19 @@
   .btn-primary {
     @apply relative inline-flex items-center justify-center gap-2 px-6 py-3 text-sm font-bold text-black rounded-xl
       bg-gradient-to-b from-gold-300 via-gold-500 to-gold-600
-      shadow-[0_10px_30px_-8px_rgba(217,165,33,0.55),inset_0_1px_0_rgba(255,255,255,0.45)]
+      shadow-[0_8px_24px_-8px_rgba(217,165,33,0.5),inset_0_1px_0_rgba(255,255,255,0.45)]
       transition-all duration-300 ease-out
-      hover:scale-[1.02] hover:shadow-[0_14px_38px_-8px_rgba(217,165,33,0.7),inset_0_1px_0_rgba(255,255,255,0.5)]
-      active:scale-[0.98]
-      disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100;
+      hover:brightness-110 hover:shadow-[0_10px_28px_-8px_rgba(217,165,33,0.6),inset_0_1px_0_rgba(255,255,255,0.5)]
+      active:scale-[0.99]
+      disabled:opacity-50 disabled:cursor-not-allowed;
   }
   
   .btn-glow {
     @apply relative inline-flex items-center justify-center gap-2 px-6 py-3 text-sm font-semibold text-white rounded-xl
-      bg-graphite-lighter border border-white/10
+      bg-white/[0.04] backdrop-blur-md border border-white/10
       transition-all duration-300 ease-out
-      hover:border-electric-cyan/50 hover:shadow-[0_0_20px_rgba(0,240,255,0.2)] hover:bg-white/5
-      active:scale-[0.98];
+      hover:border-gold-500/40 hover:bg-white/[0.07]
+      active:scale-[0.99];
   }
 
   .btn-ghost {
@@ -152,7 +144,7 @@
 
   /* Inputs */
   .input-premium {
-    @apply w-full px-4 py-3 text-sm text-white bg-graphite border border-graphite-border rounded-xl
+    @apply w-full px-4 py-3 text-sm text-white bg-white/[0.03] backdrop-blur-md border border-white/[0.09] rounded-xl
       transition-all duration-300
       focus:outline-none focus:ring-1 focus:ring-gold-500 focus:border-gold-500
       placeholder:text-slate-600;
@@ -165,24 +157,6 @@
   50% { transform: translateY(-10px); }
 }
 
-@keyframes pulse-cyan {
-  0%, 100% { box-shadow: 0 0 10px rgba(0, 240, 255, 0.1); border-color: rgba(0, 240, 255, 0.2); }
-  50% { box-shadow: 0 0 25px rgba(0, 240, 255, 0.3); border-color: rgba(0, 240, 255, 0.5); }
-}
-
-@keyframes pulse-emerald {
-  0%, 100% { box-shadow: 0 0 10px rgba(0, 255, 163, 0.1); border-color: rgba(0, 255, 163, 0.2); }
-  50% { box-shadow: 0 0 25px rgba(0, 255, 163, 0.3); border-color: rgba(0, 255, 163, 0.5); }
-}
-
 .animate-float-slow {
   animation: float-slow 6s ease-in-out infinite;
-}
-
-.animate-pulse-cyan {
-  animation: pulse-cyan 3s ease-in-out infinite;
-}
-
-.animate-pulse-emerald {
-  animation: pulse-emerald 3s ease-in-out infinite;
 }
