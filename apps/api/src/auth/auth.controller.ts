@@ -1,6 +1,8 @@
-import { Controller, Post, Body, UnauthorizedException, Get, Query, Logger } from '@nestjs/common';
+import { Controller, Post, Body, UnauthorizedException, Get, Query, Logger, UseGuards, Request } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { EmailService } from './email.service';
+import { JwtAuthGuard } from './jwt-auth.guard';
+import { AuthThrottleGuard } from './auth-throttle.guard';
 
 @Controller('api/account')
 export class AuthController {
@@ -10,11 +12,13 @@ export class AuthController {
     private emailService: EmailService
   ) {}
 
+  @UseGuards(AuthThrottleGuard)
   @Post('login')
   async login(@Body() body) {
     return this.authService.login(body.email, body.password);
   }
 
+  @UseGuards(AuthThrottleGuard)
   @Post('register')
   async register(@Body() body) {
     this.logger.log(`[Register] Starting register process for ${body.email}`);
@@ -36,6 +40,7 @@ export class AuthController {
     return this.authService.verifyEmail(token);
   }
 
+  @UseGuards(AuthThrottleGuard)
   @Post('forgot-password')
   async forgotPassword(@Body('email') email: string) {
     this.logger.log(`[ForgotPassword] Starting forgot password process for ${email}`);
@@ -56,8 +61,11 @@ export class AuthController {
     return this.authService.resetPassword(body.token, body.password);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Post('mock-pay')
-  async mockPay(@Body('email') email: string) {
-    return this.authService.mockPay(email);
+  async mockPay(@Request() req) {
+    // Identity comes from the caller's JWT — never trust an email from the body:
+    // otherwise anyone could unlock any account for free just by knowing its email.
+    return this.authService.mockPay(req.user.email);
   }
 }
