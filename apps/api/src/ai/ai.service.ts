@@ -1,26 +1,75 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GoogleGenerativeAI, Part } from '@google/generative-ai';
 import * as fs from 'fs';
 
+/**
+ * Provider-agnostic LLM client (OpenAI-compatible chat completions).
+ * Defaults target Groq's free tier; any compatible endpoint (Groq,
+ * OpenRouter, Gemini's OpenAI endpoint, a local server) can be selected
+ * purely by env:
+ *   LLM_API_KEY      — provider API key
+ *   LLM_BASE_URL     — default https://api.groq.com/openai/v1
+ *   LLM_TEXT_MODEL   — default llama-3.3-70b-versatile
+ *   LLM_VISION_MODEL — default meta-llama/llama-4-scout-17b-16e-instruct
+ */
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
-  private genAI: GoogleGenerativeAI;
-  private model: any;
+  private readonly apiKey: string | null;
+  private readonly baseUrl: string;
+  private readonly textModel: string;
+  private readonly visionModel: string;
 
   constructor(private configService: ConfigService) {
-    const apiKey = this.configService.get('LLM_API_KEY');
-    if (apiKey && apiKey !== 'test_gemini_key') {
-      this.genAI = new GoogleGenerativeAI(apiKey);
-      this.model = this.genAI.getGenerativeModel({
-        model: 'gemini-3.5-flash-lite',
-      });
-    } else {
+    const apiKey = this.configService.get<string>('LLM_API_KEY');
+    this.apiKey = apiKey && apiKey !== 'test_gemini_key' ? apiKey : null;
+    this.baseUrl = (
+      this.configService.get<string>('LLM_BASE_URL') ||
+      'https://api.groq.com/openai/v1'
+    ).replace(/\/$/, '');
+    this.textModel =
+      this.configService.get<string>('LLM_TEXT_MODEL') ||
+      'llama-3.3-70b-versatile';
+    this.visionModel =
+      this.configService.get<string>('LLM_VISION_MODEL') ||
+      'meta-llama/llama-4-scout-17b-16e-instruct';
+    if (!this.apiKey) {
       this.logger.warn(
         'No valid LLM_API_KEY found. AI features will be mocked.',
       );
+    } else {
+      this.logger.log(
+        `LLM provider ready: ${this.baseUrl} (text=${this.textModel}, vision=${this.visionModel})`,
+      );
     }
+  }
+
+  /** One chat-completions call. Returns the assistant message content. */
+  private async chat(
+    messages: any[],
+    opts: { model?: string; json?: boolean } = {},
+  ): Promise<string> {
+    const res = await fetch(`${this.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: opts.model || this.textModel,
+        messages,
+        temperature: 0.2,
+        ...(opts.json ? { response_format: { type: 'json_object' } } : {}),
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`LLM request failed (${res.status}): ${body.slice(0, 300)}`);
+    }
+    const data: any = await res.json();
+    const content = data?.choices?.[0]?.message?.content;
+    if (!content) throw new Error('LLM returned an empty response.');
+    return content;
   }
 
   heuristicExtractProductDetails(rawText: string): { product_name: string | null; price: string | null; features: string[] } {
@@ -86,22 +135,11 @@ export class AiService {
   async extractProductDetails(rawText: string): Promise<any> {
     const fallback = this.heuristicExtractProductDetails(rawText);
 
-    if (!this.genAI) {
+    if (!this.apiKey) {
       return fallback;
     }
 
-    const candidateModels = [
-      'gemini-3.5-flash-lite',
-      'gemini-2.5-flash-lite',
-      'gemini-flash-lite-latest',
-      'gemini-3.1-flash-lite',
-      'gemini-flash-latest'
-    ];
-
-    for (const modelName of candidateModels) {
-      try {
-        const model = this.genAI.getGenerativeModel({ model: modelName });
-        const prompt = `Extract product details from the following WhatsApp message.
+    const prompt = `Extract product details from the following WhatsApp message.
 CRITICAL INSTRUCTION: Do NOT include any luxury brand names or altered spellings of brands (no Rolex, roolax, Omega, Casio, etc.). Focus exclusively on material, movement, size, color, and build quality.
 
 Return ONLY a JSON object with the following schema:
@@ -115,13 +153,13 @@ If a field is missing, leave it as null or empty array.
 Message:
 ${rawText}`;
 
-        const result = await model.generateContent({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: {
-            responseMimeType: 'application/json',
-          },
-        });
-        const responseText = result.response.text();
+    const candidateModels = [this.textModel, 'llama-3.1-8b-instant'];
+    for (const modelName of candidateModels) {
+      try {
+        const responseText = await this.chat(
+          [{ role: 'user', content: prompt }],
+          { model: modelName, json: true },
+        );
         const parsed = JSON.parse(responseText);
 
         return {
@@ -143,7 +181,7 @@ ${rawText}`;
     facebookCaption: string;
     storyText: string;
   }> {
-    if (!this.model) {
+    if (!this.apiKey) {
       return {
         instagramCaption: 'Mock IG Caption',
         facebookCaption: 'Mock FB Caption',
@@ -170,13 +208,10 @@ Return ONLY a JSON object with this exact schema:
   "facebookCaption": "string",
   "storyText": "string"
 }`;
-      const result = await this.model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-        },
-      });
-      const responseText = result.response.text();
+      const responseText = await this.chat(
+        [{ role: 'user', content: prompt }],
+        { json: true },
+      );
       return JSON.parse(responseText);
     } catch (e) {
       this.logger.error('Failed to generate captions', e);
@@ -190,7 +225,7 @@ Return ONLY a JSON object with this exact schema:
     width: number;
     height: number;
   } | null> {
-    if (!this.model) {
+    if (!this.apiKey) {
       return null;
     }
 
@@ -198,13 +233,6 @@ Return ONLY a JSON object with this exact schema:
       if (!fs.existsSync(imagePath)) return null;
       const imageBuffer = fs.readFileSync(imagePath);
       const mimeType = imagePath.endsWith('.png') ? 'image/png' : 'image/jpeg';
-
-      const imagePart: Part = {
-        inlineData: {
-          data: imageBuffer.toString('base64'),
-          mimeType,
-        },
-      };
 
       const prompt = `You are a brand rights protection scanner. Detect if there is any visible brand logo on this product.
 If a brand logo is detected, return its bounding box coordinates scaled from 0 to 1000 in this EXACT JSON format:
@@ -214,13 +242,23 @@ If no logo is detected, return:
 
 Return ONLY the JSON object.`;
 
-      const result = await this.model.generateContent({
-        contents: [{ role: 'user', parts: [imagePart, { text: prompt }] }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-        },
-      });
-      const responseText = result.response.text();
+      const responseText = await this.chat(
+        [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:${mimeType};base64,${imageBuffer.toString('base64')}`,
+                },
+              },
+            ],
+          },
+        ],
+        { model: this.visionModel, json: true },
+      );
       const data = JSON.parse(responseText);
 
       if (data.hasLogo && data.box) {
