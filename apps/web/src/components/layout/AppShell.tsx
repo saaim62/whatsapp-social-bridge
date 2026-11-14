@@ -53,7 +53,7 @@ function getPageTitle(pathname: string | null): string {
 export function CinematicScene() {
   return (
     <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden>
-      <div className="absolute -top-40 left-1/4 w-[620px] h-[420px] rounded-full bg-gold-500/[0.05] blur-[130px]" />
+      <div className="absolute -top-40 left-1/4 w-[620px] h-[420px] rounded-full bg-gold-500/[0.035] blur-[130px]" />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_55%,rgba(0,0,0,0.5)_100%)]" />
     </div>
   );
