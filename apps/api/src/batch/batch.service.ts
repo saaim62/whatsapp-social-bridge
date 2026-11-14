@@ -41,8 +41,8 @@ export class BatchService implements OnModuleDestroy {
     @InjectQueue('image-blur') private imageBlurQueue: Queue,
   ) {
     this.redisClient = new Redis({
-      host: '127.0.0.1',
-      port: 6379,
+      host: this.configService.get<string>('REDIS_HOST', '127.0.0.1'),
+      port: this.configService.get<number>('REDIS_PORT', 6379),
     });
     this.redisClient.on('error', (err) => {
       console.error('[Redis Client Error]', err.message);
