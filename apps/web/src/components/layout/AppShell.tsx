@@ -47,16 +47,14 @@ function getPageTitle(pathname: string | null): string {
   return PAGE_TITLES[pathname] ?? "Command Center";
 }
 
-/* The cinematic scene: ambient gold/cyan light, a perspective floor
-   grid and a vignette. Fixed behind everything, all pages inherit it. */
+/* The ambient base under the glass: one warm breath of gold light
+   from the top and a soft vignette. Everything else is the 3D studio
+   itself — no coloured glows, no floor grid. */
 export function CinematicScene() {
   return (
     <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden>
-      <div className="absolute -top-40 left-1/4 w-[620px] h-[420px] rounded-full bg-gold-500/[0.08] blur-[130px]" />
-      <div className="absolute top-1/3 -right-40 w-[520px] h-[460px] rounded-full bg-electric-cyan/[0.05] blur-[130px]" />
-      <div className="absolute -bottom-32 -left-24 w-[460px] h-[340px] rounded-full bg-electric-magenta/[0.04] blur-[120px]" />
-      <div className="scene-floor absolute -bottom-8 left-[-12%] right-[-12%] h-80 opacity-[0.10]" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_50%,rgba(0,0,0,0.55)_100%)]" />
+      <div className="absolute -top-40 left-1/4 w-[620px] h-[420px] rounded-full bg-gold-500/[0.05] blur-[130px]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_55%,rgba(0,0,0,0.5)_100%)]" />
     </div>
   );
 }
@@ -243,13 +241,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   {isActive && (
                     <motion.div
                       layoutId="active-nav"
-                      className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-gold-300 via-gold-500 to-gold-600 shadow-[0_0_12px_rgba(217,165,33,0.65)]"
+                      className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-gold-300 via-gold-500 to-gold-600"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ type: "spring", stiffness: 300, damping: 30 }}
                     />
                   )}
-                  <Icon className={`w-5 h-5 ${isActive ? "text-gold-400 drop-shadow-[0_0_8px_rgba(217,165,33,0.5)]" : ""}`} />
+                  <Icon className={`w-5 h-5 ${isActive ? "text-gold-400" : ""}`} />
                   <span className="font-medium text-sm">{item.label}</span>
                 </Link>
               );
@@ -261,7 +259,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="p-4 border-t border-graphite-border bg-graphite/30">
           <div className="flex items-center justify-between mb-4 px-2">
              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-electric-emerald animate-pulse-emerald" />
+                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 <span className="text-xs text-slate-400 font-mono">{session?.user?.email}</span>
              </div>
           </div>
@@ -291,7 +289,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           >
             <div>
               <h1 className="text-2xl font-heading font-bold text-white tracking-tight">{pageTitle}</h1>
-              <div className="mt-1.5 h-[2px] w-14 rounded-full bg-gradient-to-r from-gold-400 via-gold-500 to-transparent shadow-[0_0_10px_rgba(217,165,33,0.5)]" />
+              <div className="mt-1.5 h-[2px] w-14 rounded-full bg-gradient-to-r from-gold-400 via-gold-500 to-transparent" />
             </div>
           </motion.div>
 
@@ -360,7 +358,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     transition={{ type: "spring", stiffness: 400, damping: 30 }}
                   />
                 )}
-                <Icon className={`w-5 h-5 relative z-10 ${isActive ? "filter drop-shadow-[0_0_8px_rgba(217,165,33,0.8)]" : ""}`} />
+                <Icon className="w-5 h-5 relative z-10" />
                 <span className="text-[9px] font-medium uppercase tracking-wider relative z-10">{item.label}</span>
               </Link>
             );
@@ -398,15 +396,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="p-2 bg-graphite-light">
                 <div className="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-widest">System Actions</div>
                 <button onClick={() => { router.push('/'); setIsCmdkOpen(false); }} className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 text-slate-300 hover:text-white transition-colors text-sm text-left group">
-                  <Activity className="w-4 h-4 text-gold-400 group-hover:drop-shadow-[0_0_8px_rgba(217,165,33,0.8)] transition-all" />
+                  <Activity className="w-4 h-4 text-gold-400 transition-all" />
                   Mission Control Dashboard
                 </button>
                 <button onClick={() => { router.push('/products'); setIsCmdkOpen(false); }} className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 text-slate-300 hover:text-white transition-colors text-sm text-left group">
-                  <Package className="w-4 h-4 text-brand-400 group-hover:drop-shadow-[0_0_8px_#ff00ff] transition-all" />
+                  <Package className="w-4 h-4 text-brand-400 transition-all" />
                   Access Product Matrix
                 </button>
                 <button onClick={() => { router.push('/sources'); setIsCmdkOpen(false); }} className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 text-slate-300 hover:text-white transition-colors text-sm text-left group">
-                  <Radio className="w-4 h-4 text-electric-emerald group-hover:drop-shadow-[0_0_8px_rgba(0,255,102,0.8)] transition-all" />
+                  <Radio className="w-4 h-4 text-emerald-400 transition-all" />
                   Manage Integrations
                 </button>
                 <button onClick={() => { router.push('/settings'); setIsCmdkOpen(false); }} className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 text-slate-300 hover:text-white transition-colors text-sm text-left group">
