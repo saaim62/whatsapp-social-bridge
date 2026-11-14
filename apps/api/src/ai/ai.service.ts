@@ -9,7 +9,7 @@ import * as fs from 'fs';
  * purely by env:
  *   LLM_API_KEY      — provider API key
  *   LLM_BASE_URL     — default https://api.groq.com/openai/v1
- *   LLM_TEXT_MODEL   — default llama-3.3-70b-versatile
+ *   LLM_TEXT_MODEL   — default openai/gpt-oss-120b
  *   LLM_VISION_MODEL — default meta-llama/llama-4-scout-17b-16e-instruct
  */
 @Injectable()
@@ -29,7 +29,7 @@ export class AiService {
     ).replace(/\/$/, '');
     this.textModel =
       this.configService.get<string>('LLM_TEXT_MODEL') ||
-      'llama-3.3-70b-versatile';
+      'openai/gpt-oss-120b';
     this.visionModel =
       this.configService.get<string>('LLM_VISION_MODEL') ||
       'meta-llama/llama-4-scout-17b-16e-instruct';
@@ -49,19 +49,28 @@ export class AiService {
     messages: any[],
     opts: { model?: string; json?: boolean } = {},
   ): Promise<string> {
-    const res = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: opts.model || this.textModel,
-        messages,
-        temperature: 0.2,
-        ...(opts.json ? { response_format: { type: 'json_object' } } : {}),
-      }),
+    const payload = (json: boolean) => ({
+      model: opts.model || this.textModel,
+      messages,
+      temperature: 0.2,
+      ...(json ? { response_format: { type: 'json_object' } } : {}),
     });
+    const send = (json: boolean) =>
+      fetch(`${this.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload(json)),
+      });
+
+    let res = await send(!!opts.json);
+    if (!res.ok && opts.json) {
+      // Some providers/models reject JSON mode — retry without it;
+      // the prompts already demand JSON-only output.
+      res = await send(false);
+    }
     if (!res.ok) {
       const body = await res.text();
       throw new Error(`LLM request failed (${res.status}): ${body.slice(0, 300)}`);
@@ -70,6 +79,15 @@ export class AiService {
     const content = data?.choices?.[0]?.message?.content;
     if (!content) throw new Error('LLM returned an empty response.');
     return content;
+  }
+
+  /** JSON.parse that tolerates markdown code fences around the payload. */
+  private parseJson(text: string): any {
+    const cleaned = text
+      .trim()
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/, '');
+    return JSON.parse(cleaned);
   }
 
   heuristicExtractProductDetails(rawText: string): { product_name: string | null; price: string | null; features: string[] } {
@@ -153,14 +171,14 @@ If a field is missing, leave it as null or empty array.
 Message:
 ${rawText}`;
 
-    const candidateModels = [this.textModel, 'llama-3.1-8b-instant'];
+    const candidateModels = [this.textModel, 'openai/gpt-oss-20b'];
     for (const modelName of candidateModels) {
       try {
         const responseText = await this.chat(
           [{ role: 'user', content: prompt }],
           { model: modelName, json: true },
         );
-        const parsed = JSON.parse(responseText);
+        const parsed = this.parseJson(responseText);
 
         return {
           product_name: parsed.product_name || fallback.product_name || 'Product',
@@ -212,7 +230,7 @@ Return ONLY a JSON object with this exact schema:
         [{ role: 'user', content: prompt }],
         { json: true },
       );
-      return JSON.parse(responseText);
+      return this.parseJson(responseText);
     } catch (e) {
       this.logger.error('Failed to generate captions', e);
       return { instagramCaption: '', facebookCaption: '', storyText: '' };
@@ -259,7 +277,7 @@ Return ONLY the JSON object.`;
         ],
         { model: this.visionModel, json: true },
       );
-      const data = JSON.parse(responseText);
+      const data = this.parseJson(responseText);
 
       if (data.hasLogo && data.box) {
         // Wait, we need the original image dimensions to convert the 0-1000 scale to pixels.
