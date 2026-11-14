@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import dynamic from "next/dynamic";
+import ShowroomBackdrop from "./ShowroomBackdrop";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
@@ -25,7 +25,7 @@ import { API_URL } from "@/lib/api";
 import { useSceneStore } from "@/lib/scene-store";
 
 /* The WebGL scene is client-only and code-split — SSR never sees it. */
-const Scene3D = dynamic(() => import("@/components/three/Scene3D"), { ssr: false });
+
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -123,7 +123,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Cinematic scene backdrop (CSS base + live WebGL layer) */}
       <CinematicScene />
-      <Scene3D />
+      <ShowroomBackdrop />
 
       {/* Trial Expired Overlay */}
       {isTrialExpired && (
