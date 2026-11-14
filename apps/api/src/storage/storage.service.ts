@@ -20,8 +20,8 @@ export class StorageService implements OnModuleInit {
 
   constructor(private configService: ConfigService) {
     this.redisClient = new Redis({
-      host: '127.0.0.1',
-      port: 6379,
+      host: this.configService.get<string>('REDIS_HOST', '127.0.0.1'),
+      port: this.configService.get<number>('REDIS_PORT', 6379),
     });
   }
 

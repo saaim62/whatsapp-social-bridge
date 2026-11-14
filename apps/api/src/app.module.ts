@@ -39,8 +39,8 @@ import { AppController } from './app.controller';
       useFactory: async (configService: ConfigService) => {
         return {
           connection: {
-            host: '127.0.0.1',
-            port: 6379,
+            host: configService.get<string>('REDIS_HOST', '127.0.0.1'),
+            port: configService.get<number>('REDIS_PORT', 6379),
           }
         };
       },

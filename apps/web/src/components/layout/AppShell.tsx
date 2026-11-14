@@ -119,7 +119,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 try {
                   await fetch(`${API_URL}/api/account/mock-pay`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${(session as any)?.accessToken}` },
                     body: JSON.stringify({ email: session?.user?.email })
                   });
                   alert('Authorization successful! Rebooting systems...');
