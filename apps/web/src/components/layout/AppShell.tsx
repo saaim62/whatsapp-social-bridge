@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
@@ -21,6 +22,10 @@ import {
 } from "lucide-react";
 import { BRAND } from "@/lib/brand";
 import { API_URL } from "@/lib/api";
+import { useSceneStore } from "@/lib/scene-store";
+
+/* The WebGL scene is client-only and code-split — SSR never sees it. */
+const Scene3D = dynamic(() => import("@/components/three/Scene3D"), { ssr: false });
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -73,6 +78,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, [status, isPublicRoute, router]);
 
+  // Feed the WebGL camera rig: route changes retarget the camera.
+  useEffect(() => {
+    useSceneStore.getState().setRoute(pathname || "/");
+  }, [pathname]);
+
   // Global Keyboard Shortcut for Cmd+K
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -113,8 +123,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="h-screen w-full bg-obsidian flex overflow-hidden selection:bg-gold-dim selection:text-gold-400">
 
-      {/* Cinematic scene backdrop */}
+      {/* Cinematic scene backdrop (CSS base + live WebGL layer) */}
       <CinematicScene />
+      <Scene3D />
 
       {/* Trial Expired Overlay */}
       {isTrialExpired && (
@@ -268,7 +279,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </motion.aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+      <div className="flex-1 flex flex-col h-full overflow-hidden relative z-10">
         
         {/* Floating Header */}
         <header className="h-20 flex items-center justify-between px-6 md:px-10 z-50 shrink-0 relative">
@@ -295,8 +306,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </motion.div>
         </header>
 
-        {/* Scrollable Main Content */}
-        <main className="flex-1 overflow-x-hidden overflow-y-auto pb-24 md:pb-8 px-4 md:px-10 custom-scrollbar">
+        {/* Scrollable Main Content — scroll progress feeds the camera rig */}
+        <main
+          className="flex-1 overflow-x-hidden overflow-y-auto pb-24 md:pb-8 px-4 md:px-10 custom-scrollbar"
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            const max = el.scrollHeight - el.clientHeight;
+            useSceneStore.getState().setScroll(max > 0 ? el.scrollTop / max : 0);
+          }}
+        >
           <AnimatePresence mode="wait">
             <motion.div
               key={pathname}
