@@ -42,6 +42,20 @@ function getPageTitle(pathname: string | null): string {
   return PAGE_TITLES[pathname] ?? "Command Center";
 }
 
+/* The cinematic scene: ambient gold/cyan light, a perspective floor
+   grid and a vignette. Fixed behind everything, all pages inherit it. */
+export function CinematicScene() {
+  return (
+    <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden>
+      <div className="absolute -top-40 left-1/4 w-[620px] h-[420px] rounded-full bg-gold-500/[0.08] blur-[130px]" />
+      <div className="absolute top-1/3 -right-40 w-[520px] h-[460px] rounded-full bg-electric-cyan/[0.05] blur-[130px]" />
+      <div className="absolute -bottom-32 -left-24 w-[460px] h-[340px] rounded-full bg-electric-magenta/[0.04] blur-[120px]" />
+      <div className="scene-floor absolute -bottom-8 left-[-12%] right-[-12%] h-80 opacity-[0.10]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_50%,rgba(0,0,0,0.55)_100%)]" />
+    </div>
+  );
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const pageTitle = getPageTitle(pathname);
@@ -72,7 +86,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   if (isPublicRoute) {
-    return <>{children}</>;
+    return (
+      <>
+        <CinematicScene />
+        {children}
+      </>
+    );
   }
 
   if (status === "loading" || status === "unauthenticated") {
@@ -81,9 +100,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <motion.div
           animate={{ scale: [0.95, 1.05, 0.95], opacity: [0.5, 1, 0.5] }}
           transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-          className="w-16 h-16 rounded-full border-t-2 border-electric-cyan flex items-center justify-center"
+          className="w-16 h-16 rounded-full border-t-2 border-gold-500 flex items-center justify-center"
         >
-          <Zap className="w-6 h-6 text-electric-cyan" />
+          <Zap className="w-6 h-6 text-gold-400" />
         </motion.div>
       </div>
     );
@@ -92,11 +111,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isTrialExpired = (session?.user as any)?.trialExpired;
 
   return (
-    <div className="h-screen w-full bg-obsidian flex overflow-hidden selection:bg-electric-cyan-dim selection:text-electric-cyan">
-      
-      {/* Background ambient lighting */}
-      <div className="fixed top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-electric-cyan-dim blur-[150px] pointer-events-none" />
-      <div className="fixed bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-electric-magenta-dim blur-[150px] pointer-events-none" />
+    <div className="h-screen w-full bg-obsidian flex overflow-hidden selection:bg-gold-dim selection:text-gold-400">
+
+      {/* Cinematic scene backdrop */}
+      <CinematicScene />
 
       {/* Trial Expired Overlay */}
       {isTrialExpired && (
@@ -156,14 +174,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Brand Header */}
         <div className="p-6 border-b border-graphite-border">
           <Link href="/" className="flex items-center gap-4 group">
-            <div className="w-10 h-10 rounded-xl bg-graphite flex items-center justify-center border border-graphite-border group-hover:border-electric-cyan/50 transition-colors shadow-[0_0_15px_rgba(0,240,255,0.1)] group-hover:shadow-[0_0_20px_rgba(0,240,255,0.2)] relative">
-              <Zap className="w-5 h-5 text-electric-cyan" />
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-b from-gold-300 via-gold-500 to-gold-600 flex items-center justify-center shadow-[0_10px_26px_-6px_rgba(217,165,33,0.65),inset_0_1px_0_rgba(255,255,255,0.5)] group-hover:shadow-[0_12px_32px_-6px_rgba(217,165,33,0.85),inset_0_1px_0_rgba(255,255,255,0.5)] transition-shadow relative">
+              <Zap className="w-5 h-5 text-black" strokeWidth={2.5} />
             </div>
             <div>
               <span className="block font-heading text-xl font-bold text-white tracking-tight">
                 {BRAND.name}
               </span>
-              <span className="block text-[10px] uppercase tracking-widest text-electric-cyan font-semibold mt-1 opacity-80">
+              <span className="block text-[10px] uppercase tracking-widest text-gold-400 font-semibold mt-1 opacity-90">
                 System Active
               </span>
             </div>
@@ -177,11 +195,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-graphite/50 border border-graphite-border hover:border-white/20 transition-all text-slate-400 hover:text-white group"
           >
             <div className="flex items-center gap-3 text-sm">
-              <Search className="w-4 h-4 group-hover:text-electric-cyan transition-colors" />
+              <Search className="w-4 h-4 group-hover:text-gold-400 transition-colors" />
               <span>Initialize Command</span>
             </div>
             <div className="flex items-center gap-1">
-              <kbd className="px-2 py-1 bg-graphite rounded-md text-[10px] font-mono border border-graphite-border text-slate-500 group-hover:text-electric-cyan transition-colors">⌘K</kbd>
+              <kbd className="px-2 py-1 bg-graphite rounded-md text-[10px] font-mono border border-graphite-border text-slate-500 group-hover:text-gold-400 transition-colors">⌘K</kbd>
             </div>
           </button>
         </div>
@@ -206,21 +224,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   key={item.href}
                   href={item.href}
                   className={`flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-300 relative overflow-hidden ${
-                    isActive 
-                      ? "bg-white/5 text-white" 
+                    isActive
+                      ? "bg-gold-500/[0.07] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
                       : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.02]"
                   }`}
                 >
                   {isActive && (
                     <motion.div
                       layoutId="active-nav"
-                      className="absolute left-0 top-0 bottom-0 w-1 bg-electric-cyan shadow-[0_0_10px_rgba(0,240,255,0.5)]"
+                      className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-gold-300 via-gold-500 to-gold-600 shadow-[0_0_12px_rgba(217,165,33,0.65)]"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ type: "spring", stiffness: 300, damping: 30 }}
                     />
                   )}
-                  <Icon className={`w-5 h-5 ${isActive ? "text-electric-cyan" : ""}`} />
+                  <Icon className={`w-5 h-5 ${isActive ? "text-gold-400 drop-shadow-[0_0_8px_rgba(217,165,33,0.5)]" : ""}`} />
                   <span className="font-medium text-sm">{item.label}</span>
                 </Link>
               );
@@ -260,7 +278,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="flex items-center gap-4"
           >
-            <h1 className="text-2xl font-heading font-bold text-white tracking-tight">{pageTitle}</h1>
+            <div>
+              <h1 className="text-2xl font-heading font-bold text-white tracking-tight">{pageTitle}</h1>
+              <div className="mt-1.5 h-[2px] w-14 rounded-full bg-gradient-to-r from-gold-400 via-gold-500 to-transparent shadow-[0_0_10px_rgba(217,165,33,0.5)]" />
+            </div>
           </motion.div>
 
           <motion.div 
@@ -311,17 +332,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 href={item.href}
                 className={`relative flex flex-col items-center justify-center w-14 h-full gap-1 transition-colors ${
-                  isActive ? "text-electric-cyan" : "text-slate-400 hover:text-slate-200"
+                  isActive ? "text-gold-400" : "text-slate-400 hover:text-slate-200"
                 }`}
               >
                 {isActive && (
-                  <motion.div 
+                  <motion.div
                     layoutId="mobile-active"
-                    className="absolute inset-0 bg-electric-cyan/10 rounded-xl"
+                    className="absolute inset-0 bg-gold-500/10 rounded-xl"
                     transition={{ type: "spring", stiffness: 400, damping: 30 }}
                   />
                 )}
-                <Icon className={`w-5 h-5 relative z-10 ${isActive ? "filter drop-shadow-[0_0_8px_rgba(0,240,255,0.8)]" : ""}`} />
+                <Icon className={`w-5 h-5 relative z-10 ${isActive ? "filter drop-shadow-[0_0_8px_rgba(217,165,33,0.8)]" : ""}`} />
                 <span className="text-[9px] font-medium uppercase tracking-wider relative z-10">{item.label}</span>
               </Link>
             );
@@ -344,11 +365,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 10 }}
               transition={{ type: "spring", stiffness: 400, damping: 30 }}
-              className="glass-panel w-full max-w-2xl rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,240,255,0.1)] border-white/10"
+              className="glass-panel w-full max-w-2xl rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(217,165,33,0.12)] border-white/10"
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-center gap-3 px-4 py-4 border-b border-graphite-border bg-graphite/50">
-                <Search className="w-5 h-5 text-electric-cyan" />
+                <Search className="w-5 h-5 text-gold-400" />
                 <input 
                   autoFocus
                   placeholder="Initialize command..."
@@ -359,7 +380,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="p-2 bg-graphite-light">
                 <div className="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-widest">System Actions</div>
                 <button onClick={() => { router.push('/'); setIsCmdkOpen(false); }} className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 text-slate-300 hover:text-white transition-colors text-sm text-left group">
-                  <Activity className="w-4 h-4 text-electric-cyan group-hover:drop-shadow-[0_0_8px_rgba(0,240,255,0.8)] transition-all" />
+                  <Activity className="w-4 h-4 text-gold-400 group-hover:drop-shadow-[0_0_8px_rgba(217,165,33,0.8)] transition-all" />
                   Mission Control Dashboard
                 </button>
                 <button onClick={() => { router.push('/products'); setIsCmdkOpen(false); }} className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 text-slate-300 hover:text-white transition-colors text-sm text-left group">

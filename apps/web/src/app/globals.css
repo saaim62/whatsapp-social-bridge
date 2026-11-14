@@ -18,9 +18,17 @@
   --color-electric-magenta-dim: rgba(255, 0, 229, 0.2);
   --color-electric-violet: #8B5CF6;
   
-  --color-brand-400: #818cf8;
-  --color-brand-500: #6366f1;
-  --color-brand-600: #4f46e5;
+  --color-gold-300: #f7e08c;
+  --color-gold-400: #e8c15a;
+  --color-gold-500: #d9a521;
+  --color-gold-600: #a87f16;
+  --color-gold-dim: rgba(217, 165, 33, 0.18);
+
+  /* Brand IS gold — the cinematic identity. Every brand-* usage
+     across the app picks this ramp up automatically. */
+  --color-brand-400: #e8c15a;
+  --color-brand-500: #d9a521;
+  --color-brand-600: #a87f16;
   
   --color-surface-glass: rgba(18, 18, 20, 0.6);
   --color-surface-glass-hover: rgba(28, 28, 31, 0.8);
@@ -38,8 +46,8 @@
   body {
     @apply bg-obsidian text-slate-200 font-sans antialiased;
     background-image:
-      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0, 240, 255, 0.03), transparent),
-      radial-gradient(ellipse 60% 40% at 100% 0%, rgba(139, 92, 246, 0.04), transparent),
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(217, 165, 33, 0.05), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 0%, rgba(0, 240, 255, 0.03), transparent),
       radial-gradient(ellipse 50% 50% at 0% 100%, rgba(0, 255, 163, 0.02), transparent);
     background-attachment: fixed;
     /* Noise texture overlay for premium feel */
@@ -50,22 +58,55 @@
   }
 
   ::selection {
-    @apply bg-electric-cyan-dim text-electric-cyan;
+    @apply bg-gold-dim text-gold-400;
   }
 }
 
 @layer components {
-  /* New Glassmorphic System */
+  /* Cinematic glass system — deep shadows, an inset top light so every
+     surface reads as a lit slab, and a hairline gold-tinted edge. */
   .glass-panel {
-    @apply bg-surface-glass backdrop-blur-xl border border-graphite-border shadow-2xl;
+    @apply bg-surface-glass backdrop-blur-xl border border-white/[0.07];
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+      0 30px 80px -24px rgba(0, 0, 0, 0.9);
   }
-  
+
   .glass-card {
-    @apply bg-graphite-light/50 backdrop-blur-md border border-graphite-border rounded-2xl overflow-hidden transition-all duration-300;
+    @apply bg-graphite-light/50 backdrop-blur-md border border-white/[0.07] rounded-2xl overflow-hidden transition-all duration-300;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      0 24px 60px -20px rgba(0, 0, 0, 0.85);
   }
 
   .glass-card-hover {
-    @apply bg-graphite-light/50 backdrop-blur-md border border-graphite-border rounded-2xl overflow-hidden transition-all duration-300 hover:bg-graphite-lighter/60 hover:border-white/10 hover:shadow-xl hover:shadow-electric-cyan/5 hover:-translate-y-0.5;
+    @apply bg-graphite-light/50 backdrop-blur-md border border-white/[0.07] rounded-2xl overflow-hidden transition-all duration-300 hover:bg-graphite-lighter/60 hover:border-gold-500/25 hover:-translate-y-0.5;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      0 24px 60px -20px rgba(0, 0, 0, 0.85);
+  }
+  .glass-card-hover:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.07),
+      0 30px 70px -20px rgba(0, 0, 0, 0.9),
+      0 0 32px rgba(217, 165, 33, 0.07);
+  }
+
+  /* Perspective floor grid for the cinematic scene backdrop. */
+  .scene-floor {
+    background-image:
+      linear-gradient(rgba(232, 193, 90, 0.35) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(232, 193, 90, 0.35) 1px, transparent 1px);
+    background-size: 46px 46px;
+    transform: perspective(750px) rotateX(63deg);
+    transform-origin: bottom;
+    -webkit-mask-image: linear-gradient(to top, black 25%, transparent 90%);
+    mask-image: linear-gradient(to top, black 25%, transparent 90%);
+  }
+
+  .text-gradient-gold {
+    @apply bg-clip-text text-transparent bg-gradient-to-b from-gold-300 via-gold-400 to-gold-600;
   }
 
   /* Typography */
@@ -87,10 +128,11 @@
 
   /* Buttons */
   .btn-primary {
-    @apply relative inline-flex items-center justify-center gap-2 px-6 py-3 text-sm font-semibold text-obsidian rounded-xl
-      bg-white shadow-[0_0_20px_rgba(255,255,255,0.1)]
+    @apply relative inline-flex items-center justify-center gap-2 px-6 py-3 text-sm font-bold text-black rounded-xl
+      bg-gradient-to-b from-gold-300 via-gold-500 to-gold-600
+      shadow-[0_10px_30px_-8px_rgba(217,165,33,0.55),inset_0_1px_0_rgba(255,255,255,0.45)]
       transition-all duration-300 ease-out
-      hover:scale-[1.02] hover:shadow-[0_0_25px_rgba(255,255,255,0.2)]
+      hover:scale-[1.02] hover:shadow-[0_14px_38px_-8px_rgba(217,165,33,0.7),inset_0_1px_0_rgba(255,255,255,0.5)]
       active:scale-[0.98]
       disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100;
   }
@@ -112,7 +154,7 @@
   .input-premium {
     @apply w-full px-4 py-3 text-sm text-white bg-graphite border border-graphite-border rounded-xl
       transition-all duration-300
-      focus:outline-none focus:ring-1 focus:ring-electric-cyan focus:border-electric-cyan
+      focus:outline-none focus:ring-1 focus:ring-gold-500 focus:border-gold-500
       placeholder:text-slate-600;
   }
 }

@@ -155,27 +155,7 @@ export default function DashboardPage() {
       animate="show"
       className="relative max-w-6xl mx-auto"
     >
-      {/* ——— Cinematic scene backdrop ——— */}
-      <div className="pointer-events-none absolute inset-0 -mx-6 overflow-hidden" aria-hidden>
-        <div className="absolute -top-32 left-1/4 w-[560px] h-[380px] rounded-full bg-[#d9a521]/[0.07] blur-[110px]" />
-        <div className="absolute top-24 -right-24 w-[480px] h-[420px] rounded-full bg-electric-cyan/[0.06] blur-[120px]" />
-        <div className="absolute bottom-0 left-0 w-[420px] h-[300px] rounded-full bg-electric-magenta/[0.05] blur-[110px]" />
-        {/* perspective floor grid */}
-        <div
-          className="absolute -bottom-10 left-[-10%] right-[-10%] h-72 opacity-[0.13]"
-          style={{
-            backgroundImage:
-              "linear-gradient(rgba(148,197,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(148,197,255,0.5) 1px, transparent 1px)",
-            backgroundSize: "44px 44px",
-            transform: "perspective(700px) rotateX(63deg)",
-            transformOrigin: "bottom",
-            maskImage: "linear-gradient(to top, black 30%, transparent 92%)",
-            WebkitMaskImage: "linear-gradient(to top, black 30%, transparent 92%)",
-          }}
-        />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_52%,rgba(0,0,0,0.5)_100%)]" />
-      </div>
-
+      {/* Scene backdrop is global now (AppShell CinematicScene). */}
       <div className="relative space-y-10">
         {/* ——— System Status HUD ——— */}
         <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-3 gap-6">
