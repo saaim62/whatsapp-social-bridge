@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import * as fs from 'fs';
@@ -6,6 +6,7 @@ import * as path from 'path';
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
   constructor(
     private prisma: PrismaService,
     private storageService: StorageService,
@@ -180,8 +181,8 @@ export class AdminService {
 
     // If new limit is lower than current usage, we must simulate archiving the excess.
     if (storageLimitBytes < currentUsage) {
-      console.log(`[STORAGE] User ${user.email} quota reduced from ${user.storageLimitBytes} to ${storageLimitBytes}.`);
-      console.log(`[STORAGE] Current usage (${currentUsage}) exceeds new limit. Simulating migration of excess data to local 'archive' directory...`);
+      this.logger.log(`[STORAGE] User ${user.email} quota reduced from ${user.storageLimitBytes} to ${storageLimitBytes}.`);
+      this.logger.log(`[STORAGE] Current usage (${currentUsage}) exceeds new limit. Simulating migration of excess data to local 'archive' directory...`);
       
       const fs = require('fs');
       const path = require('path');
@@ -213,14 +214,14 @@ export class AdminService {
           // Simulate migration
           fs.copyFileSync(asset.localPath, archivePath);
           fs.unlinkSync(asset.localPath);
-          console.log(`[STORAGE] Migrated ${fileName} to archive and deleted locally.`);
+          this.logger.log(`[STORAGE] Migrated ${fileName} to archive and deleted locally.`);
         }
         
         // Remove from DB so it's formally cleared
         await this.prisma.mediaAsset.delete({ where: { id: asset.id } });
         cleared += (asset.fileSize || 0);
       }
-      console.log(`[STORAGE] Migration complete. Cleared ${cleared} bytes.`);
+      this.logger.log(`[STORAGE] Migration complete. Cleared ${cleared} bytes.`);
     }
 
     return this.prisma.user.update({

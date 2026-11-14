@@ -54,7 +54,7 @@ export class EmailService {
 
     // Fire and forget so we don't block the UI
     setTimeout(() => {
-      console.log('[EmailService] Executing background sendMail for verification...');
+      this.logger.log('[EmailService] Executing background sendMail for verification...');
       this.transporter.sendMail({
         from,
         to: email,
@@ -62,7 +62,7 @@ export class EmailService {
         html: `<p>Please click <a href="${url}">here</a> to verify your account.</p>`,
       }).then(info => {
         this.logger.log(`Ethereal Email Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
-        console.log('[EmailService] Verification sendMail completed successfully.');
+        this.logger.log('[EmailService] Verification sendMail completed successfully.');
       }).catch(e => {
         this.logger.error('Failed to send verification email', e);
       });
@@ -83,7 +83,7 @@ export class EmailService {
 
     // Fire and forget so we don't block the UI
     setTimeout(() => {
-      console.log('[EmailService] Executing background sendMail for reset password...');
+      this.logger.log('[EmailService] Executing background sendMail for reset password...');
       this.transporter.sendMail({
         from,
         to: email,
@@ -91,7 +91,7 @@ export class EmailService {
         html: `<p>Please click <a href="${url}">here</a> to reset your password.</p>`,
       }).then(info => {
         this.logger.log(`Ethereal Email Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
-        console.log('[EmailService] Reset password sendMail completed successfully.');
+        this.logger.log('[EmailService] Reset password sendMail completed successfully.');
       }).catch(e => {
         this.logger.error('Failed to send reset email', e);
       });
