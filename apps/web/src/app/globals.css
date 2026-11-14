@@ -97,6 +97,22 @@
       0 0 28px rgba(217, 165, 33, 0.05);
   }
 
+  /* Backdrop plate drift — a slow Ken Burns push-in over the showroom
+     video, alternating so it breathes in and out. Deliberately out of
+     sync with the video's own 20s loop. */
+  @keyframes showroom-drift {
+    from {
+      transform: scale(1.03) translate(0.4%, 0.3%);
+    }
+    to {
+      transform: scale(1.15) translate(-1.4%, -1.6%);
+    }
+  }
+  .showroom-video {
+    animation: showroom-drift 24s ease-in-out infinite alternate;
+    will-change: transform;
+  }
+
   .text-gradient-gold {
     @apply bg-clip-text text-transparent bg-gradient-to-b from-gold-300 via-gold-400 to-gold-600;
   }
