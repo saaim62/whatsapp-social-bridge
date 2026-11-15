@@ -1,28 +1,28 @@
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import { API_URL } from '@/lib/api';
 
 function VerifyEmailContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams?.get('token') || null;
 
+  // A missing token is known at first render (URL param), so it is
+  // the initial state; the effect below only runs the verification
+  // fetch when a token exists.
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>(
-    'loading',
+    token ? 'loading' : 'error',
   );
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState(
+    token ? '' : 'Invalid or missing verification token.',
+  );
 
   useEffect(() => {
-    if (!token) {
-      setStatus('error');
-      setMessage('Invalid or missing verification token.');
-      return;
-    }
+    if (!token) return;
 
     fetch(`${API_URL}/api/account/verify-email?token=${token}`)
       .then((res) => res.json().then((data) => ({ status: res.status, data })))

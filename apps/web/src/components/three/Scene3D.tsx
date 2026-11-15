@@ -162,7 +162,7 @@ function CeilingCoffers() {
    showroom. Panels are uniform, so the wrap is invisible. */
 function Hall() {
   const group = useRef<THREE.Group>(null);
-  const marble = useMemo(makeMarbleTexture, []);
+  const marble = useMemo(() => makeMarbleTexture(), []);
 
   useFrame((state) => {
     if (group.current) {

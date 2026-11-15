@@ -19,7 +19,6 @@ import {
   Shield,
   Search,
   LogOut,
-  Command,
   Activity,
 } from 'lucide-react';
 import { BRAND } from '@/lib/brand';
@@ -321,7 +320,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const isTrialExpired = (session?.user as any)?.trialExpired;
+  const isTrialExpired = session?.user?.trialExpired;
 
   return (
     <div className="h-dvh w-full bg-obsidian flex overflow-hidden selection:bg-gold-dim selection:text-gold-400">
@@ -356,13 +355,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     method: 'POST',
                     headers: {
                       'Content-Type': 'application/json',
-                      Authorization: `Bearer ${(session as any)?.accessToken}`,
+                      Authorization: `Bearer ${session?.accessToken}`,
                     },
                     body: JSON.stringify({ email: session?.user?.email }),
                   });
                   alert('Authorization successful! Rebooting systems...');
                   signOut();
-                } catch (e) {
+                } catch {
                   alert('Authorization failed');
                 }
               }}
@@ -374,7 +373,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <button
               onClick={async () => {
                 await signOut({ redirect: false });
-                window.location.href = '/login';
+                router.push('/login');
               }}
               className="mt-6 text-slate-500 hover:text-white text-sm transition-colors cursor-pointer"
             >
@@ -430,7 +429,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <nav className="flex-1 px-4 space-y-1 mt-2 overflow-y-auto custom-scrollbar">
           {(() => {
             const items = [...NAV_ITEMS];
-            if (['ADMIN', 'OWNER'].includes((session?.user as any)?.role)) {
+            if (['ADMIN', 'OWNER'].includes(session?.user?.role ?? '')) {
               items.push({
                 href: '/admin',
                 label: 'Admin Console',
@@ -491,7 +490,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <button
             onClick={async () => {
               await signOut({ redirect: false });
-              window.location.href = '/login';
+              router.push('/login');
             }}
             className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-colors text-sm font-medium border border-red-500/10 hover:border-red-500/30 cursor-pointer"
           >
@@ -560,7 +559,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <nav className="md:hidden fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] left-4 right-4 h-16 glass-panel rounded-2xl flex items-center justify-around px-2 z-50 border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
         {(() => {
           const items = [...NAV_ITEMS];
-          if (['ADMIN', 'OWNER'].includes((session?.user as any)?.role)) {
+          if (['ADMIN', 'OWNER'].includes(session?.user?.role ?? '')) {
             items.push({ href: '/admin', label: 'Admin', icon: Shield });
           }
           return items.map((item) => {

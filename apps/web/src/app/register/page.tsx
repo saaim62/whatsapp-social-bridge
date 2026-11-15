@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Eye, EyeOff, Loader2, ArrowRight, CheckCircle2 } from 'lucide-react';
@@ -9,7 +8,6 @@ import { BRAND } from '@/lib/brand';
 import { API_URL } from '@/lib/api';
 
 export default function RegisterPage() {
-  const router = useRouter();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -55,7 +53,7 @@ export default function RegisterPage() {
       } else {
         setSuccess(true);
       }
-    } catch (err) {
+    } catch {
       setLoading(false);
       setError('An unexpected error occurred');
     }
@@ -92,7 +90,7 @@ export default function RegisterPage() {
                     Registration Successful!
                   </h2>
                   <p className="text-white/60 mb-8 leading-relaxed max-w-sm mx-auto">
-                    We've sent a verification email to{' '}
+                    We&apos;ve sent a verification email to{' '}
                     <strong>{formData.email}</strong>. Please check your inbox
                     and click the link to verify your account.
                   </p>

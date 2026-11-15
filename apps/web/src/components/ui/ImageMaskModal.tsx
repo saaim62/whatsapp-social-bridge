@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
@@ -9,7 +9,6 @@ import {
   ChevronLeft,
   ChevronRight,
   RotateCcw,
-  Sparkles,
 } from 'lucide-react';
 import { API_URL, fetchWithAuth } from '@/lib/api';
 import { mediaSrcFor } from '@/lib/media';
@@ -55,26 +54,31 @@ export function ImageMaskModal({
   >({});
 
   const imgRef = useRef<HTMLImageElement>(null);
-  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(
-    null,
-  );
 
-  useEffect(() => {
-    if (isOpen) {
-      const validIndex = Math.max(0, Math.min(initialIndex, images.length - 1));
-      setCurrentIndex(validIndex);
-      setCurrentBox(null);
-      setBoxes([]);
-      setSuccessToast(null);
-    }
-  }, [isOpen, initialIndex, images.length]);
-
-  // Reset boxes when switching images
-  useEffect(() => {
+  // Switching images always clears the in-progress mask state. All
+  // index changes flow through here so the reset lives with the
+  // action, not in an effect.
+  const goToIndex = (idx: number) => {
+    setCurrentIndex(idx);
     setCurrentBox(null);
     setBoxes([]);
     setSuccessToast(null);
-  }, [currentIndex]);
+  };
+
+  // (Re)opening the modal resets to the requested image. This is the
+  // React-docs pattern for prop-driven state adjustment: setState
+  // during render, keyed on the values that should trigger the reset
+  // — no effect, no cascading render loop.
+  const [openKey, setOpenKey] = useState('');
+  const currentOpenKey = isOpen
+    ? `open:${initialIndex}:${images.length}`
+    : 'closed';
+  if (currentOpenKey !== openKey) {
+    setOpenKey(currentOpenKey);
+    if (isOpen) {
+      goToIndex(Math.max(0, Math.min(initialIndex, images.length - 1)));
+    }
+  }
 
   const currentMedia = images[currentIndex];
   const currentTimestamp = currentMedia
@@ -88,29 +92,34 @@ export function ImageMaskModal({
     }, 2500);
   };
 
-  const handlePrev = useCallback(() => {
+  const handlePrev = () => {
     if (currentIndex > 0) {
-      setCurrentIndex((prev) => prev - 1);
+      goToIndex(currentIndex - 1);
     }
-  }, [currentIndex]);
+  };
 
-  const handleNext = useCallback(() => {
+  const handleNext = () => {
     if (currentIndex < images.length - 1) {
-      setCurrentIndex((prev) => prev + 1);
+      goToIndex(currentIndex + 1);
     }
-  }, [currentIndex, images.length]);
+  };
 
-  // Keyboard navigation
+  // Keyboard navigation (self-contained: it navigates via goToIndex
+  // directly so no component-scope handler is an effect dependency)
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') handlePrev();
-      if (e.key === 'ArrowRight') handleNext();
+      if (e.key === 'ArrowLeft' && currentIndex > 0) {
+        goToIndex(currentIndex - 1);
+      }
+      if (e.key === 'ArrowRight' && currentIndex < images.length - 1) {
+        goToIndex(currentIndex + 1);
+      }
       if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, handlePrev, handleNext, onClose]);
+  }, [isOpen, currentIndex, images.length, onClose]);
 
   if (!isOpen || !currentMedia) return null;
 
@@ -351,6 +360,12 @@ export function ImageMaskModal({
               onTouchEnd={handleMouseUp}
               onTouchCancel={handleMouseUp}
             >
+              {/* Plain <img> on purpose: this is a pixel-coordinate
+                  masking surface over arbitrary user-media URLs
+                  (signed, short-lived hosts); the editor reads the
+                  element's natural size and bounding rect directly,
+                  which next/image's optimizer would complicate. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 ref={imgRef}
                 key={`${currentMedia.id}-${currentTimestamp}`}
@@ -393,7 +408,7 @@ export function ImageMaskModal({
               {images.map((img, idx) => (
                 <button
                   key={img.id}
-                  onClick={() => setCurrentIndex(idx)}
+                  onClick={() => goToIndex(idx)}
                   className={`w-2.5 h-2.5 rounded-full transition-all ${
                     idx === currentIndex
                       ? 'bg-brand-600 scale-125 w-5'

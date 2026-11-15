@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { API_URL, fetchWithAuth } from '@/lib/api';
+import type { WhatsAppSource } from '@/lib/types';
 import {
   Search,
   RefreshCw,
@@ -44,7 +45,7 @@ function formatJid(jid: string): string {
 /**
  * Check if a source name is a properly formatted human name vs raw number.
  */
-function hasProperName(name: string, jid: string): boolean {
+function hasProperName(name: string | null, jid: string): boolean {
   if (!name) return false;
   if (name === 'Unknown') return false;
   const localPart = jid.split('@')[0];
@@ -82,7 +83,7 @@ function getTypeBadge(type: string): { label: string; className: string } {
 }
 
 export default function SourcesPage() {
-  const [sources, setSources] = useState<any[]>([]);
+  const [sources, setSources] = useState<WhatsAppSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -109,7 +110,10 @@ export default function SourcesPage() {
   };
 
   useEffect(() => {
-    fetchSources();
+    const tick = () => {
+      void fetchSources();
+    };
+    tick();
   }, []);
 
   const toggleSource = async (id: string, currentStatus: boolean) => {
@@ -237,7 +241,7 @@ export default function SourcesPage() {
       // text search
       if (searchQuery) {
         if (
-          !s.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+          !(s.name ?? '').toLowerCase().includes(searchQuery.toLowerCase()) &&
           !s.jid.toLowerCase().includes(searchQuery.toLowerCase())
         ) {
           return false;
@@ -333,11 +337,12 @@ export default function SourcesPage() {
       <div className="glass-card overflow-hidden flex flex-col min-h-[500px]">
         {/* Filters */}
         <div className="px-4 py-3 border-b border-graphite-border bg-graphite-darker/50 flex flex-wrap gap-2">
-          {['ALL', 'CONTACTS_NAMED', 'GROUPS', 'CHANNELS', 'NUMBERS'].map(
-            (type) => (
+          {(
+            ['ALL', 'CONTACTS_NAMED', 'GROUPS', 'CHANNELS', 'NUMBERS'] as const
+          ).map((type) => (
               <button
                 key={type}
-                onClick={() => setFilterType(type as any)}
+                onClick={() => setFilterType(type)}
                 className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all ${
                   filterType === type
                     ? 'bg-electric-cyan/20 text-electric-cyan border-electric-cyan/50 shadow-[0_0_10px_rgba(0,255,255,0.1)]'
@@ -550,7 +555,7 @@ export default function SourcesPage() {
                               <button
                                 onClick={() => {
                                   setEditingId(source.id);
-                                  setEditName(source.name);
+                                  setEditName(source.name ?? '');
                                 }}
                                 className="p-1 text-slate-500 opacity-0 group-hover/name:opacity-100 hover:text-white transition-all rounded"
                                 title="Rename"

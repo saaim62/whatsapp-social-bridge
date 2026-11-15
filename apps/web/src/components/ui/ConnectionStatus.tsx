@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { API_URL } from '@/lib/api';
-import { Radio, Smartphone, Share2 } from 'lucide-react';
+import { Smartphone, Share2 } from 'lucide-react';
 
 interface ConnectionStatus {
   whatsapp: {
@@ -36,12 +36,12 @@ export function ConnectionStatusWidget({
         const [waRes, metaRes] = await Promise.all([
           fetch(`${API_URL}/api/whatsapp/status`, {
             headers: {
-              Authorization: `Bearer ${(session as any)?.accessToken}`,
+              Authorization: `Bearer ${session?.accessToken}`,
             },
           }),
           fetch(`${API_URL}/api/social/accounts`, {
             headers: {
-              Authorization: `Bearer ${(session as any)?.accessToken}`,
+              Authorization: `Bearer ${session?.accessToken}`,
             },
           }),
         ]);

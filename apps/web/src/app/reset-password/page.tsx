@@ -1,29 +1,26 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, ArrowRight, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import { API_URL } from '@/lib/api';
 
 function ResetPasswordContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams?.get('token') || null;
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
+  // A missing token is known at first render (it comes from the URL),
+  // so the error is the lazy initial state — no effect needed.
+  const [error, setError] = useState(() =>
+    token ? '' : 'Invalid or missing reset token.',
+  );
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-
-  useEffect(() => {
-    if (!token) {
-      setError('Invalid or missing reset token.');
-    }
-  }, [token]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,7 +50,7 @@ function ResetPasswordContent() {
       } else {
         setSuccess(true);
       }
-    } catch (err) {
+    } catch {
       setLoading(false);
       setError('An unexpected error occurred');
     }
