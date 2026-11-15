@@ -2,7 +2,8 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { AiService } from '../ai/ai.service';
+import type { Prisma } from '@prisma/client';
+import { AiService, ExtractedProductData } from '../ai/ai.service';
 import { SocialService } from '../social/social.service';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -12,6 +13,7 @@ import {
   finalizeCaption,
   PricingRule,
 } from '../pricing/pricing.util';
+import type { ProcessBatchJob } from '../batch/batch.service';
 
 @Processor('batch-processing')
 export class BatchProcessor extends WorkerHost {
@@ -26,7 +28,7 @@ export class BatchProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job<any, any, string>): Promise<any> {
+  async process(job: Job<ProcessBatchJob>): Promise<unknown> {
     switch (job.name) {
       case 'process-batch':
         return this.handleProcessBatch(job.data.batchId);
@@ -63,7 +65,11 @@ export class BatchProcessor extends WorkerHost {
 
     try {
       // 1. AI Extraction
-      let extractedData: any = {};
+      let extractedData: ExtractedProductData = {
+        product_name: null,
+        price: null,
+        features: [],
+      };
       if (batch.rawText) {
         extractedData = await this.aiService.extractProductDetails(
           batch.rawText,
@@ -128,7 +134,8 @@ export class BatchProcessor extends WorkerHost {
         await tx.productBatch.update({
           where: { id: batchId },
           data: {
-            extractedData: extractedData,
+            // Our typed extraction bag serializes into the JSON column.
+            extractedData: extractedData as Prisma.InputJsonObject,
             status: 'READY',
           },
         });
@@ -237,8 +244,8 @@ export class BatchProcessor extends WorkerHost {
         marginValue: settings?.marginValue ?? 30,
         priceRounding: settings?.priceRounding ?? 50,
       };
-      const extracted: any = batch.extractedData || {};
-      const gc: any = batch.generatedContent;
+      const extracted = (batch.extractedData ?? {}) as ExtractedProductData;
+      const gc = batch.generatedContent;
       // An explicit manual price override — recorded through the
       // dedicated price-update action (PATCH /api/batches/:id/price) —
       // wins over every derived value. A price that merely appears
@@ -365,8 +372,8 @@ export class BatchProcessor extends WorkerHost {
     });
     const alreadyPublished = new Set(
       existingPublications
-        .filter((p: any) => p.status === 'PUBLISHED')
-        .map((p: any) => p.platform),
+        .filter((p) => p.status === 'PUBLISHED')
+        .map((p) => p.platform),
     );
 
     const attemptDestination = async (
@@ -412,7 +419,7 @@ export class BatchProcessor extends WorkerHost {
             batchId,
             platform,
             status: 'FAILED',
-            error: e.message,
+            error: e instanceof Error ? e.message : String(e),
           },
         });
       }

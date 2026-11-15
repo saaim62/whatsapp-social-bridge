@@ -8,7 +8,8 @@ import Redis from 'ioredis';
 import * as fs from 'fs';
 import * as path from 'path';
 import { StorageService } from '../storage/storage.service';
-const sharp = require('sharp');
+import sharp from 'sharp';
+import type { BlurImageJob } from '../batch/batch.service';
 
 @Processor('image-blur')
 export class ImageBlurProcessor
@@ -27,20 +28,22 @@ export class ImageBlurProcessor
   ) {
     super();
     this.redisClient = new Redis({
-      host: this.configService.get('REDIS_HOST', 'localhost'),
-      port: this.configService.get('REDIS_PORT', 6379),
+      host: this.configService.get<string>('REDIS_HOST', 'localhost'),
+      port: parseInt(this.configService.get<string>('REDIS_PORT', '6379'), 10),
     });
   }
 
   onModuleInit() {
     this.logger.log('ImageBlurProcessor initialized. Starting heartbeat...');
     // Emit heartbeat every 10 seconds
-    this.heartbeatInterval = setInterval(async () => {
-      try {
-        await this.redisClient.set('mac_worker_online', 'true', 'EX', 15);
-      } catch (err) {
-        this.logger.error('Failed to emit heartbeat to Redis', err);
-      }
+    this.heartbeatInterval = setInterval(() => {
+      void (async () => {
+        try {
+          await this.redisClient.set('mac_worker_online', 'true', 'EX', 15);
+        } catch (err) {
+          this.logger.error('Failed to emit heartbeat to Redis', err);
+        }
+      })();
     }, 10000);
     // Initial heartbeat
     this.redisClient
@@ -51,10 +54,10 @@ export class ImageBlurProcessor
   onModuleDestroy() {
     if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
     this.redisClient.del('mac_worker_online').catch(() => {});
-    this.redisClient.quit();
+    void this.redisClient.quit();
   }
 
-  async process(job: Job<any, any, string>): Promise<any> {
+  async process(job: Job<BlurImageJob>): Promise<void> {
     const { mediaId, localPath } = job.data;
     this.logger.log(`Processing image-blur for media ${mediaId}`);
 
@@ -131,24 +134,24 @@ export class ImageBlurProcessor
 
             const left = Math.max(
               0,
-              Math.min(metadata.width! - 1, Math.round(targetLeft)),
+              Math.min(metadata.width - 1, Math.round(targetLeft)),
             );
             const top = Math.max(
               0,
-              Math.min(metadata.height! - 1, Math.round(targetTop)),
+              Math.min(metadata.height - 1, Math.round(targetTop)),
             );
             const width = Math.max(
               1,
-              Math.min(metadata.width! - left, Math.round(targetWidth)),
+              Math.min(metadata.width - left, Math.round(targetWidth)),
             );
             const height = Math.max(
               1,
-              Math.min(metadata.height! - top, Math.round(targetHeight)),
+              Math.min(metadata.height - top, Math.round(targetHeight)),
             );
 
             // Create a polygon mask with slight feathering for smooth edges
             const localizedSvgPoints = box.polygon
-              .map((p: any) => `${p[0] - left},${p[1] - top}`)
+              .map((p) => `${p[0] - left},${p[1] - top}`)
               .join(' ');
             const feather = Math.max(1, Math.round(padding * 0.5));
             const maskSvg = `<svg width="${width}" height="${height}">
@@ -190,19 +193,19 @@ export class ImageBlurProcessor
 
             const left = Math.max(
               0,
-              Math.min(metadata.width! - 1, Math.round(targetLeft)),
+              Math.min(metadata.width - 1, Math.round(targetLeft)),
             );
             const top = Math.max(
               0,
-              Math.min(metadata.height! - 1, Math.round(targetTop)),
+              Math.min(metadata.height - 1, Math.round(targetTop)),
             );
             const width = Math.max(
               1,
-              Math.min(metadata.width! - left, Math.round(targetWidth)),
+              Math.min(metadata.width - left, Math.round(targetWidth)),
             );
             const height = Math.max(
               1,
-              Math.min(metadata.height! - top, Math.round(targetHeight)),
+              Math.min(metadata.height - top, Math.round(targetHeight)),
             );
 
             const blurredRegion = await sharp(imageBuffer)
