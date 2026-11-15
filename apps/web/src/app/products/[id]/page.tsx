@@ -242,14 +242,28 @@ export default function ProductDetailPage() {
     setIsPublishModalOpen(false);
     setBatch((prev: any) => ({ ...prev, status: "PUBLISHING" }));
     try {
-      // If no selling price was derived (ambiguous/missing supplier
-      // price) and the reseller typed one into the price field, record
-      // it as an explicit price decision BEFORE approving — the backend
-      // publish gate requires a recorded decision, not merely a price
-      // baked into the caption text by applyPrice below.
-      const derivedValue = Number(batch.extractedData?.selling_price_value);
+      // Price-revision consistency: the price recorded on the batch
+      // (structured selling price) must be the same revision the
+      // captions carry and the publish gate uses. Whenever the price
+      // in the field DIFFERS from the recorded structured price —
+      // whether that's no recorded price at all (ambiguous/missing
+      // supplier price) or an edit of a derived price (Rs. 2,400
+      // derived, reseller types Rs. 2,500) — record the entered value
+      // through the price endpoint BEFORE approving. Without this, an
+      // edit only changed the caption text while the database kept
+      // the old derived price, and the two silently diverged.
+      const recordedValue = (() => {
+        const o = Number(batch.extractedData?.manual_price_override);
+        if (Number.isFinite(o) && o > 0) return o;
+        const s = Number(batch.extractedData?.selling_price_value);
+        return Number.isFinite(s) && s > 0 ? s : null;
+      })();
       const typedPrice = parseFloat((overridePrice || "").replace(/[^0-9.]/g, ""));
-      if (!(derivedValue > 0) && Number.isFinite(typedPrice) && typedPrice > 0) {
+      if (
+        Number.isFinite(typedPrice) &&
+        typedPrice > 0 &&
+        Math.round(typedPrice) !== recordedValue
+      ) {
         await fetchWithAuth(`${API_URL}/api/batches/${id}/price`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
