@@ -1,6 +1,5 @@
 import * as fs from 'fs';
-import { OverlayOptions } from 'sharp';
-const sharp = require('sharp');
+import sharp, { OverlayOptions } from 'sharp';
 
 export type BlurBox = {
   left: number;

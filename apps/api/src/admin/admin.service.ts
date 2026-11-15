@@ -6,12 +6,42 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { StorageService } from '../storage/storage.service';
 import Redis from 'ioredis';
 import * as fs from 'fs';
 import * as path from 'path';
 
 export type Actor = { id: string; email: string; role: string };
+
+interface DayCountRow {
+  date: Date;
+  count: number;
+}
+
+interface DaySizeRow {
+  date: Date;
+  size: bigint;
+}
+
+/** The user shape mapUser reads (list and detail queries both satisfy it). */
+export interface AdminUserRow {
+  id: string;
+  email: string;
+  name: string | null;
+  role: string;
+  isPaid: boolean;
+  isBlocked: boolean;
+  isEmailVerified: boolean;
+  trialEndsAt: Date | null;
+  lastActiveAt: Date | null;
+  createdAt: Date;
+  city: string | null;
+  country: string | null;
+  storageLimitBytes: bigint;
+  batches?: Array<{ mediaAssets: Array<{ fileSize: number | null }> }>;
+  _count?: { batches?: number; sources?: number; socialAccounts?: number };
+}
 
 /** Plan state derived from the billing fields — one definition, used everywhere. */
 export function planStatusOf(u: {
@@ -38,7 +68,7 @@ export class AdminService {
     actor: Actor,
     action: string,
     target?: { id?: string; email?: string },
-    details?: Record<string, any>,
+    details?: Prisma.InputJsonObject,
   ) {
     try {
       await this.prisma.adminAuditLog.create({
@@ -143,7 +173,7 @@ export class AdminService {
       _count: { id: true },
     });
 
-    const activeUsersByDay: any = await this.prisma.$queryRaw`
+    const activeUsersByDay: DayCountRow[] = await this.prisma.$queryRaw`
       SELECT DATE_TRUNC('day', "lastActiveAt") as date, COUNT(*)::int as count
       FROM "User"
       WHERE "lastActiveAt" >= NOW() - INTERVAL '7 days'
@@ -151,7 +181,7 @@ export class AdminService {
       ORDER BY date ASC
     `;
 
-    const signupsByDay: any = await this.prisma.$queryRaw`
+    const signupsByDay: DayCountRow[] = await this.prisma.$queryRaw`
       SELECT DATE_TRUNC('day', "createdAt") as date, COUNT(*)::int as count
       FROM "User"
       WHERE "createdAt" >= NOW() - INTERVAL '14 days'
@@ -159,7 +189,7 @@ export class AdminService {
       ORDER BY date ASC
     `;
 
-    const storageByDay: any = await this.prisma.$queryRaw`
+    const storageByDay: DaySizeRow[] = await this.prisma.$queryRaw`
       SELECT DATE_TRUNC('day', "createdAt") as date, COALESCE(SUM("fileSize"), 0)::bigint as size
       FROM "MediaAsset"
       WHERE "createdAt" >= NOW() - INTERVAL '30 days'
@@ -176,10 +206,8 @@ export class AdminService {
       if (fs.existsSync(uploadsDir)) {
         serverStorageConsumedBytes = this.dirSize(uploadsDir);
       }
-      const stat: any = (fs as any).statfsSync
-        ? (fs as any).statfsSync(process.cwd())
-        : null;
-      if (stat) {
+      if (typeof fs.statfsSync === 'function') {
+        const stat = fs.statfsSync(process.cwd());
         serverStorageTotalBytes = Number(stat.blocks) * Number(stat.bsize);
       }
     } catch (err) {
@@ -253,13 +281,13 @@ export class AdminService {
   }
 
   // ---------------------------------------------------------------- users
-  private mapUser(user: any) {
+  private mapUser(user: AdminUserRow) {
     let totalMedia = 0;
     let totalStorage = 0;
     if (Array.isArray(user.batches)) {
-      user.batches.forEach((b: any) => {
+      user.batches.forEach((b) => {
         totalMedia += b.mediaAssets?.length || 0;
-        b.mediaAssets?.forEach((m: any) => {
+        b.mediaAssets?.forEach((m) => {
           totalStorage += m.fileSize || 0;
         });
       });
@@ -297,8 +325,8 @@ export class AdminService {
     const pageSize = Math.min(Math.max(query.pageSize || 20, 1), 100);
     const now = new Date();
 
-    const where: any = {};
-    const andClauses: any[] = [];
+    const where: Prisma.UserWhereInput = {};
+    const andClauses: Prisma.UserWhereInput[] = [];
     if (query.search) {
       andClauses.push({
         OR: [
@@ -403,7 +431,7 @@ export class AdminService {
       }),
     ]);
 
-    const { settings, ...rest } = user as any;
+    const { settings, ...rest } = user;
     return {
       ...this.mapUser(rest),
       settings: settings
@@ -600,10 +628,15 @@ export class AdminService {
     try {
       await this.prisma.$queryRaw`SELECT 1`;
       database = 'up';
-    } catch {}
+    } catch {
+      // Probe failed: database stays 'down'.
+    }
 
     let redisStatus = 'down';
-    const queues: Record<string, any> = {};
+    const queues: Record<
+      string,
+      { waiting: number; active: number; delayed: number; failed: number }
+    > = {};
     const redis = new Redis({
       host: process.env.REDIS_HOST || '127.0.0.1',
       port: parseInt(process.env.REDIS_PORT || '6379', 10),

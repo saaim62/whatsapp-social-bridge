@@ -8,6 +8,61 @@ import { exec } from 'child_process';
 import * as util from 'util';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
+
+/** Meta Graph API response shapes (v19) — the fields this service reads. */
+export interface MetaPage {
+  id: string;
+  name: string;
+  access_token: string;
+}
+
+interface MetaAccountsResponse {
+  data?: MetaPage[];
+}
+
+interface MetaPageIgResponse {
+  instagram_business_account?: { id: string; username?: string };
+}
+
+interface MetaIdResponse {
+  id: string;
+}
+
+interface MetaFbPostResponse {
+  id?: string;
+  post_id?: string;
+  video_id?: string;
+}
+
+interface MetaContainerStatusResponse {
+  status_code?: string;
+}
+
+interface MetaTokenResponse {
+  access_token: string;
+}
+
+/** Query params for IG media-container creation. */
+interface MetaMediaParams {
+  access_token: string;
+  is_carousel_item?: string;
+  media_type?: string;
+  video_url?: string;
+  image_url?: string;
+}
+
+/** The batch shape the publish methods consume. */
+export type PublishableBatch = Prisma.ProductBatchGetPayload<{
+  include: { mediaAssets: true; generatedContent: true };
+}>;
+
+/** Log-friendly detail for a failed Meta call: the Graph error body when
+ *  there is one, otherwise the error message. */
+function errorDetail(err: unknown): unknown {
+  if (axios.isAxiosError(err)) return err.response?.data ?? err.message;
+  return err instanceof Error ? err.message : err;
+}
 import { randomBytes } from 'crypto';
 import {
   encryptToken,
@@ -101,9 +156,17 @@ export class SocialService {
     // Fallback for contexts where signing is not wired (unit tests):
     // the legacy public path. Production always injects the signer.
     const baseUrl =
-      this.configService.get('PUBLIC_API_URL') ||
+      this.configService.get<string>('PUBLIC_API_URL') ||
       'https://api-droproute.duckdns.org';
     return `${baseUrl}/api/uploads/${filename}`;
+  }
+
+  /** Absolute path for an asset's local file, or null when the asset
+   *  has no local copy (R2-only) — callers skip those, as before the
+   *  publish attempt would have failed on the missing file anyway. */
+  private localFilePath(asset: { localPath: string | null }): string | null {
+    if (!asset.localPath) return null;
+    return path.join(process.cwd(), asset.localPath.replace(/^api\//, ''));
   }
 
   private async pollInstagramContainer(
@@ -120,13 +183,13 @@ export class SocialService {
     while (status === 'IN_PROGRESS' && attempts < maxAttempts) {
       await new Promise((resolve) => setTimeout(resolve, 3000));
       try {
-        const statusRes = await axios.get(
+        const statusRes = await axios.get<MetaContainerStatusResponse>(
           `https://graph.facebook.com/v19.0/${containerId}`,
           { params: { fields: 'status_code', access_token: accessToken } },
         );
         status = statusRes.data.status_code || 'ERROR';
         this.logger.log(`Container ${containerId} status: ${status}`);
-      } catch (err: any) {
+      } catch {
         this.logger.warn(
           `Failed to poll container ${containerId}, retrying...`,
         );
@@ -202,8 +265,8 @@ export class SocialService {
     };
   }
 
-  private async fetchUserPages(userAccessToken: string): Promise<any[]> {
-    const accountsRes = await axios.get(
+  private async fetchUserPages(userAccessToken: string): Promise<MetaPage[]> {
+    const accountsRes = await axios.get<MetaAccountsResponse>(
       `https://graph.facebook.com/v19.0/me/accounts`,
       { params: { access_token: userAccessToken } },
     );
@@ -239,7 +302,7 @@ export class SocialService {
       let instagramAccountId: string | null = null;
       let instagramUsername: string | null = null;
       try {
-        const igRes = await axios.get(
+        const igRes = await axios.get<MetaPageIgResponse>(
           `https://graph.facebook.com/v19.0/${page.id}`,
           {
             params: {
@@ -253,7 +316,7 @@ export class SocialService {
           instagramAccountId = ig.id;
           instagramUsername = ig.username ?? null;
         }
-      } catch (igErr) {
+      } catch {
         this.logger.warn(
           `Could not fetch Instagram account for page ${page.id}`,
         );
@@ -331,9 +394,7 @@ export class SocialService {
    * clear error when the saved page is no longer accessible — it never
    * falls back to another page.
    */
-  private async getMetaPublishingContext(
-    userId: string,
-  ): Promise<{
+  private async getMetaPublishingContext(userId: string): Promise<{
     pageId: string;
     pageName: string;
     pageAccessToken: string;
@@ -349,13 +410,13 @@ export class SocialService {
     if (!saved) {
       throw new MetaDestinationNotConfiguredError();
     }
-    let pages: any[];
+    let pages: MetaPage[];
     try {
       pages = await this.fetchUserPages(userAccessToken);
-    } catch (err: any) {
+    } catch (err) {
       this.logger.error(
         'Failed to fetch Meta publishing context',
-        err.response?.data || err.message,
+        errorDetail(err),
       );
       throw new Error(
         'Failed to fetch Facebook Pages. Ensure your user account has the required permissions.',
@@ -372,7 +433,7 @@ export class SocialService {
     // the saved value rather than blocking an otherwise-valid publish.
     let igAccountId: string | undefined = saved.igAccountId ?? undefined;
     try {
-      const igRes = await axios.get(
+      const igRes = await axios.get<MetaPageIgResponse>(
         `https://graph.facebook.com/v19.0/${page.id}`,
         {
           params: {
@@ -389,7 +450,7 @@ export class SocialService {
         );
         igAccountId = undefined;
       }
-    } catch (igErr) {
+    } catch {
       this.logger.warn(
         `Could not verify Instagram account for page ${page.id}; using the saved destination.`,
       );
@@ -406,7 +467,7 @@ export class SocialService {
     };
   }
 
-  async publishInstagram(batch: any): Promise<{ id: string }> {
+  async publishInstagram(batch: PublishableBatch): Promise<{ id: string }> {
     this.logger.log(`Publishing to Instagram for batch ${batch.id}`);
 
     const userAccessToken = await this.getMetaUserToken(batch.userId);
@@ -443,11 +504,8 @@ export class SocialService {
       const isVideoMap: Record<string, boolean> = {};
 
       for (const asset of carouselAssets) {
-        let absolutePath = path.join(
-          process.cwd(),
-          asset.localPath.replace(/^api\//, ''),
-        );
-        if (fs.existsSync(absolutePath)) {
+        let absolutePath = this.localFilePath(asset);
+        if (absolutePath && fs.existsSync(absolutePath)) {
           const isVideo = asset.mimeType?.startsWith('video/') || false;
 
           // Pad all media (images & videos) to perfect 1:1 square to satisfy Instagram API
@@ -456,7 +514,7 @@ export class SocialService {
           const mediaUrl = this.getPublicMediaUrl(absolutePath);
           this.logger.log(`Using public URL for Instagram: ${mediaUrl}`);
 
-          const params: any = {
+          const params: MetaMediaParams = {
             is_carousel_item: 'true',
             access_token: accessToken,
           };
@@ -468,7 +526,7 @@ export class SocialService {
             params.image_url = mediaUrl;
           }
 
-          const itemRes = await axios.post(
+          const itemRes = await axios.post<MetaIdResponse>(
             `https://graph.facebook.com/v19.0/${igAccountId}/media`,
             null,
             { params },
@@ -487,7 +545,7 @@ export class SocialService {
         }
       }
 
-      const carouselRes = await axios.post(
+      const carouselRes = await axios.post<MetaIdResponse>(
         `https://graph.facebook.com/v19.0/${igAccountId}/media`,
         null,
         {
@@ -503,7 +561,7 @@ export class SocialService {
       finalCreationId = creationId; // Save as the primary ID
 
       await this.pollInstagramContainer(creationId, accessToken);
-      const publishRes = await axios.post(
+      const publishRes = await axios.post<MetaIdResponse>(
         `https://graph.facebook.com/v19.0/${igAccountId}/media_publish`,
         null,
         { params: { creation_id: creationId, access_token: accessToken } },
@@ -513,16 +571,13 @@ export class SocialService {
       );
 
       return { id: finalCreationId || 'success' };
-    } catch (error: any) {
-      this.logger.error(
-        'Error publishing to Instagram',
-        error.response?.data || error.message,
-      );
+    } catch (error) {
+      this.logger.error('Error publishing to Instagram', errorDetail(error));
       throw error;
     }
   }
 
-  async publishFacebook(batch: any): Promise<{ id: string }> {
+  async publishFacebook(batch: PublishableBatch): Promise<{ id: string }> {
     this.logger.log(`Publishing to Facebook for batch ${batch.id}`);
 
     const userAccessToken = await this.getMetaUserToken(batch.userId);
@@ -540,13 +595,11 @@ export class SocialService {
 
     try {
       const photos =
-        batch.mediaAssets?.filter(
-          (a: any) => !a.mimeType?.startsWith('video/'),
-        ) || [];
+        batch.mediaAssets?.filter((a) => !a.mimeType?.startsWith('video/')) ||
+        [];
       const videos =
-        batch.mediaAssets?.filter((a: any) =>
-          a.mimeType?.startsWith('video/'),
-        ) || [];
+        batch.mediaAssets?.filter((a) => a.mimeType?.startsWith('video/')) ||
+        [];
 
       let finalFeedResId = '';
 
@@ -554,17 +607,14 @@ export class SocialService {
       if (photos.length > 1) {
         const mediaFbids: string[] = [];
         for (const asset of photos) {
-          const absolutePath = path.join(
-            process.cwd(),
-            asset.localPath.replace(/^api\//, ''),
-          );
-          if (fs.existsSync(absolutePath)) {
+          const absolutePath = this.localFilePath(asset);
+          if (absolutePath && fs.existsSync(absolutePath)) {
             const formData = new FormData();
             formData.append('source', fs.createReadStream(absolutePath));
             formData.append('published', 'false');
             formData.append('access_token', accessToken);
 
-            const res = await axios.post(
+            const res = await axios.post<MetaIdResponse>(
               `https://graph.facebook.com/v19.0/${pageId}/photos`,
               formData,
               {
@@ -578,7 +628,7 @@ export class SocialService {
         }
 
         const attachedMedia = mediaFbids.map((id) => ({ media_fbid: id }));
-        const feedRes = await axios.post(
+        const feedRes = await axios.post<MetaIdResponse>(
           `https://graph.facebook.com/v19.0/${pageId}/feed`,
           null,
           {
@@ -594,17 +644,14 @@ export class SocialService {
           `Successfully published photo album to Facebook: ${finalFeedResId}`,
         );
       } else if (photos.length === 1) {
-        const absolutePath = path.join(
-          process.cwd(),
-          photos[0].localPath.replace(/^api\//, ''),
-        );
-        if (fs.existsSync(absolutePath)) {
+        const absolutePath = this.localFilePath(photos[0]);
+        if (absolutePath && fs.existsSync(absolutePath)) {
           const formData = new FormData();
           formData.append('message', caption);
           formData.append('source', fs.createReadStream(absolutePath));
           formData.append('access_token', accessToken);
 
-          const res = await axios.post(
+          const res = await axios.post<MetaIdResponse>(
             `https://graph.facebook.com/v19.0/${pageId}/photos`,
             formData,
             {
@@ -622,11 +669,8 @@ export class SocialService {
 
       // 2. Publish all videos sequentially as individual posts
       for (const asset of videos) {
-        let absolutePath = path.join(
-          process.cwd(),
-          asset.localPath.replace(/^api\//, ''),
-        );
-        if (fs.existsSync(absolutePath)) {
+        let absolutePath = this.localFilePath(asset);
+        if (absolutePath && fs.existsSync(absolutePath)) {
           absolutePath = await this.compressVideo(absolutePath);
 
           const formData = new FormData();
@@ -635,7 +679,7 @@ export class SocialService {
           formData.append('access_token', accessToken);
 
           // By omitting 'published=false', it directly posts to the page timeline.
-          const res = await axios.post(
+          const res = await axios.post<MetaIdResponse>(
             `https://graph.facebook.com/v19.0/${pageId}/videos`,
             formData,
             {
@@ -653,7 +697,7 @@ export class SocialService {
 
       // 3. Text-only fallback if absolutely no media
       if (photos.length === 0 && videos.length === 0) {
-        const res = await axios.post(
+        const res = await axios.post<MetaIdResponse>(
           `https://graph.facebook.com/v19.0/${pageId}/feed`,
           null,
           { params: { message: caption, access_token: accessToken } },
@@ -665,19 +709,16 @@ export class SocialService {
       }
 
       return { id: finalFeedResId };
-    } catch (error: any) {
-      this.logger.error(
-        'Error publishing to Facebook',
-        error.response?.data || error.message,
-      );
+    } catch (error) {
+      this.logger.error('Error publishing to Facebook', errorDetail(error));
       throw error;
     }
   }
 
   async getMetaOAuthUrl(userId: string): Promise<string> {
-    const appId = this.configService.get('META_APP_ID');
+    const appId = this.configService.get<string>('META_APP_ID');
     const redirectUri =
-      this.configService.get('FACEBOOK_REDIRECT_URI') ||
+      this.configService.get<string>('FACEBOOK_REDIRECT_URI') ||
       'http://localhost:3001/api/social/oauth/facebook/callback';
 
     // The state parameter is a cryptographically random nonce stored
@@ -705,10 +746,10 @@ export class SocialService {
   }
 
   async handleMetaOAuthCallback(code: string, state: string): Promise<void> {
-    const appId = this.configService.get('META_APP_ID');
-    const appSecret = this.configService.get('META_APP_SECRET');
+    const appId = this.configService.get<string>('META_APP_ID');
+    const appSecret = this.configService.get<string>('META_APP_SECRET');
     const redirectUri =
-      this.configService.get('FACEBOOK_REDIRECT_URI') ||
+      this.configService.get<string>('FACEBOOK_REDIRECT_URI') ||
       'http://localhost:3001/api/social/oauth/facebook/callback';
 
     // Consume the state nonce exactly once. Unknown, expired, malformed,
@@ -733,13 +774,13 @@ export class SocialService {
     // 1. Exchange code for short-lived access token
     const tokenUrl = `https://graph.facebook.com/v19.0/oauth/access_token?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${appSecret}&code=${code}`;
 
-    const tokenRes = await axios.get(tokenUrl);
+    const tokenRes = await axios.get<MetaTokenResponse>(tokenUrl);
     const shortLivedToken = tokenRes.data.access_token;
 
     // 2. Exchange short-lived token for long-lived token
     const longLivedUrl = `https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${shortLivedToken}`;
 
-    const longLivedRes = await axios.get(longLivedUrl);
+    const longLivedRes = await axios.get<MetaTokenResponse>(longLivedUrl);
     const longLivedToken = longLivedRes.data.access_token;
 
     // 3. Save the token for the user — encrypted at rest (AES-256-GCM,
@@ -790,7 +831,9 @@ export class SocialService {
     return { success: true };
   }
 
-  async publishInstagramStory(batch: any): Promise<{ id: string }> {
+  async publishInstagramStory(
+    batch: PublishableBatch,
+  ): Promise<{ id: string }> {
     this.logger.log(`Publishing to Instagram Story for batch ${batch.id}`);
 
     const userAccessToken = await this.getMetaUserToken(batch.userId);
@@ -820,19 +863,16 @@ export class SocialService {
 
       // We publish only the first asset as a story (Instagram API limitation for simple flows)
       const asset = allAssets[0];
-      let absolutePath = path.join(
-        process.cwd(),
-        asset.localPath.replace(/^api\//, ''),
-      );
+      const absolutePath = this.localFilePath(asset);
       let finalCreationId = '';
 
-      if (fs.existsSync(absolutePath)) {
+      if (absolutePath && fs.existsSync(absolutePath)) {
         const isVideo = asset.mimeType?.startsWith('video/') || false;
 
         const mediaUrl = this.getPublicMediaUrl(absolutePath);
         this.logger.log(`Using public URL for Instagram Story: ${mediaUrl}`);
 
-        const params: any = {
+        const params: MetaMediaParams = {
           media_type: 'STORIES',
           access_token: accessToken,
         };
@@ -843,7 +883,7 @@ export class SocialService {
           params.image_url = mediaUrl;
         }
 
-        const itemRes = await axios.post(
+        const itemRes = await axios.post<MetaIdResponse>(
           `https://graph.facebook.com/v19.0/${igAccountId}/media`,
           null,
           { params },
@@ -854,7 +894,7 @@ export class SocialService {
 
         await this.pollInstagramContainer(creationId, accessToken);
 
-        const publishRes = await axios.post(
+        const publishRes = await axios.post<MetaIdResponse>(
           `https://graph.facebook.com/v19.0/${igAccountId}/media_publish`,
           null,
           { params: { creation_id: creationId, access_token: accessToken } },
@@ -865,16 +905,16 @@ export class SocialService {
         );
       }
       return { id: finalCreationId || 'success' };
-    } catch (error: any) {
+    } catch (error) {
       this.logger.error(
         'Error publishing to Instagram Story',
-        error.response?.data || error.message,
+        errorDetail(error),
       );
       throw error;
     }
   }
 
-  async publishFacebookStory(batch: any): Promise<{ id: string }> {
+  async publishFacebookStory(batch: PublishableBatch): Promise<{ id: string }> {
     this.logger.log(`Publishing to Facebook Story for batch ${batch.id}`);
 
     const userAccessToken = await this.getMetaUserToken(batch.userId);
@@ -896,13 +936,10 @@ export class SocialService {
       }
 
       const asset = allAssets[0];
-      let absolutePath = path.join(
-        process.cwd(),
-        asset.localPath.replace(/^api\//, ''),
-      );
+      let absolutePath = this.localFilePath(asset);
       let finalResId = '';
 
-      if (fs.existsSync(absolutePath)) {
+      if (absolutePath && fs.existsSync(absolutePath)) {
         const isVideo = asset.mimeType?.startsWith('video/') || false;
 
         if (isVideo) {
@@ -915,7 +952,7 @@ export class SocialService {
 
         const endpoint = isVideo ? 'video_stories' : 'photo_stories';
 
-        const res = await axios.post(
+        const res = await axios.post<MetaFbPostResponse>(
           `https://graph.facebook.com/v19.0/${pageId}/${endpoint}`,
           formData,
           {
@@ -924,16 +961,16 @@ export class SocialService {
             maxBodyLength: Infinity,
           },
         );
-        finalResId = res.data.id || res.data.post_id || res.data.video_id;
+        finalResId = res.data.id || res.data.post_id || res.data.video_id || '';
         this.logger.log(
           `Successfully published to Facebook Story: ${finalResId}`,
         );
       }
       return { id: finalResId || 'success' };
-    } catch (error: any) {
+    } catch (error) {
       this.logger.error(
         'Error publishing to Facebook Story',
-        error.response?.data || error.message,
+        errorDetail(error),
       );
       throw error;
     }
