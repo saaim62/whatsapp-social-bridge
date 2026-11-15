@@ -1,6 +1,15 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import type { ContactLikeInput } from '../whatsapp/whatsapp.service';
+
+/** Contact shape accepted by syncContacts (Baileys contacts plus the
+ *  optional LID fields the sync also persists). */
+export interface SyncContactInput extends ContactLikeInput {
+  lid?: string;
+  lidJid?: string;
+}
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -64,7 +73,7 @@ export class SourcesService {
    * Pick the best human-readable name from a Baileys contact object.
    * Returns null if no usable name is found.
    */
-  private pickBestContactName(contact: any): string | null {
+  private pickBestContactName(contact: ContactLikeInput): string | null {
     // Priority: verifiedName > name (saved contact) > notify/pushName (self-set)
     // But skip masked/raw for the first pass
     const candidates = [
@@ -178,7 +187,7 @@ export class SourcesService {
         let isActiveParticipant = true;
         if (meId && groupMeta.participants) {
           const myLid = client.authState?.creds?.me?.lid?.split(':')[0] || '';
-          isActiveParticipant = groupMeta.participants.some((p: any) => {
+          isActiveParticipant = groupMeta.participants.some((p) => {
             return (
               p.id.includes(meId) ||
               (client.user?.id &&
@@ -291,7 +300,7 @@ export class SourcesService {
             .replace('lid-mapping-', '')
             .replace('_reverse.json', '');
           const content = fs.readFileSync(path.join(sessionDir, file), 'utf8');
-          const phone = JSON.parse(content);
+          const phone = JSON.parse(content) as string;
 
           const lidJid = lid + '@lid';
           const phoneJid = phone + '@s.whatsapp.net';
@@ -470,13 +479,13 @@ export class SourcesService {
    * Sync contacts from Baileys contacts.upsert events into the DB.
    * Also maps LID JIDs to real names via the `lid` field.
    */
-  async syncContacts(userId: string, contacts: any[]) {
+  async syncContacts(userId: string, contacts: SyncContactInput[]) {
     try {
       let syncedCount = 0;
       for (let i = 0; i < contacts.length; i += 100) {
         const chunk = contacts.slice(i, i + 100);
         await Promise.all(
-          chunk.map(async (c: any) => {
+          chunk.map(async (c) => {
             if (!c.id || !this.isUsableJid(c.id)) return;
 
             const contactName = this.pickBestContactName(c);
@@ -505,7 +514,7 @@ export class SourcesService {
 
               // Auto-heal the primary JID source if it has a bad name
               await this.healSourceFromContact(userId, c.id, contactName);
-            } catch (err) {
+            } catch {
               // Ignore unique constraint or other minor errors during bulk sync
             }
           }),
@@ -550,7 +559,7 @@ export class SourcesService {
           `Healed source name for ${jid}: "${source.name}" → "${goodName}"`,
         );
       }
-    } catch (err) {
+    } catch {
       // ignore
     }
   }
@@ -581,9 +590,7 @@ export class SourcesService {
 
     if (!source) {
       // Auto-add unknown sources so they appear in the UI
-      let type = 'INDIVIDUAL';
-      if (jid.endsWith('@g.us')) type = 'GROUP';
-      else if (jid.endsWith('@newsletter')) type = 'CHANNEL';
+      // (the type is derived from the JID suffix at create time below).
 
       // Build the best display name:
       // 1. Real pushName (not a number)
@@ -629,8 +636,11 @@ export class SourcesService {
         // identity (two different people can share one), so a name
         // match must never grant access. Unknown identities stay
         // DISABLED until the user enables this exact source.
-      } catch (error: any) {
-        if (error.code === 'P2002') {
+      } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002'
+        ) {
           // Concurrent create — just fetch it
           source = await this.prisma.whatsappSource.findUnique({
             where: { userId_jid: { userId, jid } },
