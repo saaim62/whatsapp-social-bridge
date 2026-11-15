@@ -39,7 +39,7 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen w-full relative flex items-center justify-center bg-[#0a0a0a] overflow-hidden selection:bg-brand-500/30">
+    <div className="min-h-dvh w-full relative flex items-center justify-center bg-transparent selection:bg-gold-500/30">
       <div className="absolute inset-0 z-0">
         <div className="absolute top-1/4 -left-1/4 w-[800px] h-[800px] bg-brand-500/20 rounded-full blur-[120px] mix-blend-screen animate-pulse" style={{ animationDuration: '4s' }} />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[url('/noise.png')] opacity-20 mix-blend-overlay pointer-events-none" />
@@ -104,14 +104,14 @@ export default function ForgotPasswordPage() {
                         id="email"
                         type="email"
                         required
-                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white placeholder-transparent focus:bg-white/10 focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all peer"
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white placeholder-transparent focus:bg-white/10 focus:border-gold-500/50 focus:ring-2 focus:ring-gold-500/20 outline-none transition-all peer"
                         placeholder="Email address"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                       />
                       <label 
                         htmlFor="email" 
-                        className="absolute left-5 -top-2.5 bg-[#1a1a1a] px-2 text-xs font-medium text-white/50 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:bg-transparent peer-focus:-top-2.5 peer-focus:text-xs peer-focus:bg-[#1a1a1a] peer-focus:text-brand-400 rounded"
+                        className="absolute left-5 -top-2.5 bg-[#1a1a1a] px-2 text-xs font-medium text-white/50 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:bg-transparent peer-focus:-top-2.5 peer-focus:text-xs peer-focus:bg-[#1a1a1a] peer-focus:text-gold-400 rounded"
                       >
                         Email address
                       </label>
@@ -120,7 +120,7 @@ export default function ForgotPasswordPage() {
                     <button
                       type="submit"
                       disabled={loading}
-                      className="group relative w-full flex items-center justify-center gap-2 bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white font-semibold py-4 px-8 rounded-2xl transition-all shadow-[0_0_40px_-10px_rgba(99,102,241,0.5)] hover:shadow-[0_0_60px_-15px_rgba(99,102,241,0.7)] overflow-hidden disabled:opacity-70 disabled:cursor-not-allowed"
+                      className="group relative w-full flex items-center justify-center gap-2 bg-gradient-to-r from-gold-400 via-gold-500 to-gold-600 hover:from-gold-300 hover:to-gold-500 text-black font-semibold py-4 px-8 rounded-2xl transition-all shadow-[0_0_40px_-10px_rgba(217,165,33,0.5)] hover:shadow-[0_0_60px_-15px_rgba(217,165,33,0.7)] overflow-hidden disabled:opacity-70 disabled:cursor-not-allowed"
                     >
                       <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-in-out" />
                       <span className="relative z-10 flex items-center gap-2">
@@ -144,7 +144,7 @@ export default function ForgotPasswordPage() {
         {!success && (
           <div className="text-center mt-8 text-white/50 text-sm">
             Remembered your password?{' '}
-            <Link href="/login" className="font-semibold text-white hover:text-brand-300 transition-colors underline decoration-white/20 underline-offset-4">
+            <Link href="/login" className="font-semibold text-white hover:text-gold-300 transition-colors underline decoration-white/20 underline-offset-4">
               Sign in
             </Link>
           </div>

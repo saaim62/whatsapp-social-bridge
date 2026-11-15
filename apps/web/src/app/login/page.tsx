@@ -5,7 +5,7 @@ import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, Loader2, ArrowRight } from 'lucide-react';
+import { Eye, EyeOff, Loader2, ArrowRight, Zap } from 'lucide-react';
 import { BRAND } from '@/lib/brand';
 
 export default function LoginPage() {
@@ -37,13 +37,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full relative flex items-center justify-center bg-[#0a0a0a] overflow-hidden selection:bg-brand-500/30">
-      {/* Background Effects */}
-      <div className="absolute inset-0 z-0">
-        <div className="absolute top-1/4 -left-1/4 w-[800px] h-[800px] bg-brand-500/20 rounded-full blur-[120px] mix-blend-screen animate-pulse" style={{ animationDuration: '4s' }} />
-        <div className="absolute -bottom-1/4 -right-1/4 w-[800px] h-[800px] bg-gold-600/20 rounded-full blur-[120px] mix-blend-screen animate-pulse" style={{ animationDuration: '6s' }} />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[url('/noise.png')] opacity-20 mix-blend-overlay pointer-events-none" />
-      </div>
+    <div className="min-h-dvh w-full relative flex items-center justify-center bg-transparent selection:bg-gold-500/30">
 
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
@@ -61,9 +55,9 @@ export default function LoginPage() {
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ delay: 0.2 }}
-                className="w-16 h-16 bg-gradient-to-br from-brand-500 to-indigo-600 rounded-2xl mx-auto mb-6 flex items-center justify-center shadow-lg shadow-brand-500/30"
+                className="w-16 h-16 bg-gradient-to-br from-gold-300 via-gold-500 to-gold-600 rounded-2xl mx-auto mb-6 flex items-center justify-center shadow-lg shadow-gold-500/30"
               >
-                <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin" style={{ animationDuration: '3s' }} />
+                <Zap className="w-8 h-8 text-black" strokeWidth={2.5} />
               </motion.div>
               <h2 className="text-3xl font-extrabold text-white tracking-tight">
                 Welcome back
@@ -91,14 +85,14 @@ export default function LoginPage() {
                     name="email"
                     type="email"
                     required
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white placeholder-transparent focus:bg-white/10 focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all peer"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white placeholder-transparent focus:bg-white/10 focus:border-gold-500/50 focus:ring-2 focus:ring-gold-500/20 outline-none transition-all peer"
                     placeholder="Email address"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                   />
                   <label 
                     htmlFor="email-address" 
-                    className="absolute left-5 -top-2.5 bg-[#1a1a1a] px-2 text-xs font-medium text-white/50 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:bg-transparent peer-focus:-top-2.5 peer-focus:text-xs peer-focus:bg-[#1a1a1a] peer-focus:text-brand-400 rounded"
+                    className="absolute left-5 -top-2.5 bg-[#1a1a1a] px-2 text-xs font-medium text-white/50 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:bg-transparent peer-focus:-top-2.5 peer-focus:text-xs peer-focus:bg-[#1a1a1a] peer-focus:text-gold-400 rounded"
                   >
                     Email address
                   </label>
@@ -110,14 +104,14 @@ export default function LoginPage() {
                     name="password"
                     type={showPassword ? "text" : "password"}
                     required
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white placeholder-transparent focus:bg-white/10 focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all peer pr-12"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white placeholder-transparent focus:bg-white/10 focus:border-gold-500/50 focus:ring-2 focus:ring-gold-500/20 outline-none transition-all peer pr-12"
                     placeholder="Password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
                   <label 
                     htmlFor="password" 
-                    className="absolute left-5 -top-2.5 bg-[#1a1a1a] px-2 text-xs font-medium text-white/50 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:bg-transparent peer-focus:-top-2.5 peer-focus:text-xs peer-focus:bg-[#1a1a1a] peer-focus:text-brand-400 rounded"
+                    className="absolute left-5 -top-2.5 bg-[#1a1a1a] px-2 text-xs font-medium text-white/50 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:bg-transparent peer-focus:-top-2.5 peer-focus:text-xs peer-focus:bg-[#1a1a1a] peer-focus:text-gold-400 rounded"
                   >
                     Password
                   </label>
@@ -132,7 +126,7 @@ export default function LoginPage() {
               </div>
 
               <div className="flex items-center justify-end">
-                <Link href="/forgot-password" className="text-sm font-medium text-brand-400 hover:text-brand-300 transition-colors">
+                <Link href="/forgot-password" className="text-sm font-medium text-gold-400 hover:text-gold-300 transition-colors">
                   Forgot password?
                 </Link>
               </div>
@@ -140,7 +134,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="group relative w-full flex items-center justify-center gap-2 bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white font-semibold py-4 px-8 rounded-2xl transition-all shadow-[0_0_40px_-10px_rgba(99,102,241,0.5)] hover:shadow-[0_0_60px_-15px_rgba(99,102,241,0.7)] overflow-hidden disabled:opacity-70 disabled:cursor-not-allowed"
+                className="group relative w-full flex items-center justify-center gap-2 bg-gradient-to-r from-gold-400 via-gold-500 to-gold-600 hover:from-gold-300 hover:to-gold-500 text-black font-semibold py-4 px-8 rounded-2xl transition-all shadow-[0_0_40px_-10px_rgba(217,165,33,0.5)] hover:shadow-[0_0_60px_-15px_rgba(217,165,33,0.7)] overflow-hidden disabled:opacity-70 disabled:cursor-not-allowed"
               >
                 <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-in-out" />
                 <span className="relative z-10 flex items-center gap-2">
@@ -160,7 +154,7 @@ export default function LoginPage() {
         
         <div className="text-center mt-8 text-white/50 text-sm">
           Don't have an account?{' '}
-          <Link href="/register" className="font-semibold text-white hover:text-brand-300 transition-colors underline decoration-white/20 underline-offset-4">
+          <Link href="/register" className="font-semibold text-white hover:text-gold-300 transition-colors underline decoration-white/20 underline-offset-4">
             Create an account
           </Link>
         </div>

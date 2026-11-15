@@ -604,7 +604,7 @@ export default function ProductDetailPage() {
   const isEditable = batch.status === "READY" || batch.status === "FAILED";
 
   return (
-    <div className="-mx-4 md:-mx-10 min-h-screen bg-graphite flex flex-col relative overflow-hidden">
+    <div className="-mx-4 md:-mx-10 min-h-dvh bg-graphite flex flex-col relative overflow-hidden">
       {/* Decorative ambient background */}
       <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-electric-cyan/5 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-electric-magenta/5 rounded-full blur-[120px] pointer-events-none" />

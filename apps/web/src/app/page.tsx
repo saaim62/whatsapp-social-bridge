@@ -216,11 +216,11 @@ export default function DashboardPage() {
                 {/* ——— Action Center: Review Queue ——— */}
         <motion.div
           variants={itemVariants}
-          className="glass-panel relative overflow-hidden rounded-3xl p-8"
+          className="glass-panel relative overflow-hidden rounded-3xl p-5 sm:p-8"
         >
           <div className="relative z-10 mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h2 className="text-2xl font-heading font-bold text-white">Needs Your Review</h2>
+              <h2 className="text-xl sm:text-2xl font-heading font-bold text-white">Needs Your Review</h2>
               <p className="text-slate-400 text-sm mt-1">
                 Products extracted from your WhatsApp sources, waiting for your decision.
                 {waitingValue > 0 && (

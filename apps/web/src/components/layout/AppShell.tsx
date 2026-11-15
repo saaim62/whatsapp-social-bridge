@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import ShowroomBackdrop from "./ShowroomBackdrop";
+import { GuestPreview } from "./GuestPreview";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
@@ -59,6 +60,138 @@ export function CinematicScene() {
   );
 }
 
+/* Logged-out shell: the same showroom, sidebar frame and header as the
+   signed-in app, wrapped around a sample-data preview. A visitor sees
+   the real product first; sign-in is one prominent tap away. */
+export function GuestShell() {
+  return (
+    <div className="h-dvh w-full bg-obsidian flex overflow-hidden selection:bg-gold-dim selection:text-gold-400">
+      <CinematicScene />
+      <ShowroomBackdrop />
+
+      {/* Sidebar frame (desktop) — nav leads to sign-in */}
+      <aside className="hidden md:flex flex-col w-[280px] h-[calc(100dvh-2rem)] my-4 ml-4 rounded-3xl glass-panel relative z-40 overflow-hidden shrink-0">
+        <div className="p-6 border-b border-graphite-border">
+          <Link href="/login" className="flex items-center gap-4 group">
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-b from-gold-300 via-gold-500 to-gold-600 flex items-center justify-center shadow-[0_10px_26px_-6px_rgba(217,165,33,0.65),inset_0_1px_0_rgba(255,255,255,0.5)] relative">
+              <Zap className="w-5 h-5 text-black" strokeWidth={2.5} />
+            </div>
+            <div>
+              <span className="block font-heading text-xl font-bold text-white tracking-tight">
+                {BRAND.name}
+              </span>
+              <span className="block text-[10px] uppercase tracking-widest text-gold-400 font-semibold mt-1 opacity-90">
+                Preview Mode
+              </span>
+            </div>
+          </Link>
+        </div>
+
+        <nav className="flex-1 px-4 space-y-1 mt-6 overflow-y-auto custom-scrollbar">
+          {NAV_ITEMS.map((item, i) => {
+            const Icon = item.icon;
+            const isActive = i === 0;
+            return (
+              <Link
+                key={item.href}
+                href="/login"
+                className={`flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-300 relative overflow-hidden ${
+                  isActive
+                    ? "bg-gold-500/[0.07] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.02]"
+                }`}
+              >
+                {isActive && (
+                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-gold-300 via-gold-500 to-gold-600" />
+                )}
+                <Icon className={`w-5 h-5 ${isActive ? "text-gold-400" : ""}`} />
+                <span className="font-medium text-sm">{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="p-4 border-t border-graphite-border bg-graphite/30">
+          <p className="text-xs text-slate-400 leading-relaxed px-2 mb-4">
+            You&apos;re viewing a live preview with sample data. Sign in to run
+            DropRoute on your own WhatsApp sources.
+          </p>
+          <Link
+            href="/register"
+            className="btn-primary w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold"
+          >
+            Create free account
+          </Link>
+          <Link
+            href="/login"
+            className="mt-2 w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-white/[0.04] text-slate-200 hover:bg-white/[0.08] transition-colors text-sm font-medium border border-white/10"
+          >
+            Sign in
+          </Link>
+        </div>
+      </aside>
+
+      {/* Main column */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden relative z-10 min-w-0">
+        <header className="h-16 md:h-20 flex items-center justify-between gap-3 px-4 md:px-10 z-50 shrink-0 relative">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="md:hidden w-9 h-9 rounded-lg bg-gradient-to-b from-gold-300 via-gold-500 to-gold-600 flex items-center justify-center shrink-0">
+              <Zap className="w-4 h-4 text-black" strokeWidth={2.5} />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-xl md:text-2xl font-heading font-bold text-white tracking-tight truncate">Command Center</h1>
+              <div className="mt-1.5 h-[2px] w-14 rounded-full bg-gradient-to-r from-gold-400 via-gold-500 to-transparent" />
+            </div>
+          </div>
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <Link
+              href="/login"
+              className="px-4 sm:px-5 py-2.5 rounded-xl bg-white/[0.04] border border-white/15 text-sm font-semibold text-white hover:bg-white/[0.08] transition-colors"
+            >
+              Sign in
+            </Link>
+            <Link
+              href="/register"
+              className="btn-primary px-4 sm:px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center"
+            >
+              Get started
+            </Link>
+          </div>
+        </header>
+
+        <main
+          className="flex-1 overflow-x-hidden overflow-y-auto pb-[calc(6.5rem+env(safe-area-inset-bottom))] md:pb-8 px-4 md:px-10 custom-scrollbar"
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            const max = el.scrollHeight - el.clientHeight;
+            useSceneStore.getState().setScroll(max > 0 ? el.scrollTop / max : 0);
+          }}
+        >
+          <div className="max-w-[1600px] mx-auto w-full min-h-full pt-2 md:pt-0">
+            <GuestPreview />
+          </div>
+        </main>
+      </div>
+
+      {/* Mobile CTA bar */}
+      <nav className="md:hidden fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 right-4 glass-panel rounded-2xl flex items-center gap-2 p-2 z-50 border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
+        <Link
+          href="/login"
+          className="flex-1 flex items-center justify-center px-4 py-3 rounded-xl bg-white/[0.05] border border-white/10 text-sm font-semibold text-white"
+        >
+          Sign in
+        </Link>
+        <Link
+          href="/register"
+          className="btn-primary flex-1 flex items-center justify-center px-4 py-3 rounded-xl text-sm font-semibold"
+        >
+          Create free account
+        </Link>
+      </nav>
+    </div>
+  );
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const pageTitle = getPageTitle(pathname);
@@ -69,12 +202,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password", "/reset-password", "/verify-email"];
   const isPublicRoute = PUBLIC_ROUTES.includes(pathname || "");
-
-  useEffect(() => {
-    if (status === "unauthenticated" && !isPublicRoute) {
-      router.push("/login");
-    }
-  }, [status, isPublicRoute, router]);
 
   // Feed the WebGL camera rig: route changes retarget the camera.
   useEffect(() => {
@@ -97,14 +224,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return (
       <>
         <CinematicScene />
-        {children}
+        <ShowroomBackdrop />
+        <div className="relative z-10 h-dvh overflow-y-auto custom-scrollbar">{children}</div>
       </>
     );
   }
 
-  if (status === "loading" || status === "unauthenticated") {
+  if (status === "unauthenticated") {
+    return <GuestShell />;
+  }
+
+  if (status === "loading") {
     return (
-      <div className="flex h-screen items-center justify-center bg-obsidian">
+      <div className="flex h-dvh items-center justify-center bg-obsidian">
         <motion.div
           animate={{ scale: [0.95, 1.05, 0.95], opacity: [0.5, 1, 0.5] }}
           transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
@@ -119,7 +251,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isTrialExpired = (session?.user as any)?.trialExpired;
 
   return (
-    <div className="h-screen w-full bg-obsidian flex overflow-hidden selection:bg-gold-dim selection:text-gold-400">
+    <div className="h-dvh w-full bg-obsidian flex overflow-hidden selection:bg-gold-dim selection:text-gold-400">
 
       {/* Cinematic scene backdrop (CSS base + live WebGL layer) */}
       <CinematicScene />
@@ -178,7 +310,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         initial={{ x: -100, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-        className="hidden md:flex flex-col w-[280px] h-[calc(100vh-2rem)] my-4 ml-4 rounded-3xl glass-panel relative z-40 overflow-hidden shrink-0"
+        className="hidden md:flex flex-col w-[280px] h-[calc(100dvh-2rem)] my-4 ml-4 rounded-3xl glass-panel relative z-40 overflow-hidden shrink-0"
       >
         {/* Brand Header */}
         <div className="p-6 border-b border-graphite-border">
@@ -277,27 +409,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </motion.aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden relative z-10">
-        
+      <div className="flex-1 flex flex-col h-full overflow-hidden relative z-10 min-w-0">
+
         {/* Floating Header */}
-        <header className="h-20 flex items-center justify-between px-6 md:px-10 z-50 shrink-0 relative">
-          <motion.div 
+        <header className="h-16 md:h-20 flex items-center justify-between gap-3 px-4 md:px-10 z-50 shrink-0 relative">
+          <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
-            className="flex items-center gap-4"
+            className="flex items-center gap-4 min-w-0"
           >
-            <div>
-              <h1 className="text-2xl font-heading font-bold text-white tracking-tight">{pageTitle}</h1>
+            <div className="min-w-0">
+              <h1 className="text-xl md:text-2xl font-heading font-bold text-white tracking-tight truncate">{pageTitle}</h1>
               <div className="mt-1.5 h-[2px] w-14 rounded-full bg-gradient-to-r from-gold-400 via-gold-500 to-transparent" />
             </div>
           </motion.div>
 
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.3 }}
-            className="flex items-center gap-4"
+            className="flex items-center gap-2 md:gap-4 shrink-0"
           >
             <ConnectionStatusWidget variant="header" />
             <NotificationDropdown />
@@ -306,7 +438,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Scrollable Main Content — scroll progress feeds the camera rig */}
         <main
-          className="flex-1 overflow-x-hidden overflow-y-auto pb-24 md:pb-8 px-4 md:px-10 custom-scrollbar"
+          className="flex-1 overflow-x-hidden overflow-y-auto pb-[calc(7rem+env(safe-area-inset-bottom))] md:pb-8 px-4 md:px-10 custom-scrollbar"
           onScroll={(e) => {
             const el = e.currentTarget;
             const max = el.scrollHeight - el.clientHeight;
@@ -320,7 +452,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
               exit={{ opacity: 0, scale: 1.02, filter: "blur(4px)" }}
               transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-              className="max-w-[1600px] mx-auto w-full h-full"
+              className="max-w-[1600px] mx-auto w-full min-h-full"
             >
               {children}
             </motion.div>
@@ -329,7 +461,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Mobile Floating Dock */}
-      <nav className="md:hidden fixed bottom-6 left-4 right-4 h-16 glass-panel rounded-2xl flex items-center justify-around px-2 z-50 border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
+      <nav className="md:hidden fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] left-4 right-4 h-16 glass-panel rounded-2xl flex items-center justify-around px-2 z-50 border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
         {(() => {
           const items = [...NAV_ITEMS];
           if ((session?.user as any)?.role === 'ADMIN') {
