@@ -6,7 +6,16 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['eslint.config.mjs'],
+    ignores: [
+      'eslint.config.mjs',
+      'dist/**',
+      // Standalone manual test harnesses kept at the app root (not part of
+      // the application source or the project lint script's scope).
+      'test-blur/**',
+      'test-*.js',
+      'test_*.js',
+      'scripts/verify-all-users.js',
+    ],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,

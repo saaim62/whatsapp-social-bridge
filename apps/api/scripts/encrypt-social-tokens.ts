@@ -15,10 +15,7 @@
  *   npx ts-node scripts/encrypt-social-tokens.ts --apply    # write
  */
 import { PrismaClient } from '@prisma/client';
-import {
-  encryptToken,
-  tokenNeedsEncryption,
-} from '../src/social/token-crypto';
+import { encryptToken, tokenNeedsEncryption } from '../src/social/token-crypto';
 
 async function main() {
   if (!process.env.TOKEN_ENCRYPTION_KEY) {
@@ -40,10 +37,14 @@ async function main() {
     let converted = 0;
     for (const account of accounts) {
       if (!tokenNeedsEncryption(account.accessToken)) {
-        console.log(`SKIP    account ${account.id} (${account.platform}) — already encrypted`);
+        console.log(
+          `SKIP    account ${account.id} (${account.platform}) — already encrypted`,
+        );
         continue;
       }
-      console.log(`ENCRYPT account ${account.id} (${account.platform}, user ${account.userId})`);
+      console.log(
+        `ENCRYPT account ${account.id} (${account.platform}, user ${account.userId})`,
+      );
       converted++;
       if (apply) {
         await prisma.socialAccount.update({

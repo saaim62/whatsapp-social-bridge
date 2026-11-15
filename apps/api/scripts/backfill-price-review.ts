@@ -19,8 +19,6 @@
  */
 import { PrismaClient, Prisma } from '@prisma/client';
 import {
-
-
   decidePriceBackfill,
   applyPriceBackfill,
 } from '../src/pricing/price-backfill';
@@ -32,7 +30,6 @@ function asRecord(v: unknown): Record<string, unknown> | null {
     ? (v as Record<string, unknown>)
     : null;
 }
-
 
 async function main() {
   const apply = process.argv.includes('--apply');
