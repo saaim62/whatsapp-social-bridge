@@ -26,7 +26,6 @@ import { CSS } from '@dnd-kit/utilities';
 import {
   ChevronLeft,
   Sparkles,
-  Tag,
   Image as ImageIcon,
   CheckCircle2,
   Save,
@@ -44,6 +43,42 @@ import {
 } from 'lucide-react';
 import { API_URL, fetchWithAuth } from '@/lib/api';
 import { mediaSrcFor } from '@/lib/media';
+import type {
+  ExtractedData,
+  MediaAsset,
+  ProductBatch,
+  Publication,
+} from '@/lib/types';
+
+/** The single-batch endpoint returns media with a processing flag and
+ * generatedContent as a single object (not the list relation). */
+interface DetailMediaAsset extends MediaAsset {
+  isProcessing?: boolean;
+}
+
+interface DetailBatch {
+  id: string;
+  status: string;
+  senderId: string;
+  senderName: string | null;
+  rawText: string | null;
+  createdAt: string;
+  extractedData: ExtractedData | null;
+  generatedContent: {
+    instagramCaption: string | null;
+    facebookCaption: string | null;
+    storyText: string | null;
+  } | null;
+  mediaAssets: DetailMediaAsset[];
+  publications: Publication[];
+}
+
+interface MetaAccount {
+  platform: string;
+  facebookPageId: string | null;
+  facebookPageName: string | null;
+  instagramUsername: string | null;
+}
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ImageMaskModal } from '@/components/ui/ImageMaskModal';
@@ -52,10 +87,9 @@ export default function ProductDetailPage() {
   const params = useParams();
   const id = params?.id as string;
   const router = useRouter();
-  const [batch, setBatch] = useState<any>(null);
-  const [mediaOrder, setMediaOrder] = useState<any[]>([]);
+  const [batch, setBatch] = useState<DetailBatch | null>(null);
+  const [mediaOrder, setMediaOrder] = useState<DetailMediaAsset[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [confirmDeleteMediaId, setConfirmDeleteMediaId] = useState<
     string | null
   >(null);
@@ -84,7 +118,7 @@ export default function ProductDetailPage() {
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
-  const [batchesList, setBatchesList] = useState<any[]>([]);
+  const [batchesList, setBatchesList] = useState<ProductBatch[]>([]);
   const [targetBatchId, setTargetBatchId] = useState('');
   const [moveSearchQuery, setMoveSearchQuery] = useState('');
   const [isMovingMedia, setIsMovingMedia] = useState(false);
@@ -92,7 +126,17 @@ export default function ProductDetailPage() {
 
   const [isSendModalOpen, setIsSendModalOpen] = useState(false);
   const [targetEmailsInput, setTargetEmailsInput] = useState('');
-  const [emailHistory, setEmailHistory] = useState<string[]>([]);
+  // Lazy initializer: read the sent-emails history once at mount
+  // (the canonical replacement for a setState-in-effect localStorage
+  // hydration).
+  const [emailHistory, setEmailHistory] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('sentEmailsHistory');
+      return raw ? (JSON.parse(raw) as string[]) : [];
+    } catch {
+      return [];
+    }
+  });
   const [isSending, setIsSending] = useState(false);
 
   const [isRenaming, setIsRenaming] = useState(false);
@@ -104,19 +148,15 @@ export default function ProductDetailPage() {
   // modal so the reseller sees exactly which Page/IG this will post
   // to. Null when Meta isn't connected or the fetch failed (e.g. demo
   // mode) — the modal then simply doesn't render a destination line.
-  const [metaAccount, setMetaAccount] = useState<any>(null);
+  const [metaAccount, setMetaAccount] = useState<MetaAccount | null>(null);
 
-  useEffect(() => {
-    const history = localStorage.getItem('sentEmailsHistory');
-    if (history) setEmailHistory(JSON.parse(history));
-  }, []);
 
   useEffect(() => {
     fetchWithAuth(`${API_URL}/api/social/accounts`)
       .then((r) => r.json())
-      .then((data) => {
+      .then((data: MetaAccount[]) => {
         if (Array.isArray(data)) {
-          setMetaAccount(data.find((a: any) => a.platform === 'META') ?? null);
+          setMetaAccount(data.find((a) => a.platform === 'META') ?? null);
         }
       })
       .catch(() => {});
@@ -135,8 +175,11 @@ export default function ProductDetailPage() {
   }, []);
 
   useEffect(() => {
-    fetchWorkerStatus();
-    const interval = setInterval(fetchWorkerStatus, 15000);
+    const tick = () => {
+      void fetchWorkerStatus();
+    };
+    tick();
+    const interval = setInterval(tick, 15000);
     return () => clearInterval(interval);
   }, [fetchWorkerStatus]);
 
@@ -195,15 +238,15 @@ export default function ProductDetailPage() {
     try {
       const res = await fetchWithAuth(`${API_URL}/api/batches/${id}`);
       if (res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as DetailBatch;
 
         // Auto-bust browser cache when media finishes processing
-        setBatch((prev: any) => {
+        setBatch((prev) => {
           if (prev?.mediaAssets) {
             const newTimestamps: Record<string, number> = {};
             for (const asset of data.mediaAssets || []) {
               const prevAsset = prev.mediaAssets.find(
-                (a: any) => a.id === asset.id,
+                (a) => a.id === asset.id,
               );
               if (prevAsset?.isProcessing && !asset.isProcessing) {
                 newTimestamps[asset.id] = Date.now();
@@ -224,7 +267,7 @@ export default function ProductDetailPage() {
           ) {
             // We can just update the underlying data objects but keep order
             return prev.map(
-              (p) => data.mediaAssets.find((a: any) => a.id === p.id) || p,
+              (p) => data.mediaAssets.find((a) => a.id === p.id) || p,
             );
           }
           // Otherwise initialize to the fetched order
@@ -259,15 +302,23 @@ export default function ProductDetailPage() {
   }, [id]);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-
-    fetchBatchData().then((data) => {
-      if (data && data.status !== 'PUBLISHED' && data.status !== 'FAILED') {
-        interval = setInterval(fetchBatchData, 3000);
-      }
-    });
-
-    return () => clearInterval(interval);
+    let interval: NodeJS.Timeout | undefined;
+    const tick = () => {
+      void fetchBatchData().then((data) => {
+        if (
+          data &&
+          data.status !== 'PUBLISHED' &&
+          data.status !== 'FAILED' &&
+          !interval
+        ) {
+          interval = setInterval(tick, 3000);
+        }
+      });
+    };
+    tick();
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [fetchBatchData]);
 
   const openPublishModal = () => {
@@ -276,7 +327,8 @@ export default function ProductDetailPage() {
 
   const approveAndPublish = async () => {
     setIsPublishModalOpen(false);
-    setBatch((prev: any) => ({ ...prev, status: 'PUBLISHING' }));
+    if (!batch) return;
+    setBatch((prev) => ({ ...(prev as DetailBatch), status: 'PUBLISHING' }));
     try {
       // Price-revision consistency: the price recorded on the batch
       // (structured selling price) must be the same revision the
@@ -385,11 +437,11 @@ export default function ProductDetailPage() {
       );
       if (res.ok) {
         // Optimistically update UI to show processing loader
-        setBatch((prev: any) => {
+        setBatch((prev) => {
           if (!prev?.mediaAssets) return prev;
           return {
             ...prev,
-            mediaAssets: prev.mediaAssets.map((asset: any) =>
+            mediaAssets: prev.mediaAssets.map((asset) =>
               asset.id === mediaId ? { ...asset, isProcessing: true } : asset,
             ),
           };
@@ -417,11 +469,11 @@ export default function ProductDetailPage() {
       await fetchWithAuth(`${API_URL}/api/batches/media/${mediaId}/delete`, {
         method: 'POST',
       });
-      setBatch((prev: any) => ({
-        ...prev,
-        mediaAssets: prev.mediaAssets.filter((a: any) => a.id !== mediaId),
+      setBatch((prev) => ({
+        ...(prev as DetailBatch),
+        mediaAssets: (prev as DetailBatch).mediaAssets.filter((a) => a.id !== mediaId),
       }));
-      setMediaOrder((prev) => prev.filter((a: any) => a.id !== mediaId));
+      setMediaOrder((prev) => prev.filter((a) => a.id !== mediaId));
       setSelectedMediaIds((prev) => {
         const next = new Set(prev);
         next.delete(mediaId);
@@ -451,7 +503,7 @@ export default function ProductDetailPage() {
     });
   };
 
-  const isVideoAsset = (asset: any) => {
+  const isVideoAsset = (asset: DetailMediaAsset) => {
     if (asset.mimeType?.startsWith('video/')) return true;
     if (asset.localPath?.toLowerCase().match(/\.(mp4|mov|webm)$/)) return true;
     if (asset.originalUrl?.toLowerCase().match(/\.(mp4|mov|webm)$/))
@@ -460,14 +512,17 @@ export default function ProductDetailPage() {
   };
 
   const imageAssets = (batch?.mediaAssets || []).filter(
-    (a: any) => !isVideoAsset(a),
+    (a) => !isVideoAsset(a),
   );
 
+  const features = batch?.extractedData?.features ?? [];
+
   const toggleSelectAll = () => {
+    if (!batch) return;
     if (selectedMediaIds.size === batch.mediaAssets.length) {
       setSelectedMediaIds(new Set());
     } else {
-      setSelectedMediaIds(new Set(batch.mediaAssets.map((a: any) => a.id)));
+      setSelectedMediaIds(new Set(batch.mediaAssets.map((a) => a.id)));
     }
   };
 
@@ -519,14 +574,14 @@ export default function ProductDetailPage() {
           }),
         ),
       );
-      setBatch((prev: any) => ({
-        ...prev,
-        mediaAssets: prev.mediaAssets.filter(
-          (a: any) => !selectedMediaIds.has(a.id),
+      setBatch((prev) => ({
+        ...(prev as DetailBatch),
+        mediaAssets: (prev as DetailBatch).mediaAssets.filter(
+          (a) => !selectedMediaIds.has(a.id),
         ),
       }));
       setMediaOrder((prev) =>
-        prev.filter((a: any) => !selectedMediaIds.has(a.id)),
+        prev.filter((a) => !selectedMediaIds.has(a.id)),
       );
       setSelectedMediaIds(new Set());
       await fetchBatchData();
@@ -544,7 +599,9 @@ export default function ProductDetailPage() {
       const res = await fetchWithAuth(`${API_URL}/api/batches`);
       if (res.ok) {
         const data = await res.json();
-        setBatchesList(data.filter((b: any) => b.id !== id));
+        setBatchesList(
+          (data as ProductBatch[]).filter((b) => b.id !== id),
+        );
       }
     } catch (err) {
       console.error(err);
@@ -566,14 +623,14 @@ export default function ProductDetailPage() {
           }),
         ),
       );
-      setBatch((prev: any) => ({
-        ...prev,
-        mediaAssets: prev.mediaAssets.filter(
-          (a: any) => !selectedMediaIds.has(a.id),
+      setBatch((prev) => ({
+        ...(prev as DetailBatch),
+        mediaAssets: (prev as DetailBatch).mediaAssets.filter(
+          (a) => !selectedMediaIds.has(a.id),
         ),
       }));
       setMediaOrder((prev) =>
-        prev.filter((a: any) => !selectedMediaIds.has(a.id)),
+        prev.filter((a) => !selectedMediaIds.has(a.id)),
       );
       setSelectedMediaIds(new Set());
       setIsMoveModalOpen(false);
@@ -611,7 +668,7 @@ export default function ProductDetailPage() {
   const handleRenameProduct = async () => {
     if (
       !renameInput.trim() ||
-      renameInput === batch.extractedData?.product_name
+      renameInput === batch?.extractedData?.product_name
     ) {
       setIsRenaming(false);
       return;
@@ -622,10 +679,10 @@ export default function ProductDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: renameInput.trim() }),
       });
-      setBatch((prev: any) => ({
-        ...prev,
+      setBatch((prev) => ({
+        ...(prev as DetailBatch),
         extractedData: {
-          ...prev.extractedData,
+          ...(prev as DetailBatch).extractedData,
           product_name: renameInput.trim(),
         },
       }));
@@ -752,18 +809,18 @@ export default function ProductDetailPage() {
               <div className="hidden sm:flex items-center gap-2">
                 <StatusBadge status={batch.status} />
                 {batch.publications?.some(
-                  (p: any) => p.status === 'FAILED',
+                  (p) => p.status === 'FAILED',
                 ) && (
                   <div
                     className="text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-1 rounded text-xs font-bold"
                     title={
-                      batch.publications.find((p: any) => p.status === 'FAILED')
-                        ?.error
+                      batch.publications.find((p) => p.status === 'FAILED')
+                        ?.error ?? undefined
                     }
                   >
                     <AlertTriangle className="w-3 h-3 inline mr-1" />
                     {
-                      batch.publications.find((p: any) => p.status === 'FAILED')
+                      batch.publications.find((p) => p.status === 'FAILED')
                         ?.platform
                     }{' '}
                     Error
@@ -944,14 +1001,11 @@ export default function ProductDetailPage() {
                       strategy={rectSortingStrategy}
                     >
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                        {mediaOrder.map((asset: any, index: number) => {
+                        {mediaOrder.map((asset, index: number) => {
                           const isImage = !isVideoAsset(asset);
                           const imageIndex = isImage
-                            ? imageAssets.findIndex(
-                                (a: any) => a.id === asset.id,
-                              )
+                            ? imageAssets.findIndex((a) => a.id === asset.id)
                             : -1;
-                          const isSelected = selectedMediaIds.has(asset.id);
                           const timestamp = mediaTimestamps[asset.id] || 0;
                           const baseMediaSrc = mediaSrcFor(asset);
                           const mediaSrc = baseMediaSrc
@@ -1098,14 +1152,13 @@ export default function ProductDetailPage() {
                   </div>
                 </div>
 
-                {batch.extractedData?.features?.length > 0 && (
+                {features.length > 0 && (
                   <div>
                     <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 block">
                       Extracted Vector Tags
                     </label>
                     <div className="flex flex-wrap gap-2">
-                      {batch.extractedData.features.map(
-                        (feat: string, i: number) => (
+                      {features.map((feat: string, i: number) => (
                           <span
                             key={i}
                             className="text-xs font-mono text-slate-300 bg-graphite border border-graphite-border px-2 py-1 rounded-md"
@@ -1156,7 +1209,7 @@ export default function ProductDetailPage() {
                   value={
                     isEditable
                       ? applyPrice(editedInstagram)
-                      : batch.generatedContent?.instagramCaption
+                      : (batch.generatedContent?.instagramCaption ?? undefined)
                   }
                   onChange={isEditable ? setEditedInstagram : undefined}
                   editable={isEditable}
@@ -1168,7 +1221,7 @@ export default function ProductDetailPage() {
                   value={
                     isEditable
                       ? applyPrice(editedFacebook)
-                      : batch.generatedContent?.facebookCaption
+                      : (batch.generatedContent?.facebookCaption ?? undefined)
                   }
                   onChange={isEditable ? setEditedFacebook : undefined}
                   editable={isEditable}
@@ -1180,7 +1233,7 @@ export default function ProductDetailPage() {
                   value={
                     isEditable
                       ? applyPrice(editedStory)
-                      : batch.generatedContent?.storyText
+                      : (batch.generatedContent?.storyText ?? undefined)
                   }
                   onChange={isEditable ? setEditedStory : undefined}
                   editable={isEditable}
@@ -1516,6 +1569,30 @@ export default function ProductDetailPage() {
   );
 }
 
+type MediaActionHandler = (
+  mediaId: string,
+  e: React.MouseEvent,
+) => void | Promise<void>;
+
+interface SortableMediaItemProps {
+  asset: DetailMediaAsset;
+  index: number;
+  isImage: boolean;
+  imageIndex: number;
+  isSelected: boolean;
+  mediaSrc: string;
+  revertingMediaId: string | null;
+  convertingMediaId: string | null;
+  isWorkerOnline: boolean;
+  onToggleSelect: (mediaId: string, e?: React.MouseEvent) => void;
+  onSingleDelete: MediaActionHandler;
+  onMask: (index: number, e: React.MouseEvent) => void;
+  onSingleRevert: MediaActionHandler;
+  onStopBlur: MediaActionHandler;
+  onForceImage: MediaActionHandler;
+  onTriggerAutoBlur: MediaActionHandler;
+}
+
 function SortableMediaItem({
   asset,
   index,
@@ -1533,7 +1610,7 @@ function SortableMediaItem({
   convertingMediaId,
   onTriggerAutoBlur,
   isWorkerOnline,
-}: any) {
+}: SortableMediaItemProps) {
   const {
     attributes,
     listeners,

@@ -6,6 +6,7 @@
 
 export interface ExtractedData {
   product_name?: string | null;
+  brand?: string | null;
   price?: string | null;
   description?: string | null;
   features?: string[];
@@ -25,6 +26,8 @@ export interface MediaAsset {
   localPath: string | null;
   mimeType: string | null;
   isBlurred?: boolean;
+  /** True while the blur/mask worker is processing this asset. */
+  isProcessing?: boolean;
   /** Signed display URL attached by the API (P1-5). */
   mediaUrl?: string;
   createdAt?: string;
@@ -61,7 +64,7 @@ export interface ProductBatch {
   createdAt: string;
   updatedAt: string;
   mediaAssets: MediaAsset[];
-  generatedContent: GeneratedContent[];
+  generatedContent: GeneratedContent[] | null;
   publications: Publication[];
 }
 

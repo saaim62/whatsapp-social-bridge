@@ -14,7 +14,37 @@ const img = (id: string) =>
 
 const minsAgo = (m: number) => new Date(Date.now() - m * 60000).toISOString();
 
-const media = (batchId: string, ids: string[]) =>
+export interface DemoMedia {
+  id: string;
+  mimeType: string;
+  originalUrl: string;
+  localPath: null;
+  isProcessing: boolean;
+}
+
+export interface DemoBatch {
+  id: string;
+  status: string;
+  createdAt: string;
+  senderName: string;
+  senderId: string;
+  rawText: string;
+  extractedData: {
+    product_name: string;
+    price: string;
+    selling_price: string;
+    selling_price_value: number;
+  };
+  generatedContent: {
+    instagramCaption: string;
+    facebookCaption: string;
+    storyText: string;
+  };
+  mediaAssets: DemoMedia[];
+  publications: never[];
+}
+
+const media = (batchId: string, ids: string[]): DemoMedia[] =>
   ids.map((id, i) => ({
     id: `${batchId}-m${i + 1}`,
     mimeType: 'image/jpeg',
@@ -23,7 +53,7 @@ const media = (batchId: string, ids: string[]) =>
     isProcessing: false,
   }));
 
-export const DEMO_BATCHES: any[] = [
+export const DEMO_BATCHES: DemoBatch[] = [
   {
     id: 'demo-1',
     status: 'READY',
@@ -238,7 +268,15 @@ export const DEMO_BATCHES: any[] = [
   },
 ];
 
-export const DEMO_SOURCES: any[] = [
+export interface DemoSource {
+  id: string;
+  name: string;
+  jid: string;
+  type: string;
+  isEnabled: boolean;
+}
+
+export const DEMO_SOURCES: DemoSource[] = [
   {
     id: 'demo-src-1',
     name: 'GRAND WATCHES (ONLINE)',
@@ -269,7 +307,16 @@ export const DEMO_SOURCES: any[] = [
   },
 ];
 
-export const DEMO_SETTINGS: any = {
+export interface DemoSettings {
+  isSyncActive: boolean;
+  historySyncDepthHours: number;
+  marginType: 'PERCENT' | 'FIXED';
+  marginValue: number;
+  priceRounding: number;
+  captionFooter: string;
+}
+
+export const DEMO_SETTINGS: DemoSettings = {
   isSyncActive: true,
   historySyncDepthHours: 24,
   marginType: 'PERCENT',
@@ -279,13 +326,27 @@ export const DEMO_SETTINGS: any = {
     '📦 DM to order — Cash on Delivery available all over Pakistan 🇵🇰',
 };
 
-export const DEMO_WA_STATUS: any = {
+export interface DemoWaStatus {
+  isReady: boolean;
+  phoneNumber: string;
+  qrUrl: null;
+}
+
+export const DEMO_WA_STATUS: DemoWaStatus = {
   isReady: true,
   phoneNumber: '+92 300 1234567',
   qrUrl: null,
 };
 
-export const DEMO_SOCIAL_ACCOUNTS: any[] = [
+export interface DemoSocialAccount {
+  id: string;
+  platform: string;
+  facebookPageId: string;
+  facebookPageName: string;
+  instagramUsername: string;
+}
+
+export const DEMO_SOCIAL_ACCOUNTS: DemoSocialAccount[] = [
   {
     id: 'demo-meta',
     platform: 'META',
@@ -309,7 +370,7 @@ function actionLabelFor(path: string): string {
   return 'do this';
 }
 
-function fakeResponse(payload: any) {
+function fakeResponse(payload: unknown) {
   return {
     ok: true,
     status: 200,

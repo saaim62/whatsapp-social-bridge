@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -8,12 +8,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { formatDistanceToNow } from 'date-fns';
 import {
   Layers,
-  Clock3,
   CheckCircle2,
   ImageIcon,
   Trash2,
   Loader2,
-  AlertCircle,
   Search,
   Filter,
   Send,
@@ -21,6 +19,7 @@ import {
 } from 'lucide-react';
 import { API_URL, fetchWithAuth } from '@/lib/api';
 import { mediaSrcFor } from '@/lib/media';
+import type { MediaAsset } from '@/lib/types';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useNotifications } from '@/contexts/NotificationContext';
@@ -40,16 +39,19 @@ export default function ProductsPage() {
 
   const [isSendModalOpen, setIsSendModalOpen] = useState(false);
   const [targetEmailsInput, setTargetEmailsInput] = useState('');
-  const [emailHistory, setEmailHistory] = useState<string[]>([]);
+  // Lazy initializer: read the sent-emails history once at mount.
+  const [emailHistory, setEmailHistory] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('sentEmailsHistory');
+      return raw ? (JSON.parse(raw) as string[]) : [];
+    } catch {
+      return [];
+    }
+  });
   const [isSending, setIsSending] = useState(false);
 
   const [renamingBatchId, setRenamingBatchId] = useState<string | null>(null);
   const [renameInput, setRenameInput] = useState('');
-
-  useEffect(() => {
-    const history = localStorage.getItem('sentEmailsHistory');
-    if (history) setEmailHistory(JSON.parse(history));
-  }, []);
 
   const clearSelectedBatchesAI = async () => {
     if (selectedIds.size === 0) return;
@@ -192,7 +194,7 @@ export default function ProductsPage() {
   };
 
   const handleRenameProduct = async (batchId: string) => {
-    const originalBatch = batches.find((b: any) => b.id === batchId);
+    const originalBatch = batches.find((b) => b.id === batchId);
     if (!originalBatch) return;
 
     if (
@@ -212,7 +214,7 @@ export default function ProductsPage() {
         },
       );
       if (res.ok) {
-        setBatches((prev: any[]) =>
+        setBatches((prev) =>
           prev.map((b) => {
             if (b.id === batchId) {
               return {
@@ -239,7 +241,6 @@ export default function ProductsPage() {
 
   if (loading) return <LoadingSpinner label="Initializing databanks..." />;
 
-  const total = batches.length;
   const pending = batches.filter((b) => b.status === 'READY').length;
   const published = batches.filter((b) =>
     ['PUBLISHED', 'PARTIALLY_PUBLISHED'].includes(b.status),
@@ -454,18 +455,18 @@ export default function ProductsPage() {
                   </td>
                   <td className="px-6 py-4">
                     <div className="w-16 h-16 rounded-xl overflow-hidden border border-graphite-border bg-graphite-darker relative group-hover:border-electric-cyan/50 transition-colors">
-                      {batch.mediaAssets?.some((m: any) => m.isProcessing) && (
+                      {batch.mediaAssets?.some((m) => m.isProcessing) && (
                         <div className="absolute inset-0 bg-graphite/60 backdrop-blur-sm z-10 flex flex-col items-center justify-center">
                           <Loader2 className="w-5 h-5 text-electric-cyan animate-spin" />
                         </div>
                       )}
                       {(() => {
-                        const isVid = (m: any) =>
+                        const isVid = (m: MediaAsset) =>
                           m?.mimeType?.startsWith('video/') ||
                           m?.originalUrl?.endsWith('.mp4') ||
                           m?.localPath?.endsWith('.mp4');
                         const thumbMedia =
-                          batch.mediaAssets?.find((m: any) => !isVid(m)) ||
+                          batch.mediaAssets?.find((m) => !isVid(m)) ||
                           batch.mediaAssets?.[0];
                         const mediaSrc = mediaSrcFor(thumbMedia);
                         const isVideo = isVid(thumbMedia);

@@ -23,9 +23,9 @@ interface Box {
 
 export interface MediaItem {
   id: string;
-  localPath: string;
-  originalUrl?: string;
-  mimeType?: string;
+  localPath: string | null;
+  originalUrl?: string | null;
+  mimeType?: string | null;
 }
 
 export function ImageMaskModal({
