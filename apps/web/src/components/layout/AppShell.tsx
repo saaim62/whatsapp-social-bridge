@@ -391,8 +391,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <nav className="flex-1 px-4 space-y-1 mt-2 overflow-y-auto custom-scrollbar">
           {(() => {
             const items = [...NAV_ITEMS];
-            if ((session?.user as any)?.role === 'ADMIN') {
-              items.push({ href: "/admin", label: "Admin Override", icon: Shield });
+            if (['ADMIN', 'OWNER'].includes((session?.user as any)?.role)) {
+              items.push({ href: "/admin", label: "Admin Console", icon: Shield });
             }
             return items.map((item) => {
               const isActive = pathname
@@ -506,7 +506,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <nav className="md:hidden fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] left-4 right-4 h-16 glass-panel rounded-2xl flex items-center justify-around px-2 z-50 border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
         {(() => {
           const items = [...NAV_ITEMS];
-          if ((session?.user as any)?.role === 'ADMIN') {
+          if (['ADMIN', 'OWNER'].includes((session?.user as any)?.role)) {
             items.push({ href: "/admin", label: "Admin", icon: Shield });
           }
           return items.map((item) => {

@@ -156,3 +156,16 @@ model WhatsappContact {
 
   @@unique([userId, jid])
 }
+
+model AdminAuditLog {
+  id           String   @id @default(uuid())
+  actorId      String
+  actorEmail   String
+  action       String   // SET_ROLE, EXTEND_TRIAL, GRANT_COMP, REVOKE_COMP, BLOCK, UNBLOCK, SET_STORAGE
+  targetUserId String?
+  targetEmail  String?
+  details      Json?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+}

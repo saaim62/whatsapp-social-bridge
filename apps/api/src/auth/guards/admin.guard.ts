@@ -1,6 +1,13 @@
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
+/**
+ * Admin area access: ADMIN and OWNER roles. The role is loaded fresh
+ * from the database on every request, so promotions and demotions take
+ * effect immediately (no stale JWT claims). On success the database
+ * user is attached as `request.dbUser` for controllers to use as the
+ * acting principal (audit trail, owner checks).
+ */
 @Injectable()
 export class AdminGuard implements CanActivate {
   constructor(private prisma: PrismaService) {}
@@ -15,13 +22,14 @@ export class AdminGuard implements CanActivate {
 
     const dbUser = await this.prisma.user.findUnique({
       where: { id: user.userId },
-      select: { role: true }
+      select: { id: true, email: true, name: true, role: true },
     });
 
-    if (dbUser?.role !== 'ADMIN') {
+    if (!dbUser || (dbUser.role !== 'ADMIN' && dbUser.role !== 'OWNER')) {
       throw new ForbiddenException('Admin access required');
     }
 
+    request.dbUser = dbUser;
     return true;
   }
 }
