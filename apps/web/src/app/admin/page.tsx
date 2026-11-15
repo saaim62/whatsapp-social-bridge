@@ -42,6 +42,148 @@ import {
 } from 'recharts';
 import { API_URL, fetchWithAuth } from '@/lib/api';
 import { useNotifications } from '@/contexts/NotificationContext';
+import type { LucideIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
+
+/* ------------------------------------------------------------------ */
+/* API shapes (mirror apps/api/src/admin)                              */
+/* ------------------------------------------------------------------ */
+
+interface AdminMe {
+  id: string;
+  email: string;
+  name: string | null;
+  role: string;
+}
+
+interface DayCount {
+  date: string;
+  count: number;
+}
+
+interface R2Account {
+  id: string;
+  bucketName: string;
+  usageBytes: number;
+  limitBytes: number;
+}
+
+interface AdminStats {
+  totalUsers: number;
+  signups: number;
+  signups7d: number;
+  signups30d: number;
+  signupsByDay: DayCount[];
+  activeUsersByDay: DayCount[];
+  batchesByStatus: Record<string, number>;
+  totalBatches: number;
+  failedBatches: number;
+  publications: {
+    total: number;
+    published: number;
+    failed: number;
+    failedLast7d: number;
+  };
+  sourcesEnabled: number;
+  totalMediaCount: number;
+  totalStorageBytes: number;
+  serverStorageConsumedBytes: number;
+  serverStorageTotalBytes: number;
+  mrrEstimate: number;
+  trialConversion: number;
+  users: {
+    paid: number;
+    trialActive: number;
+    expired: number;
+    blocked: number;
+    team: number;
+  };
+  r2Accounts: R2Account[];
+}
+
+interface QueueDepth {
+  waiting: number;
+  active: number;
+  failed: number;
+}
+
+interface AdminSystem {
+  database: string;
+  redis: string;
+  queues: Record<string, QueueDepth>;
+  failedBatches: number;
+  failedPublications7d: number;
+  checkedAt: string;
+  uptimeSeconds: number;
+  r2Accounts: R2Account[];
+}
+
+interface AdminUser {
+  id: string;
+  email: string;
+  name: string | null;
+  role: string;
+  isEmailVerified: boolean;
+  planStatus: string;
+  trialEndsAt: string | null;
+  storageUsed: number;
+  storageLimitBytes: number;
+  batchCount: number;
+  sourceCount: number;
+  lastActiveAt: string | null;
+  createdAt: string;
+}
+
+interface AuditDetails {
+  days?: number;
+  trialEndsAt?: string;
+  from?: string;
+  to?: string;
+  storageLimitBytes?: number;
+}
+
+interface AuditEntry {
+  id: string;
+  action: string;
+  actorEmail: string;
+  targetEmail: string | null;
+  details: AuditDetails | null;
+  createdAt: string;
+}
+
+interface RecentBatch {
+  id: string;
+  senderName: string | null;
+  mediaCount: number;
+  status: string;
+  createdAt: string;
+}
+
+interface AdminUserDetail extends AdminUser {
+  isBlocked: boolean;
+  isPaid: boolean;
+  country: string | null;
+  city: string | null;
+  socialAccountCount: number;
+  settings: { marginType: string; marginValue: number } | null;
+  recentBatches: RecentBatch[];
+  auditTrail: AuditEntry[];
+}
+
+interface UsersPage {
+  users: AdminUser[];
+  total: number;
+  totalPages: number;
+}
+
+interface KpiCardProps {
+  icon: LucideIcon;
+  label: string;
+  value: ReactNode;
+  sub?: ReactNode;
+  tone?: 'gold' | 'emerald' | 'sky' | 'rose' | 'violet';
+  delay?: number;
+}
 
 /* ------------------------------------------------------------------ */
 /* helpers                                                             */
@@ -113,7 +255,7 @@ const AUDIT_LABELS: Record<string, string> = {
   SET_STORAGE: 'Storage limit set',
 };
 
-const auditDetailText = (entry: any) => {
+const auditDetailText = (entry: AuditEntry) => {
   const d = entry.details || {};
   switch (entry.action) {
     case 'SET_ROLE':
@@ -154,7 +296,7 @@ function KpiCard({
   sub,
   tone = 'gold',
   delay = 0,
-}: any) {
+}: KpiCardProps) {
   const tones: Record<string, string> = {
     gold: 'text-gold-400 bg-gold-500/10 border-gold-500/20',
     emerald: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
@@ -211,15 +353,15 @@ function RoleBadge({ role }: { role: string }) {
 
 export default function AdminConsole() {
   const { addToast } = useNotifications();
-  const [me, setMe] = useState<any>(null);
+  const [me, setMe] = useState<AdminMe | null>(null);
   const [meLoaded, setMeLoaded] = useState(false);
-  const [stats, setStats] = useState<any>(null);
-  const [system, setSystem] = useState<any>(null);
-  const [audit, setAudit] = useState<any[]>([]);
-  const [team, setTeam] = useState<any[]>([]);
-  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [system, setSystem] = useState<AdminSystem | null>(null);
+  const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const [team, setTeam] = useState<AdminUser[]>([]);
+  const [allUsers, setAllUsers] = useState<AdminUser[]>([]);
 
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
   const [usersTotal, setUsersTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -227,7 +369,7 @@ export default function AdminConsole() {
   const [filter, setFilter] = useState('all');
   const [usersLoading, setUsersLoading] = useState(false);
 
-  const [detail, setDetail] = useState<any>(null);
+  const [detail, setDetail] = useState<AdminUserDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [storageGB, setStorageGB] = useState(5);
@@ -246,7 +388,7 @@ export default function AdminConsole() {
       if (q) params.set('search', q);
       const res = await fetchWithAuth(`${API_URL}/api/admin/users?${params}`);
       if (res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as UsersPage;
         setUsers(data.users || []);
         setUsersTotal(data.total || 0);
         setTotalPages(data.totalPages || 1);
@@ -267,12 +409,12 @@ export default function AdminConsole() {
           `${API_URL}/api/admin/users?page=1&pageSize=100&filter=all`,
         ),
       ]);
-    if (statsRes.ok) setStats(await statsRes.json());
-    if (systemRes.ok) setSystem(await systemRes.json());
-    if (auditRes.ok) setAudit(await auditRes.json());
-    if (teamRes.ok) setTeam(await teamRes.json());
+    if (statsRes.ok) setStats((await statsRes.json()) as AdminStats);
+    if (systemRes.ok) setSystem((await systemRes.json()) as AdminSystem);
+    if (auditRes.ok) setAudit((await auditRes.json()) as AuditEntry[]);
+    if (teamRes.ok) setTeam((await teamRes.json()) as AdminUser[]);
     if (pickerRes.ok) {
-      const d = await pickerRes.json();
+      const d = (await pickerRes.json()) as UsersPage;
       setAllUsers(d.users || []);
     }
   }, []);
@@ -282,7 +424,7 @@ export default function AdminConsole() {
       try {
         const res = await fetchWithAuth(`${API_URL}/api/admin/me`);
         if (res.ok) {
-          const data = await res.json();
+          const data = (await res.json()) as AdminMe;
           if (data && (data.role === 'ADMIN' || data.role === 'OWNER')) {
             setMe(data);
           }
@@ -294,10 +436,12 @@ export default function AdminConsole() {
   }, []);
 
   useEffect(() => {
-    if (me) {
-      loadAll();
-      loadUsers(1, 'all', '');
-    }
+    if (!me) return;
+    const tick = () => {
+      void loadAll();
+      void loadUsers(1, 'all', '');
+    };
+    tick();
   }, [me, loadAll, loadUsers]);
 
   // Debounced search / filter changes
@@ -323,7 +467,7 @@ export default function AdminConsole() {
     try {
       const res = await fetchWithAuth(`${API_URL}/api/admin/users/${userId}`);
       if (res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as AdminUserDetail;
         setDetail(data);
         setStorageGB(
           Math.max(
@@ -352,21 +496,21 @@ export default function AdminConsole() {
     try {
       const ok = await fn();
       if (ok) {
-        addToast({ title: successMsg, type: 'success' } as any);
+        addToast({ title: successMsg, type: 'success' });
         await refreshAfterAction(userId);
       } else {
         addToast({
           title: 'Action failed',
           message: 'The server rejected the request.',
           type: 'error',
-        } as any);
+        });
       }
     } finally {
       setBusy(null);
     }
   };
 
-  const extendTrial = (user: any) =>
+  const extendTrial = (user: AdminUser) =>
     runAction(
       'extend',
       async () => {
@@ -383,7 +527,7 @@ export default function AdminConsole() {
       user.id,
     );
 
-  const togglePaid = (user: any) => {
+  const togglePaid = (user: AdminUserDetail) => {
     if (
       !user.isPaid ||
       window.confirm(
@@ -410,7 +554,7 @@ export default function AdminConsole() {
     }
   };
 
-  const toggleBlock = (user: any) => {
+  const toggleBlock = (user: AdminUserDetail) => {
     if (
       user.isBlocked ||
       window.confirm(
@@ -435,7 +579,7 @@ export default function AdminConsole() {
     }
   };
 
-  const saveStorage = (user: any) =>
+  const saveStorage = (user: AdminUserDetail) =>
     runAction(
       'storage',
       async () => {
@@ -500,9 +644,9 @@ export default function AdminConsole() {
   const signupData = fillDays(stats?.signupsByDay || [], 14);
   const activityData = fillDays(stats?.activeUsersByDay || [], 7);
   const pipeline = Object.entries(stats?.batchesByStatus || {}).sort(
-    (a: any, b: any) => b[1] - a[1],
+    (a, b) => b[1] - a[1],
   );
-  const pipelineMax = Math.max(1, ...pipeline.map((p: any) => p[1]));
+  const pipelineMax = Math.max(1, ...pipeline.map((p) => p[1]));
   const pickerCandidates = allUsers.filter(
     (u) => u.role === 'USER' && !team.some((t) => t.id === u.id),
   );
@@ -711,7 +855,7 @@ export default function AdminConsole() {
             {pipeline.length === 0 && (
               <p className="text-sm text-slate-500">No batches yet.</p>
             )}
-            {pipeline.map(([status, count]: any) => (
+            {pipeline.map(([status, count]) => (
               <div key={status}>
                 <div className="flex justify-between text-xs mb-1">
                   <span className="text-slate-300 font-medium tracking-wide">
@@ -1016,7 +1160,7 @@ export default function AdminConsole() {
           </div>
 
           <div className="space-y-2 mb-4">
-            {Object.entries(system?.queues || {}).map(([name, q]: any) => (
+            {Object.entries(system?.queues || {}).map(([name, q]) => (
               <div
                 key={name}
                 className="flex items-center justify-between text-sm rounded-xl bg-white/[0.02] border border-white/5 px-4 py-2.5"
@@ -1050,7 +1194,7 @@ export default function AdminConsole() {
 
           <div className="space-y-3">
             {(system?.r2Accounts || stats?.r2Accounts || []).map(
-              (acc: any, i: number) => {
+              (acc, i: number) => {
                 const pct = acc.limitBytes
                   ? Math.min(100, (acc.usageBytes / acc.limitBytes) * 100)
                   : 0;
@@ -1346,7 +1490,7 @@ export default function AdminConsole() {
                       Recent products
                     </h4>
                     <div className="space-y-2">
-                      {(detail.recentBatches || []).map((b: any) => (
+                      {(detail.recentBatches || []).map((b) => (
                         <div
                           key={b.id}
                           className="flex items-center justify-between rounded-xl bg-white/[0.02] border border-white/5 px-4 py-2.5 text-sm"
@@ -1381,7 +1525,7 @@ export default function AdminConsole() {
                         Admin history for this user
                       </h4>
                       <div className="space-y-2">
-                        {detail.auditTrail.map((entry: any) => (
+                        {detail.auditTrail.map((entry) => (
                           <div
                             key={entry.id}
                             className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm rounded-xl bg-white/[0.02] border border-white/5 px-4 py-2.5"
