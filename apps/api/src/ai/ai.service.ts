@@ -12,6 +12,30 @@ import * as fs from 'fs';
  *   LLM_TEXT_MODEL   — default openai/gpt-oss-120b
  *   LLM_VISION_MODEL — default meta-llama/llama-4-scout-17b-16e-instruct
  */
+/** Product data extracted from a supplier message. The three core
+ *  fields are always present after extraction; pricing/review fields
+ *  are attached by the pricing stage (batch 3) before publishing. */
+export interface ExtractedProductData {
+  product_name: string | null;
+  price: string | null;
+  features: string[];
+  selling_price?: string;
+  selling_price_value?: number;
+  price_needs_review?: boolean;
+  price_ambiguity?: string;
+  manual_price_override?: number;
+  [key: string]: unknown;
+}
+
+interface ChatMessage {
+  role: string;
+  content: unknown;
+}
+
+interface ChatCompletionResponse {
+  choices?: Array<{ message?: { content?: string } }>;
+}
+
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
@@ -45,7 +69,7 @@ export class AiService {
 
   /** One chat-completions call. Returns the assistant message content. */
   private async chat(
-    messages: any[],
+    messages: ChatMessage[],
     opts: { model?: string; json?: boolean } = {},
   ): Promise<string> {
     const payload = (json: boolean) => ({
@@ -76,19 +100,19 @@ export class AiService {
         `LLM request failed (${res.status}): ${body.slice(0, 300)}`,
       );
     }
-    const data: any = await res.json();
+    const data = (await res.json()) as ChatCompletionResponse;
     const content = data?.choices?.[0]?.message?.content;
     if (!content) throw new Error('LLM returned an empty response.');
     return content;
   }
 
   /** JSON.parse that tolerates markdown code fences around the payload. */
-  private parseJson(text: string): any {
+  private parseJson(text: string): Record<string, unknown> {
     const cleaned = text
       .trim()
       .replace(/^```(?:json)?\s*/i, '')
       .replace(/\s*```$/, '');
-    return JSON.parse(cleaned);
+    return JSON.parse(cleaned) as Record<string, unknown>;
   }
 
   heuristicExtractProductDetails(rawText: string): {
@@ -152,7 +176,7 @@ export class AiService {
         !buzzwordOnly.test(line) &&
         !line.startsWith('http')
       ) {
-        let cleaned = line
+        const cleaned = line
           .replace(
             /^(new arrival|restock|hot item|exclusive|best quality)[\s.!:;~-]*/i,
             '',
@@ -172,7 +196,11 @@ export class AiService {
     return { product_name: productName, price, features };
   }
 
-  async extractProductDetails(rawText: string): Promise<any> {
+  async extractProductDetails(rawText: string): Promise<{
+    product_name: string | null;
+    price: string | null;
+    features: string[];
+  }> {
     const fallback = this.heuristicExtractProductDetails(rawText);
 
     if (!this.apiKey) {
@@ -201,19 +229,24 @@ ${rawText}`;
           { model: modelName, json: true },
         );
         const parsed = this.parseJson(responseText);
+        const llmFeatures = Array.isArray(parsed.features)
+          ? parsed.features.filter((f): f is string => typeof f === 'string')
+          : [];
 
         return {
           product_name:
-            parsed.product_name || fallback.product_name || 'Product',
-          price: parsed.price || fallback.price || 'Price not specified',
-          features:
-            Array.isArray(parsed.features) && parsed.features.length > 0
-              ? parsed.features
-              : fallback.features,
+            (typeof parsed.product_name === 'string' && parsed.product_name) ||
+            fallback.product_name ||
+            'Product',
+          price:
+            (typeof parsed.price === 'string' && parsed.price) ||
+            fallback.price ||
+            'Price not specified',
+          features: llmFeatures.length > 0 ? llmFeatures : fallback.features,
         };
-      } catch (e: any) {
+      } catch (e) {
         this.logger.warn(
-          `Model ${modelName} extraction error: ${e.message}. Trying next candidate...`,
+          `Model ${modelName} extraction error: ${e instanceof Error ? e.message : String(e)}. Trying next candidate...`,
         );
       }
     }
@@ -224,7 +257,7 @@ ${rawText}`;
     return fallback;
   }
 
-  async generateCaptions(extractedData: any): Promise<{
+  async generateCaptions(extractedData: Record<string, unknown>): Promise<{
     instagramCaption: string;
     facebookCaption: string;
     storyText: string;
@@ -260,7 +293,18 @@ Return ONLY a JSON object with this exact schema:
         [{ role: 'user', content: prompt }],
         { json: true },
       );
-      return this.parseJson(responseText);
+      const parsed = this.parseJson(responseText);
+      return {
+        instagramCaption:
+          typeof parsed.instagramCaption === 'string'
+            ? parsed.instagramCaption
+            : '',
+        facebookCaption:
+          typeof parsed.facebookCaption === 'string'
+            ? parsed.facebookCaption
+            : '',
+        storyText: typeof parsed.storyText === 'string' ? parsed.storyText : '',
+      };
     } catch (e) {
       this.logger.error('Failed to generate captions', e);
       return { instagramCaption: '', facebookCaption: '', storyText: '' };
@@ -308,18 +352,28 @@ Return ONLY the JSON object.`;
         { model: this.visionModel, json: true },
       );
       const data = this.parseJson(responseText);
+      const box = data.box as
+        | { xmin?: unknown; ymin?: unknown; xmax?: unknown; ymax?: unknown }
+        | undefined;
 
-      if (data.hasLogo && data.box) {
+      if (
+        data.hasLogo === true &&
+        box &&
+        typeof box.xmin === 'number' &&
+        typeof box.ymin === 'number' &&
+        typeof box.xmax === 'number' &&
+        typeof box.ymax === 'number'
+      ) {
         // Wait, we need the original image dimensions to convert the 0-1000 scale to pixels.
         // We will assume the caller does this or we do it here if we use sharp to get metadata.
         // But since we just need to return normalized coordinates to the caller...
         // Let's return the normalized ones, and let the caller (BatchService) scale it, OR we scale it here if we read it.
         // For simplicity, let's return the normalized box.
         return {
-          top: data.box.ymin / 1000,
-          left: data.box.xmin / 1000,
-          height: (data.box.ymax - data.box.ymin) / 1000,
-          width: (data.box.xmax - data.box.xmin) / 1000,
+          top: box.ymin / 1000,
+          left: box.xmin / 1000,
+          height: (box.ymax - box.ymin) / 1000,
+          width: (box.xmax - box.xmin) / 1000,
         };
       }
       return null;

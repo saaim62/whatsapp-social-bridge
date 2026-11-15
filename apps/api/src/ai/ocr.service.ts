@@ -1,11 +1,20 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import * as fs from 'fs';
-import * as path from 'path';
 import axios from 'axios';
 import * as FormData from 'form-data';
 import { BRAND_WATCHLIST } from './brand-watchlist';
 import { BlurBox } from './image-mask.util';
-const sharp = require('sharp');
+import sharp from 'sharp';
+
+interface OcrDetection {
+  text?: string;
+  confidence?: number;
+  polygon?: number[][];
+}
+
+interface OcrResponse {
+  detections?: OcrDetection[];
+}
 
 type DetectedLogo = BlurBox & {
   word: string;
@@ -50,12 +59,12 @@ export class OcrService implements OnModuleDestroy {
       formData.append('file', originalBuffer, { filename: 'image.jpg' });
 
       const remoteUrl = process.env.REMOTE_OCR_SERVER_URL;
-      let data: any = null;
+      let data: OcrResponse | null = null;
 
       if (remoteUrl) {
         try {
           this.logger.log(`Attempting remote OCR at ${remoteUrl}...`);
-          const response = await axios.post(
+          const response = await axios.post<OcrResponse>(
             `${remoteUrl}/detect-text`,
             formData,
             {
@@ -68,9 +77,9 @@ export class OcrService implements OnModuleDestroy {
           );
           data = response.data;
           this.logger.log('Remote OCR succeeded.');
-        } catch (err: any) {
+        } catch (err) {
           this.logger.warn(
-            `Remote OCR failed or timed out (${err.message}). Falling back to local server...`,
+            `Remote OCR failed or timed out (${err instanceof Error ? err.message : String(err)}). Falling back to local server...`,
           );
         }
       }
@@ -80,7 +89,7 @@ export class OcrService implements OnModuleDestroy {
           this.logger.log(
             `Attempting local fallback OCR at http://127.0.0.1:8000...`,
           );
-          const response = await axios.post(
+          const response = await axios.post<OcrResponse>(
             'http://127.0.0.1:8000/detect-text',
             formData,
             {
@@ -93,14 +102,16 @@ export class OcrService implements OnModuleDestroy {
           );
           data = response.data;
           this.logger.log('Local fallback OCR succeeded.');
-        } catch (err: any) {
-          this.logger.error(`Local fallback OCR failed: ${err.message}`);
+        } catch (err) {
+          this.logger.error(
+            `Local fallback OCR failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
         }
       }
 
       const found: DetectedLogo[] = [];
 
-      for (const det of data.detections || []) {
+      for (const det of data?.detections ?? []) {
         const text = det.text || '';
 
         // Find if this text matches any of our brands
@@ -112,11 +123,10 @@ export class OcrService implements OnModuleDestroy {
             const brand = this.matchBrand(joined);
             if (!brand) continue;
 
-            const coords = det.polygon;
-            const polygon = coords.map((p: any) => [p[0], p[1]]) as [
-              number,
-              number,
-            ][];
+            const polygon: [number, number][] = (det.polygon ?? []).map((p) => [
+              p[0] ?? 0,
+              p[1] ?? 0,
+            ]);
             const xs = polygon.map((p) => p[0]);
             const ys = polygon.map((p) => p[1]);
 
@@ -148,9 +158,9 @@ export class OcrService implements OnModuleDestroy {
 
       this.logger.log(`Found ${found.length} brand detections`);
       return this.dedupeBoxes(found);
-    } catch (err: any) {
+    } catch (err) {
       this.logger.error(
-        `Failed to process OCR via Python server: ${err.message}`,
+        `Failed to process OCR via Python server: ${err instanceof Error ? err.message : String(err)}`,
       );
       return [];
     }
@@ -251,7 +261,7 @@ export class OcrService implements OnModuleDestroy {
     const rows = a.length + 1;
     const cols = b.length + 1;
     const dp: number[][] = Array.from({ length: rows }, () =>
-      Array(cols).fill(0),
+      Array<number>(cols).fill(0),
     );
     for (let i = 0; i < rows; i++) dp[i][0] = i;
     for (let j = 0; j < cols; j++) dp[0][j] = j;
