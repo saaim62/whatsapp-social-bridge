@@ -503,7 +503,13 @@ export class SourcesService {
 
   /**
    * Check if a source is allowed to send messages.
-   * Auto-creates unknown sources so they show up in the UI.
+   *
+   * Authorization is by EXACT JID only: a sender is allowed iff the
+   * (userId, jid) source record exists and isEnabled. Display names
+   * are presentation-only and NEVER grant access — two different
+   * people can share one name. Unknown identities are auto-created as
+   * DISABLED sources so they show up in the UI for the user to enable
+   * (or not) explicitly.
    */
   async isSourceAllowed(jid: string, pushName: string | undefined, userId: string): Promise<boolean> {
     if (!jid) return false;
@@ -557,28 +563,12 @@ export class SourcesService {
             isEnabled: false,
           },
         });
-        
-        // --- LID AUTO-RESOLUTION ---
-        // If this is a Linked Device ID (@lid) and it was just created as disabled,
-        // check if the user has already enabled the primary phone number source with the exact same contact name.
-        if (jid.endsWith('@lid') && resolvedName && !this.isBadName(resolvedName, localPart)) {
-          const matchingPrimary = await this.prisma.whatsappSource.findFirst({
-            where: {
-              userId,
-              name: resolvedName,
-              isEnabled: true,
-              NOT: { jid: { endsWith: '@lid' } }
-            }
-          });
-          
-          if (matchingPrimary) {
-            this.logger.log(`Auto-enabling LID ${jid} because its primary contact '${resolvedName}' is enabled.`);
-            source = await this.prisma.whatsappSource.update({
-              where: { id: source.id },
-              data: { isEnabled: true }
-            });
-          }
-        }
+        // Authorization is by exact JID only. A previous version
+        // auto-enabled a new @lid source when its display name matched
+        // an enabled source's name — removed: a display name is not an
+        // identity (two different people can share one), so a name
+        // match must never grant access. Unknown identities stay
+        // DISABLED until the user enables this exact source.
       } catch (error: any) {
         if (error.code === 'P2002') {
           // Concurrent create — just fetch it
@@ -591,28 +581,8 @@ export class SourcesService {
         }
       }
     } else {
-      // --- LID AUTO-RESOLUTION FOR EXISTING DISABLED LIDS ---
-      if (!source.isEnabled && jid.endsWith('@lid')) {
-        const localPart = source.jid.split('@')[0];
-        if (!this.isBadName(source.name, localPart)) {
-          const matchingPrimary = await this.prisma.whatsappSource.findFirst({
-            where: {
-              userId,
-              name: source.name,
-              isEnabled: true,
-              NOT: { jid: { endsWith: '@lid' } }
-            }
-          });
-          
-          if (matchingPrimary) {
-            this.logger.log(`Auto-enabling existing LID ${jid} because primary contact '${source.name}' is enabled.`);
-            source = await this.prisma.whatsappSource.update({
-              where: { id: source.id },
-              data: { isEnabled: true }
-            });
-          }
-        }
-      }
+      // No name-based auto-enable for existing @lid sources either:
+      // authorization is exact-JID only (see the create path above).
 
       // Auto-heal existing source if we now have a better name
       const localPart = source.jid.split('@')[0];
