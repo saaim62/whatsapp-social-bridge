@@ -1,23 +1,107 @@
 import { BatchProcessor } from './batch.processor';
+import type { PrismaService } from '../prisma/prisma.service';
+import type { AiService } from '../ai/ai.service';
+import type { SocialService } from '../social/social.service';
+import type { ConfigService } from '@nestjs/config';
 
-/**
- * Publish price-decision gate: a batch may reach Meta only with a real
- * price decision —
- *   (a) a structured selling price > 0 derived from an unambiguous
- *       supplier-price parse, or
- *   (b) an explicit manual_price_override recorded through the
- *       dedicated price-update action (PATCH /api/batches/:id/price).
- * A caption whose {{PRICE}} was already substituted by the review page
- * is NOT a decision: the page once pre-filled its price field from the
- * raw supplier text, so an ambiguous price could be "approved" without
- * the reseller ever choosing one.
- */
+interface Captions {
+  instagramCaption: string;
+  facebookCaption: string;
+  storyText: string;
+}
+
+interface TestBatch {
+  id: string;
+  userId: string;
+  extractedData: Record<string, unknown>;
+  mediaAssets: unknown[];
+  generatedContent: Captions;
+}
+
+interface BatchUpdateArg {
+  data: { status?: string };
+}
+
+interface PublicationData {
+  platform?: string;
+  status?: string;
+  publishedKey?: string | null;
+  platformPostId?: string;
+}
+
+interface PublicationUpdateManyArg {
+  where: { batchId: string; platform: string; status: string };
+  data: { status: string; publishedKey: string | null };
+}
+
+interface NotificationCreateArg {
+  data: { title: string; link?: string };
+}
+
+interface SavedDestination {
+  pageId: string;
+  pageName: string;
+  igAccountId: string;
+  igUsername: string;
+}
+
+type AsyncMock<Args extends unknown[], Result> = jest.Mock<
+  Promise<Result>,
+  Args
+>;
+
+interface PrismaMock {
+  productBatch: {
+    update: AsyncMock<[BatchUpdateArg], unknown>;
+    updateMany: AsyncMock<[unknown], { count: number }>;
+    findUnique: AsyncMock<[unknown], TestBatch>;
+  };
+  settings: {
+    findUnique: AsyncMock<
+      [unknown],
+      {
+        marginType: string;
+        marginValue: number;
+        priceRounding: number;
+        captionFooter: string | null;
+      }
+    >;
+  };
+  notification: { create: AsyncMock<[NotificationCreateArg], unknown> };
+  publication: {
+    create: AsyncMock<[{ data: PublicationData }], unknown>;
+    findMany: AsyncMock<[unknown], unknown[]>;
+    updateMany: AsyncMock<[PublicationUpdateManyArg], { count: number }>;
+  };
+  $transaction: jest.Mock<Promise<unknown>, [unknown]>;
+}
+
+interface SocialMock {
+  publishInstagram: AsyncMock<[TestBatch], { id: string }>;
+  publishFacebook: AsyncMock<[TestBatch], { id: string }>;
+  publishInstagramStory: AsyncMock<[TestBatch], { id: string }>;
+  publishFacebookStory: AsyncMock<[TestBatch], { id: string }>;
+  getSavedDestination: AsyncMock<[], SavedDestination | null>;
+}
+
+/** The private publish entry point, exercised directly by this suite. */
+interface ProcessorInternals {
+  handlePublishBatch: (
+    batchId: string,
+    targets?: string[],
+    force?: boolean,
+  ) => Promise<void>;
+}
+
 describe('BatchProcessor publish price gate', () => {
-  let prisma: any;
-  let socialService: any;
+  let prisma: PrismaMock;
+  let socialService: SocialMock;
   let processor: BatchProcessor;
 
-  function batchWith(extractedData: any, captions?: any) {
+  function batchWith(
+    extractedData: Record<string, unknown>,
+    captions?: Captions,
+  ): TestBatch {
     return {
       id: 'batch-1',
       userId: 'user-1',
@@ -31,61 +115,102 @@ describe('BatchProcessor publish price gate', () => {
     };
   }
 
-  function setup(batch: any) {
+  function setup(batch: TestBatch) {
     prisma = {
       productBatch: {
-        update: jest.fn().mockResolvedValue({}),
-        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
-        findUnique: jest.fn().mockResolvedValue(batch),
+        update: jest
+          .fn<Promise<unknown>, [BatchUpdateArg]>()
+          .mockResolvedValue({}),
+        updateMany: jest
+          .fn<Promise<{ count: number }>, [unknown]>()
+          .mockResolvedValue({ count: 1 }),
+        findUnique: jest
+          .fn<Promise<TestBatch>, [unknown]>()
+          .mockResolvedValue(batch),
       },
       settings: {
-        findUnique: jest.fn().mockResolvedValue({
-          marginType: 'PERCENT',
-          marginValue: 30,
-          priceRounding: 50,
-          captionFooter: null,
-        }),
+        findUnique: jest
+          .fn<
+            Promise<{
+              marginType: string;
+              marginValue: number;
+              priceRounding: number;
+              captionFooter: string | null;
+            }>,
+            [unknown]
+          >()
+          .mockResolvedValue({
+            marginType: 'PERCENT',
+            marginValue: 30,
+            priceRounding: 50,
+            captionFooter: null,
+          }),
       },
-      notification: { create: jest.fn().mockResolvedValue({}) },
+      notification: {
+        create: jest
+          .fn<Promise<unknown>, [NotificationCreateArg]>()
+          .mockResolvedValue({}),
+      },
       publication: {
-        create: jest.fn().mockResolvedValue({}),
-        findMany: jest.fn().mockResolvedValue([]),
-        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        create: jest
+          .fn<Promise<unknown>, [{ data: PublicationData }]>()
+          .mockResolvedValue({}),
+        findMany: jest
+          .fn<Promise<unknown[]>, [unknown]>()
+          .mockResolvedValue([]),
+        updateMany: jest
+          .fn<Promise<{ count: number }>, [PublicationUpdateManyArg]>()
+          .mockResolvedValue({ count: 1 }),
       },
-      $transaction: jest.fn(async (ops: any) =>
-        Array.isArray(ops) ? Promise.all(ops) : ops,
+      $transaction: jest.fn<Promise<unknown>, [unknown]>((ops: unknown) =>
+        Array.isArray(ops)
+          ? Promise.all(ops as Array<Promise<unknown>>)
+          : Promise.resolve(ops),
       ),
     };
     socialService = {
-      publishInstagram: jest.fn().mockResolvedValue({ id: 'ig-1' }),
-      publishFacebook: jest.fn().mockResolvedValue({ id: 'fb-1' }),
-      publishInstagramStory: jest.fn().mockResolvedValue({ id: 'igs-1' }),
-      publishFacebookStory: jest.fn().mockResolvedValue({ id: 'fbs-1' }),
+      publishInstagram: jest
+        .fn<Promise<{ id: string }>, [TestBatch]>()
+        .mockResolvedValue({ id: 'ig-1' }),
+      publishFacebook: jest
+        .fn<Promise<{ id: string }>, [TestBatch]>()
+        .mockResolvedValue({ id: 'fb-1' }),
+      publishInstagramStory: jest
+        .fn<Promise<{ id: string }>, [TestBatch]>()
+        .mockResolvedValue({ id: 'igs-1' }),
+      publishFacebookStory: jest
+        .fn<Promise<{ id: string }>, [TestBatch]>()
+        .mockResolvedValue({ id: 'fbs-1' }),
       // A destination is saved by default so the price-gate tests reach
       // the publish step; the destination-gate test overrides this.
-      getSavedDestination: jest.fn().mockResolvedValue({
-        pageId: 'page-1',
-        pageName: 'My Shop',
-        igAccountId: 'ig-acc-1',
-        igUsername: 'myshop',
-      }),
+      getSavedDestination: jest
+        .fn<Promise<SavedDestination | null>, []>()
+        .mockResolvedValue({
+          pageId: 'page-1',
+          pageName: 'My Shop',
+          igAccountId: 'ig-acc-1',
+          igUsername: 'myshop',
+        }),
     };
-    processor = new BatchProcessor(prisma, {} as any, socialService, {
-      get: (_k: string, def: any) => def,
-    } as any);
+    processor = new BatchProcessor(
+      prisma as unknown as PrismaService,
+      {} as unknown as AiService,
+      socialService as unknown as SocialService,
+      {
+        get: (_k: string, def: unknown) => def,
+      } as unknown as ConfigService,
+    );
   }
 
   function publish() {
-    return (processor as any).handlePublishBatch('batch-1', [
-      'INSTAGRAM',
-      'FACEBOOK',
-    ]);
+    return (processor as unknown as ProcessorInternals).handlePublishBatch(
+      'batch-1',
+      ['INSTAGRAM', 'FACEBOOK'],
+    );
   }
 
   function statusUpdates() {
-    return prisma.productBatch.update.mock.calls.map(
-      (c: any) => c[0].data.status,
-    );
+    return prisma.productBatch.update.mock.calls.map((c) => c[0].data.status);
   }
 
   it('IDEMPOTENT RETRY: Instagram already PUBLISHED, Facebook failed before → retry attempts Facebook only', async () => {
@@ -113,9 +238,9 @@ describe('BatchProcessor publish price gate', () => {
     expect(statusUpdates()).toContain('PUBLISHED');
     // The new Facebook record is the live one for its destination.
     const fbCreate = prisma.publication.create.mock.calls
-      .map((c: any) => c[0].data)
-      .find((d: any) => d.platform === 'FACEBOOK' && d.status === 'PUBLISHED');
-    expect(fbCreate.publishedKey).toBe('batch-1:FACEBOOK');
+      .map((c) => c[0].data)
+      .find((d) => d.platform === 'FACEBOOK' && d.status === 'PUBLISHED');
+    expect(fbCreate?.publishedKey).toBe('batch-1:FACEBOOK');
   });
 
   it('CLAIM: a second publish job while one is in flight (claim count 0) is a complete no-op', async () => {
@@ -140,7 +265,11 @@ describe('BatchProcessor publish price gate', () => {
         publishedKey: 'batch-1:INSTAGRAM',
       },
     ]);
-    await (processor as any).handlePublishBatch('batch-1', ['INSTAGRAM'], true);
+    await (processor as unknown as ProcessorInternals).handlePublishBatch(
+      'batch-1',
+      ['INSTAGRAM'],
+      true,
+    );
     expect(socialService.publishInstagram).toHaveBeenCalledTimes(1);
     // Old live record superseded (status + key cleared) inside a transaction.
     const supersede = prisma.publication.updateMany.mock.calls[0][0];
@@ -153,10 +282,10 @@ describe('BatchProcessor publish price gate', () => {
     expect(supersede.data.publishedKey).toBeNull();
     expect(prisma.$transaction).toHaveBeenCalled();
     const newRecord = prisma.publication.create.mock.calls
-      .map((c: any) => c[0].data)
-      .find((d: any) => d.platform === 'INSTAGRAM' && d.status === 'PUBLISHED');
-    expect(newRecord.publishedKey).toBe('batch-1:INSTAGRAM');
-    expect(newRecord.platformPostId).toBe('ig-1');
+      .map((c) => c[0].data)
+      .find((d) => d.platform === 'INSTAGRAM' && d.status === 'PUBLISHED');
+    expect(newRecord?.publishedKey).toBe('batch-1:INSTAGRAM');
+    expect(newRecord?.platformPostId).toBe('ig-1');
   });
 
   it('BLOCKS publishing when no Meta destination is saved — social publish methods never called, batch returns to APPROVED with a notification', async () => {

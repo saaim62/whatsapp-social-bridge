@@ -1,5 +1,77 @@
 import axios from 'axios';
 import { SocialService } from './social.service';
+import { decryptToken } from './token-crypto';
+import type { PrismaService } from '../prisma/prisma.service';
+import type { ConfigService } from '@nestjs/config';
+
+interface OAuthStateRow {
+  nonce: string;
+  userId: string;
+  expiresAt: Date;
+}
+
+interface OAuthStateCreateArg {
+  data: { userId: string; nonce: string; expiresAt: Date };
+}
+
+interface DeleteManyArg {
+  where: { nonce: string; expiresAt: { gt: Date } };
+}
+
+interface UpsertArg {
+  where: { userId_platform: { userId: string; platform: string } };
+  create: { accessToken: string };
+}
+
+interface SavedAccountRow {
+  id?: string;
+  accessToken: string;
+  facebookPageId?: string | null;
+  facebookPageName?: string | null;
+  instagramUserId?: string | null;
+  instagramUsername?: string | null;
+}
+
+interface UpdateArg {
+  data: {
+    facebookPageId: string;
+    facebookPageName: string;
+    instagramUserId: string | null;
+    instagramUsername: string | null;
+  };
+}
+
+interface PrismaMock {
+  oAuthState: {
+    create: jest.Mock<Promise<unknown>, [OAuthStateCreateArg]>;
+    findUnique: jest.Mock<Promise<OAuthStateRow | null>, [unknown]>;
+    deleteMany: jest.Mock<Promise<{ count: number }>, [DeleteManyArg]>;
+  };
+  socialAccount: {
+    upsert: jest.Mock<Promise<unknown>, [UpsertArg]>;
+    findUnique: jest.Mock<Promise<SavedAccountRow | null>, [unknown]>;
+    update: jest.Mock<Promise<unknown>, [UpdateArg]>;
+  };
+}
+
+/** The private publishing-context resolver, exercised directly. */
+interface SocialInternals {
+  getMetaPublishingContext: (userId: string) => Promise<{
+    pageId: string;
+    pageName: string;
+    pageAccessToken: string;
+    igAccountId?: string;
+  }>;
+}
+
+function makeConfig() {
+  return {
+    get: jest.fn(
+      (key: string) =>
+        ({ META_APP_ID: 'app-id', META_APP_SECRET: 'app-secret' })[key],
+    ),
+  } as unknown as ConfigService;
+}
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -9,26 +81,29 @@ const mockedAxios = axios as jest.Mocked<typeof axios>;
  * user — never a forgeable encoding of the userId.
  */
 describe('SocialService Meta OAuth state handling', () => {
-  let prisma: any;
+  let prisma: PrismaMock;
   let service: SocialService;
 
   beforeEach(() => {
     jest.clearAllMocks();
     prisma = {
       oAuthState: {
-        create: jest.fn().mockResolvedValue({}),
-        findUnique: jest.fn(),
-        deleteMany: jest.fn(),
+        create: jest
+          .fn<Promise<unknown>, [OAuthStateCreateArg]>()
+          .mockResolvedValue({}),
+        findUnique: jest.fn<Promise<OAuthStateRow | null>, [unknown]>(),
+        deleteMany: jest.fn<Promise<{ count: number }>, [DeleteManyArg]>(),
       },
-      socialAccount: { upsert: jest.fn().mockResolvedValue({}) },
+      socialAccount: {
+        upsert: jest.fn<Promise<unknown>, [UpsertArg]>().mockResolvedValue({}),
+        findUnique: jest.fn<Promise<SavedAccountRow | null>, [unknown]>(),
+        update: jest.fn<Promise<unknown>, [UpdateArg]>(),
+      },
     };
-    const config = {
-      get: jest.fn(
-        (key: string) =>
-          ({ META_APP_ID: 'app-id', META_APP_SECRET: 'app-secret' })[key],
-      ),
-    };
-    service = new SocialService(config as any, prisma);
+    service = new SocialService(
+      makeConfig(),
+      prisma as unknown as PrismaService,
+    );
   });
 
   it('issues a random nonce bound to the user with a ~10 minute TTL, and puts only the nonce in the URL', async () => {
@@ -59,7 +134,7 @@ describe('SocialService Meta OAuth state handling', () => {
       service.handleMetaOAuthCallback('code-1', forged),
     ).rejects.toThrow('Invalid state parameter');
     expect(prisma.oAuthState.findUnique).not.toHaveBeenCalled();
-    expect(mockedAxios.get).not.toHaveBeenCalled();
+    expect(mockedAxios.get.mock.calls).toHaveLength(0);
     expect(prisma.socialAccount.upsert).not.toHaveBeenCalled();
   });
 
@@ -68,7 +143,7 @@ describe('SocialService Meta OAuth state handling', () => {
     await expect(
       service.handleMetaOAuthCallback('code-1', 'b'.repeat(64)),
     ).rejects.toThrow('Invalid state parameter');
-    expect(mockedAxios.get).not.toHaveBeenCalled();
+    expect(mockedAxios.get.mock.calls).toHaveLength(0);
   });
 
   it('rejects an expired nonce (consume matches zero rows)', async () => {
@@ -81,7 +156,7 @@ describe('SocialService Meta OAuth state handling', () => {
     await expect(
       service.handleMetaOAuthCallback('code-1', 'c'.repeat(64)),
     ).rejects.toThrow('Invalid or expired state parameter');
-    expect(mockedAxios.get).not.toHaveBeenCalled();
+    expect(mockedAxios.get.mock.calls).toHaveLength(0);
     expect(prisma.socialAccount.upsert).not.toHaveBeenCalled();
   });
 
@@ -136,7 +211,6 @@ describe('SocialService Meta OAuth state handling', () => {
       const stored = upsertArg.create.accessToken;
       expect(stored).not.toBe('long-lived');
       expect(stored.startsWith('enc:v1:')).toBe(true);
-      const { decryptToken } = require('./token-crypto');
       expect(decryptToken(stored)).toBe('long-lived');
     } finally {
       if (prev === undefined) delete process.env.TOKEN_ENCRYPTION_KEY;
@@ -152,7 +226,7 @@ describe('SocialService Meta OAuth state handling', () => {
  * destination is saved.
  */
 describe('SocialService Meta destination selection', () => {
-  let prisma: any;
+  let prisma: PrismaMock;
   let service: SocialService;
 
   const PAGES = [
@@ -165,43 +239,44 @@ describe('SocialService Meta destination selection', () => {
   };
 
   function mockGraph() {
-    mockedAxios.get.mockImplementation(async (url: string) => {
+    mockedAxios.get.mockImplementation((url: string) => {
       if (url.includes('/me/accounts')) {
-        return { data: { data: PAGES } };
+        return Promise.resolve({ data: { data: PAGES } });
       }
       const pageId = url.split('/v19.0/')[1];
       const ig = IG_BY_PAGE[pageId];
-      return {
+      return Promise.resolve({
         data: {
           instagram_business_account: ig
             ? { id: ig.id, username: ig.username }
             : undefined,
         },
-      };
+      });
     });
   }
 
-  function setup(savedRow: any) {
+  function setup(savedRow: SavedAccountRow) {
     jest.clearAllMocks();
     prisma = {
       oAuthState: {
-        create: jest.fn().mockResolvedValue({}),
-        findUnique: jest.fn(),
-        deleteMany: jest.fn(),
+        create: jest
+          .fn<Promise<unknown>, [OAuthStateCreateArg]>()
+          .mockResolvedValue({}),
+        findUnique: jest.fn<Promise<OAuthStateRow | null>, [unknown]>(),
+        deleteMany: jest.fn<Promise<{ count: number }>, [DeleteManyArg]>(),
       },
       socialAccount: {
-        upsert: jest.fn().mockResolvedValue({}),
-        findUnique: jest.fn().mockResolvedValue(savedRow),
-        update: jest.fn().mockResolvedValue({}),
+        upsert: jest.fn<Promise<unknown>, [UpsertArg]>().mockResolvedValue({}),
+        findUnique: jest
+          .fn<Promise<SavedAccountRow | null>, [unknown]>()
+          .mockResolvedValue(savedRow),
+        update: jest.fn<Promise<unknown>, [UpdateArg]>().mockResolvedValue({}),
       },
     };
-    const config = {
-      get: jest.fn(
-        (key: string) =>
-          ({ META_APP_ID: 'app-id', META_APP_SECRET: 'app-secret' })[key],
-      ),
-    };
-    service = new SocialService(config as any, prisma);
+    service = new SocialService(
+      makeConfig(),
+      prisma as unknown as PrismaService,
+    );
     mockGraph();
   }
 
@@ -214,10 +289,12 @@ describe('SocialService Meta destination selection', () => {
       instagramUsername: null,
     });
     await expect(
-      (service as any).getMetaPublishingContext('user-1'),
+      (service as unknown as SocialInternals).getMetaPublishingContext(
+        'user-1',
+      ),
     ).rejects.toThrow('No publishing destination selected');
     // It must not fall back to listing pages and picking one.
-    expect(mockedAxios.get).not.toHaveBeenCalled();
+    expect(mockedAxios.get.mock.calls).toHaveLength(0);
   });
 
   it('saved destination wins even when it is NOT the first page', async () => {
@@ -228,7 +305,9 @@ describe('SocialService Meta destination selection', () => {
       instagramUserId: 'ig-saved',
       instagramUsername: 'savedshop',
     });
-    const ctx = await (service as any).getMetaPublishingContext('user-1');
+    const ctx = await (
+      service as unknown as SocialInternals
+    ).getMetaPublishingContext('user-1');
     expect(ctx.pageId).toBe('page-saved');
     expect(ctx.pageName).toBe('Saved Shop');
     expect(ctx.pageAccessToken).toBe('token-saved');
