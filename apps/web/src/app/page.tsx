@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { motion, animate } from 'framer-motion';
+import type { Variants } from 'framer-motion';
 import { formatDistanceToNow } from 'date-fns';
 import {
   Zap,
@@ -18,6 +19,7 @@ import {
 } from 'lucide-react';
 import { API_URL, fetchWithAuth } from '@/lib/api';
 import { mediaSrcFor } from '@/lib/media';
+import type { MediaAsset, ProductBatch } from '@/lib/types';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 
@@ -36,8 +38,8 @@ function CountUp({ value }: { value: number }) {
 }
 
 export default function DashboardPage() {
-  const [batches, setBatches] = useState<any[]>([]);
-  const [waStatus, setWaStatus] = useState<any>(null);
+  const [batches, setBatches] = useState<ProductBatch[]>([]);
+  const [waStatus, setWaStatus] = useState<{ isReady: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -62,7 +64,6 @@ export default function DashboardPage() {
     loadAll();
     const t = setInterval(loadAll, 30000);
     return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const toggleSelect = (id: string) =>
@@ -121,7 +122,7 @@ export default function DashboardPage() {
 
   const recent = batches.slice(0, 5);
 
-  const containerVariants: any = {
+  const containerVariants: Variants = {
     hidden: { opacity: 0 },
     show: {
       opacity: 1,
@@ -129,7 +130,7 @@ export default function DashboardPage() {
     },
   };
 
-  const itemVariants: any = {
+  const itemVariants: Variants = {
     hidden: { opacity: 0, y: 24 },
     show: {
       opacity: 1,
@@ -200,13 +201,13 @@ export default function DashboardPage() {
   }, 0);
   const waReady = !!waStatus?.isReady;
 
-  const thumbFor = (batch: any) => {
-    const isVid = (m: any) =>
+  const thumbFor = (batch: ProductBatch) => {
+    const isVid = (m: MediaAsset | undefined) =>
       m?.mimeType?.startsWith('video/') ||
       m?.originalUrl?.endsWith('.mp4') ||
       m?.localPath?.endsWith('.mp4');
     const m =
-      batch.mediaAssets?.find((x: any) => !isVid(x)) || batch.mediaAssets?.[0];
+      batch.mediaAssets?.find((x) => !isVid(x)) || batch.mediaAssets?.[0];
     return {
       src: mediaSrcFor(m),
       isVideo: isVid(m),
@@ -398,7 +399,7 @@ export default function DashboardPage() {
                 )}
               </div>
               <ul className="relative z-10 divide-y divide-white/[0.06] rounded-2xl border border-white/[0.07] bg-white/[0.02] overflow-hidden">
-                {readyQueue.slice(0, 5).map((batch: any) => {
+                {readyQueue.slice(0, 5).map((batch) => {
                   const t = thumbFor(batch);
                   return (
                     <li key={batch.id} className="flex items-stretch">
@@ -555,7 +556,7 @@ export default function DashboardPage() {
             </div>
           ) : (
             <ul className="divide-y divide-graphite-border">
-              {recent.map((batch: any, i: number) => (
+              {recent.map((batch, i: number) => (
                 <motion.li
                   key={batch.id}
                   initial={{ opacity: 0, x: -20 }}
@@ -570,12 +571,12 @@ export default function DashboardPage() {
                     <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-gradient-to-b from-gold-400 to-gold-600 opacity-0 group-hover:opacity-100 transition-opacity" />
 
                     {(() => {
-                      const isVid = (m: any) =>
+                      const isVid = (m: MediaAsset | undefined) =>
                         m?.mimeType?.startsWith('video/') ||
                         m?.originalUrl?.endsWith('.mp4') ||
                         m?.localPath?.endsWith('.mp4');
                       const thumbMedia =
-                        batch.mediaAssets?.find((m: any) => !isVid(m)) ||
+                        batch.mediaAssets?.find((m) => !isVid(m)) ||
                         batch.mediaAssets?.[0];
                       const mediaSrc = mediaSrcFor(thumbMedia);
                       const isVideo = isVid(thumbMedia);

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import { motion } from 'framer-motion';
 import {
   Save,
@@ -15,7 +16,6 @@ import {
   Percent,
 } from 'lucide-react';
 import { API_URL, fetchWithAuth } from '@/lib/api';
-import { PageHeader } from '@/components/ui/PageHeader';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 const DEPTH_OPTIONS = [
@@ -28,16 +28,38 @@ const DEPTH_OPTIONS = [
   { value: 720, label: 'Last 1 month' },
 ];
 
+interface SettingsState {
+  isSyncActive: boolean;
+  historySyncDepthHours: number;
+  marginType: string;
+  marginValue: number;
+  priceRounding: number;
+  captionFooter: string;
+}
+
+interface WaStatus {
+  isReady: boolean;
+  phoneNumber?: string | null;
+  qrUrl?: string | null;
+}
+
+interface SocialAccount {
+  platform: string;
+  facebookPageId?: string | null;
+  facebookPageName?: string | null;
+  instagramUserId?: string | null;
+  instagramUsername?: string | null;
+}
+
+interface MetaPage {
+  pageId: string;
+  pageName: string;
+  instagramAccountId?: string | null;
+  instagramUsername?: string | null;
+}
+
 export default function SettingsPage() {
-  const [settings, setSettings] = useState<{
-    isSyncActive: boolean;
-    historySyncDepthHours: number;
-    marginType: string;
-    marginValue: number;
-    priceRounding: number;
-    captionFooter: string;
-    [key: string]: any;
-  }>({
+  const [settings, setSettings] = useState<SettingsState>({
     isSyncActive: true,
     historySyncDepthHours: 24,
     marginType: 'PERCENT',
@@ -56,8 +78,8 @@ export default function SettingsPage() {
     priceRounding: s.priceRounding,
     captionFooter: s.captionFooter,
   });
-  const [waStatus, setWaStatus] = useState<any>(null);
-  const [socialAccounts, setSocialAccounts] = useState<any[]>([]);
+  const [waStatus, setWaStatus] = useState<WaStatus | null>(null);
+  const [socialAccounts, setSocialAccounts] = useState<SocialAccount[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -92,7 +114,7 @@ export default function SettingsPage() {
     ])
       .then(([settingsData, waData, socialData]) => {
         if (settingsData && !settingsData.error)
-          setSettings((prev: any) => ({
+          setSettings((prev) => ({
             ...prev,
             ...settingsData,
             captionFooter: settingsData.captionFooter ?? '',
@@ -158,10 +180,13 @@ export default function SettingsPage() {
       setTimeout(() => {
         setResyncResult((prev) => (prev === data ? null : prev));
       }, 8000);
-    } catch (err: any) {
+    } catch (err) {
       setResyncResult({
         success: false,
-        message: err.message || 'Failed to trigger historical resync.',
+        message:
+          err instanceof Error
+            ? err.message
+            : 'Failed to trigger historical resync.',
       });
     } finally {
       setResyncing(false);
@@ -226,7 +251,7 @@ export default function SettingsPage() {
   // Publishing is blocked until a destination is saved — the app never
   // auto-picks a page.
   const metaAccount = socialAccounts.find((a) => a.platform === 'META');
-  const [metaPages, setMetaPages] = useState<any[]>([]);
+  const [metaPages, setMetaPages] = useState<MetaPage[]>([]);
   const [metaPagesError, setMetaPagesError] = useState<string | null>(null);
   const [selectedPageId, setSelectedPageId] = useState<string>('');
   const [destSaving, setDestSaving] = useState(false);
@@ -275,10 +300,10 @@ export default function SettingsPage() {
             a.platform === 'META'
               ? {
                   ...a,
-                  facebookPageId: page.pageId,
-                  facebookPageName: page.pageName,
-                  instagramUserId: page.instagramAccountId,
-                  instagramUsername: page.instagramUsername,
+                  facebookPageId: page?.pageId,
+                  facebookPageName: page?.pageName,
+                  instagramUserId: page?.instagramAccountId,
+                  instagramUsername: page?.instagramUsername,
                 }
               : a,
           ),
@@ -288,7 +313,7 @@ export default function SettingsPage() {
       } else {
         setDestError(data?.message || 'Could not save the destination.');
       }
-    } catch (err) {
+    } catch {
       setDestError('Could not save the destination.');
     }
     setDestSaving(false);
@@ -374,10 +399,13 @@ export default function SettingsPage() {
                     Scan payload via Linked Devices to authorize node
                   </p>
                   <div className="p-4 bg-white rounded-xl shadow-[0_0_30px_rgba(37,211,102,0.2)]">
-                    <img
+                    <Image
                       src={waStatus.qrUrl}
                       alt="WhatsApp QR Code"
+                      width={256}
+                      height={256}
                       className="w-64 h-64"
+                      unoptimized
                     />
                   </div>
                 </motion.div>
@@ -740,7 +768,7 @@ export default function SettingsPage() {
                         key={t}
                         type="button"
                         onClick={() =>
-                          setSettings((s: any) => ({ ...s, marginType: t }))
+                          setSettings((s) => ({ ...s, marginType: t }))
                         }
                         className={`px-4 py-2.5 text-sm font-semibold transition-colors ${settings.marginType === t ? 'bg-gold-500/20 text-gold-300' : 'bg-graphite-darker text-slate-400 hover:text-slate-200'}`}
                       >
@@ -760,7 +788,7 @@ export default function SettingsPage() {
                     min={0}
                     value={settings.marginValue}
                     onChange={(e) =>
-                      setSettings((s: any) => ({
+                      setSettings((s) => ({
                         ...s,
                         marginValue: parseFloat(e.target.value) || 0,
                       }))
@@ -775,7 +803,7 @@ export default function SettingsPage() {
                   <select
                     value={settings.priceRounding}
                     onChange={(e) =>
-                      setSettings((s: any) => ({
+                      setSettings((s) => ({
                         ...s,
                         priceRounding: parseInt(e.target.value, 10),
                       }))
@@ -822,7 +850,7 @@ export default function SettingsPage() {
                   rows={3}
                   value={settings.captionFooter}
                   onChange={(e) =>
-                    setSettings((s: any) => ({
+                    setSettings((s) => ({
                       ...s,
                       captionFooter: e.target.value,
                     }))
