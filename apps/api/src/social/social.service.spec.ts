@@ -23,8 +23,9 @@ describe('SocialService Meta OAuth state handling', () => {
       socialAccount: { upsert: jest.fn().mockResolvedValue({}) },
     };
     const config = {
-      get: jest.fn((key: string) =>
-        ({ META_APP_ID: 'app-id', META_APP_SECRET: 'app-secret' })[key],
+      get: jest.fn(
+        (key: string) =>
+          ({ META_APP_ID: 'app-id', META_APP_SECRET: 'app-secret' })[key],
       ),
     };
     service = new SocialService(config as any, prisma);
@@ -45,14 +46,18 @@ describe('SocialService Meta OAuth state handling', () => {
     expect(url).toContain(`state=${data.nonce}`);
     // The state must not carry the userId in any decodable form.
     expect(url).not.toContain('user-1');
-    expect(url).not.toContain(Buffer.from(JSON.stringify({ userId: 'user-1' })).toString('base64'));
+    expect(url).not.toContain(
+      Buffer.from(JSON.stringify({ userId: 'user-1' })).toString('base64'),
+    );
   });
 
   it('rejects the OLD forgeable base64 userId state without touching the DB or Meta', async () => {
-    const forged = Buffer.from(JSON.stringify({ userId: 'victim' })).toString('base64');
-    await expect(service.handleMetaOAuthCallback('code-1', forged)).rejects.toThrow(
-      'Invalid state parameter',
+    const forged = Buffer.from(JSON.stringify({ userId: 'victim' })).toString(
+      'base64',
     );
+    await expect(
+      service.handleMetaOAuthCallback('code-1', forged),
+    ).rejects.toThrow('Invalid state parameter');
     expect(prisma.oAuthState.findUnique).not.toHaveBeenCalled();
     expect(mockedAxios.get).not.toHaveBeenCalled();
     expect(prisma.socialAccount.upsert).not.toHaveBeenCalled();
@@ -60,9 +65,9 @@ describe('SocialService Meta OAuth state handling', () => {
 
   it('rejects an unknown nonce', async () => {
     prisma.oAuthState.findUnique.mockResolvedValue(null);
-    await expect(service.handleMetaOAuthCallback('code-1', 'b'.repeat(64))).rejects.toThrow(
-      'Invalid state parameter',
-    );
+    await expect(
+      service.handleMetaOAuthCallback('code-1', 'b'.repeat(64)),
+    ).rejects.toThrow('Invalid state parameter');
     expect(mockedAxios.get).not.toHaveBeenCalled();
   });
 
@@ -73,9 +78,9 @@ describe('SocialService Meta OAuth state handling', () => {
       expiresAt: new Date(Date.now() - 1000),
     });
     prisma.oAuthState.deleteMany.mockResolvedValue({ count: 0 });
-    await expect(service.handleMetaOAuthCallback('code-1', 'c'.repeat(64))).rejects.toThrow(
-      'Invalid or expired state parameter',
-    );
+    await expect(
+      service.handleMetaOAuthCallback('code-1', 'c'.repeat(64)),
+    ).rejects.toThrow('Invalid or expired state parameter');
     expect(mockedAxios.get).not.toHaveBeenCalled();
     expect(prisma.socialAccount.upsert).not.toHaveBeenCalled();
   });
@@ -104,9 +109,9 @@ describe('SocialService Meta OAuth state handling', () => {
 
     // Replay: the nonce is gone now, so a second callback is rejected.
     prisma.oAuthState.findUnique.mockResolvedValue(null);
-    await expect(service.handleMetaOAuthCallback('code-1', nonce)).rejects.toThrow(
-      'Invalid state parameter',
-    );
+    await expect(
+      service.handleMetaOAuthCallback('code-1', nonce),
+    ).rejects.toThrow('Invalid state parameter');
     expect(prisma.socialAccount.upsert).toHaveBeenCalledTimes(1);
   });
 
@@ -191,8 +196,9 @@ describe('SocialService Meta destination selection', () => {
       },
     };
     const config = {
-      get: jest.fn((key: string) =>
-        ({ META_APP_ID: 'app-id', META_APP_SECRET: 'app-secret' })[key],
+      get: jest.fn(
+        (key: string) =>
+          ({ META_APP_ID: 'app-id', META_APP_SECRET: 'app-secret' })[key],
       ),
     };
     service = new SocialService(config as any, prisma);
@@ -265,7 +271,11 @@ describe('SocialService Meta destination selection', () => {
 
   it('saveMetaDestination rejects an IG account that is not linked to the chosen page', async () => {
     setup({ id: 'acc-1', accessToken: 'user-token' });
-    const res = await service.saveMetaDestination('user-1', 'page-saved', 'ig-first');
+    const res = await service.saveMetaDestination(
+      'user-1',
+      'page-saved',
+      'ig-first',
+    );
     expect(res.success).toBe(false);
     expect(prisma.socialAccount.update).not.toHaveBeenCalled();
   });

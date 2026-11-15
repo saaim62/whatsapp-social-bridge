@@ -32,11 +32,23 @@ describe('BatchService.clearAIContentBulk tenant isolation', () => {
     db = {
       batches: [
         { id: 'batch-a1', userId: USER_A, extractedData: { price: 1850 } },
-        { id: 'batch-b1', userId: USER_B, extractedData: { price: 9999, secret: 'B data' } },
+        {
+          id: 'batch-b1',
+          userId: USER_B,
+          extractedData: { price: 9999, secret: 'B data' },
+        },
       ],
       contents: [
-        { id: 'content-a1', batchId: 'batch-a1', instagramCaption: 'A caption' },
-        { id: 'content-b1', batchId: 'batch-b1', instagramCaption: 'B caption' },
+        {
+          id: 'content-a1',
+          batchId: 'batch-a1',
+          instagramCaption: 'A caption',
+        },
+        {
+          id: 'content-b1',
+          batchId: 'batch-b1',
+          instagramCaption: 'B caption',
+        },
       ],
       assets: [
         { id: 'asset-a1', batchId: 'batch-a1', ocrConfidence: 0.9 },
@@ -95,8 +107,12 @@ describe('BatchService.clearAIContentBulk tenant isolation', () => {
         updateMany: jest.fn(async ({ where, data }: any) => {
           let count = 0;
           for (const a of db.assets) {
-            if (where.batchId?.in && !where.batchId.in.includes(a.batchId)) continue;
-            if (where.batch?.userId && batchById(a.batchId)?.userId !== where.batch.userId)
+            if (where.batchId?.in && !where.batchId.in.includes(a.batchId))
+              continue;
+            if (
+              where.batch?.userId &&
+              batchById(a.batchId)?.userId !== where.batch.userId
+            )
               continue;
             Object.assign(a, data);
             count++;
@@ -136,16 +152,23 @@ describe('BatchService.clearAIContentBulk tenant isolation', () => {
     });
 
     // User A submits a list containing BOTH their own and user B's batch ID.
-    const res: any = await service.clearAIContentBulk(['batch-a1', 'batch-b1'], USER_A);
+    const res: any = await service.clearAIContentBulk(
+      ['batch-a1', 'batch-b1'],
+      USER_A,
+    );
     expect(res.success).toBe(true);
     expect(res.count).toBe(1); // only A's batch was in the working set
 
     // A's data was cleared.
-    expect(db.batches.find((b) => b.id === 'batch-a1')!.extractedData).not.toEqual({
+    expect(
+      db.batches.find((b) => b.id === 'batch-a1')!.extractedData,
+    ).not.toEqual({
       price: 1850,
     });
     expect(db.contents.find((c) => c.batchId === 'batch-a1')).toBeUndefined();
-    expect(db.assets.find((a) => a.batchId === 'batch-a1')!.ocrConfidence).toBeNull();
+    expect(
+      db.assets.find((a) => a.batchId === 'batch-a1')!.ocrConfidence,
+    ).toBeNull();
 
     // B's rows are byte-identical.
     const bSnapshotAfter = JSON.stringify({

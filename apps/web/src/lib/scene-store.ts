@@ -1,4 +1,4 @@
-import { create } from "zustand";
+import { create } from 'zustand';
 
 /**
  * Tiny shared store between the DOM shell and the WebGL scene.
@@ -14,7 +14,7 @@ type SceneState = {
 };
 
 export const useSceneStore = create<SceneState>((set) => ({
-  route: "/",
+  route: '/',
   scroll: 0,
   setRoute: (route) => set({ route }),
   setScroll: (scroll) => set({ scroll }),

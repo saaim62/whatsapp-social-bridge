@@ -18,7 +18,9 @@ describe('AppController readiness', () => {
   }
 
   it('returns HTTP 200 when DB and Redis are up', async () => {
-    const prisma = { $queryRaw: jest.fn().mockResolvedValue([{ '?column?': 1 }]) };
+    const prisma = {
+      $queryRaw: jest.fn().mockResolvedValue([{ '?column?': 1 }]),
+    };
     const controller = new AppController(prisma as any);
     const res = makeRes();
     await controller.checkReadiness(res);
@@ -27,7 +29,9 @@ describe('AppController readiness', () => {
   });
 
   it('returns HTTP 503 (not 200) when the DB is down', async () => {
-    const prisma = { $queryRaw: jest.fn().mockRejectedValue(new Error('db down')) };
+    const prisma = {
+      $queryRaw: jest.fn().mockRejectedValue(new Error('db down')),
+    };
     const controller = new AppController(prisma as any);
     const res = makeRes();
     await controller.checkReadiness(res);

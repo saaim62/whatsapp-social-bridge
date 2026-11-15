@@ -10,7 +10,7 @@ import { StorageService } from '../storage/storage.service';
 export class ProcessorModule {
   static register(): DynamicModule {
     const providers: any[] = [BatchProcessor, StorageService];
-    
+
     if (process.env.ENABLE_IMAGE_BLUR_WORKER === 'true') {
       providers.push(ImageBlurProcessor);
     }

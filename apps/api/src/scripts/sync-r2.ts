@@ -8,7 +8,8 @@ import * as dotenv from 'dotenv';
 dotenv.config({ path: path.join(process.cwd(), '.env') });
 dotenv.config({ path: path.join(__dirname, '../../../.env') });
 
-const clean = (val?: string) => val ? val.replace(/^["']|["']$/g, '').trim() : undefined;
+const clean = (val?: string) =>
+  val ? val.replace(/^["']|["']$/g, '').trim() : undefined;
 
 const account1 = {
   id: 'account_1',
@@ -16,7 +17,9 @@ const account1 = {
   accessKeyId: clean(process.env.R2_ACC1_ACCESS_KEY_ID),
   secretAccessKey: clean(process.env.R2_ACC1_SECRET_ACCESS_KEY),
   bucketName: clean(process.env.R2_ACC1_BUCKET_NAME) || 'whatsapp-media-1',
-  publicUrl: clean(process.env.R2_ACC1_PUBLIC_URL) || 'https://pub-4b5e72d8e2b14be8a0cb7a6c40b423cc.r2.dev',
+  publicUrl:
+    clean(process.env.R2_ACC1_PUBLIC_URL) ||
+    'https://pub-4b5e72d8e2b14be8a0cb7a6c40b423cc.r2.dev',
 };
 
 console.log('R2 Sync Config:', {
@@ -44,14 +47,11 @@ const prisma = new PrismaClient();
 
 async function sync() {
   console.log('--- Starting Cloudflare R2 Media Sync ---');
-  
+
   // Find all media assets that do not have an R2 originalUrl
   const pendingAssets = await prisma.mediaAsset.findMany({
     where: {
-      OR: [
-        { originalUrl: null },
-        { originalUrl: '' },
-      ],
+      OR: [{ originalUrl: null }, { originalUrl: '' }],
     },
   });
 
@@ -63,14 +63,46 @@ async function sync() {
   for (const asset of pendingAssets) {
     let filePath: string | null = null;
     const candidates = [
-      asset.localPath ? path.join(process.cwd(), asset.localPath.replace(/^api\//, '')) : null,
-      asset.localPath ? path.join(process.cwd(), 'apps/api', asset.localPath.replace(/^api\//, '')) : null,
-      asset.localPath ? path.join(process.cwd(), 'uploads', path.basename(asset.localPath)) : null,
-      asset.localPath ? path.join(process.cwd(), 'apps/api/uploads', path.basename(asset.localPath)) : null,
-      asset.whatsappMediaId ? path.join(process.cwd(), 'uploads', `${asset.whatsappMediaId}.jpeg`) : null,
-      asset.whatsappMediaId ? path.join(process.cwd(), 'apps/api/uploads', `${asset.whatsappMediaId}.jpeg`) : null,
-      asset.whatsappMediaId ? path.join(process.cwd(), 'uploads', `${asset.whatsappMediaId}.mp4`) : null,
-      asset.whatsappMediaId ? path.join(process.cwd(), 'apps/api/uploads', `${asset.whatsappMediaId}.mp4`) : null,
+      asset.localPath
+        ? path.join(process.cwd(), asset.localPath.replace(/^api\//, ''))
+        : null,
+      asset.localPath
+        ? path.join(
+            process.cwd(),
+            'apps/api',
+            asset.localPath.replace(/^api\//, ''),
+          )
+        : null,
+      asset.localPath
+        ? path.join(process.cwd(), 'uploads', path.basename(asset.localPath))
+        : null,
+      asset.localPath
+        ? path.join(
+            process.cwd(),
+            'apps/api/uploads',
+            path.basename(asset.localPath),
+          )
+        : null,
+      asset.whatsappMediaId
+        ? path.join(process.cwd(), 'uploads', `${asset.whatsappMediaId}.jpeg`)
+        : null,
+      asset.whatsappMediaId
+        ? path.join(
+            process.cwd(),
+            'apps/api/uploads',
+            `${asset.whatsappMediaId}.jpeg`,
+          )
+        : null,
+      asset.whatsappMediaId
+        ? path.join(process.cwd(), 'uploads', `${asset.whatsappMediaId}.mp4`)
+        : null,
+      asset.whatsappMediaId
+        ? path.join(
+            process.cwd(),
+            'apps/api/uploads',
+            `${asset.whatsappMediaId}.mp4`,
+          )
+        : null,
     ].filter(Boolean) as string[];
 
     for (const cand of candidates) {
@@ -88,17 +120,23 @@ async function sync() {
     try {
       const fileBuffer = fs.readFileSync(filePath);
       const filename = path.basename(filePath);
-      const mimeType = asset.mimeType || (filename.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg');
+      const mimeType =
+        asset.mimeType ||
+        (filename.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg');
 
       // Upload to R2
-      await s3Client.send(new PutObjectCommand({
-        Bucket: account1.bucketName,
-        Key: filename,
-        Body: fileBuffer,
-        ContentType: mimeType,
-      }));
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket: account1.bucketName,
+          Key: filename,
+          Body: fileBuffer,
+          ContentType: mimeType,
+        }),
+      );
 
-      const baseUrl = account1.publicUrl.endsWith('/') ? account1.publicUrl.slice(0, -1) : account1.publicUrl;
+      const baseUrl = account1.publicUrl.endsWith('/')
+        ? account1.publicUrl.slice(0, -1)
+        : account1.publicUrl;
       const r2Url = `${baseUrl}/${filename}`;
 
       await prisma.mediaAsset.update({
@@ -110,13 +148,17 @@ async function sync() {
       });
 
       uploadedCount++;
-      console.log(`[${uploadedCount}/${pendingAssets.length}] Uploaded ${filename} (${fileBuffer.length} bytes) -> ${r2Url}`);
+      console.log(
+        `[${uploadedCount}/${pendingAssets.length}] Uploaded ${filename} (${fileBuffer.length} bytes) -> ${r2Url}`,
+      );
     } catch (err: any) {
       console.error(`Failed to upload ${filePath}:`, err.message);
     }
   }
 
-  console.log(`\nSync finished! Uploaded to R2: ${uploadedCount}, Not on local disk: ${missingCount}`);
+  console.log(
+    `\nSync finished! Uploaded to R2: ${uploadedCount}, Not on local disk: ${missingCount}`,
+  );
   await prisma.$disconnect();
 }
 

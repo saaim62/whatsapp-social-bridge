@@ -49,11 +49,16 @@ const RANGE_RE = /\d[\d,]*\s*(?:[-–—]| to )\s*(?:rs\.?|pkr)?\s*\d[\d,]*/i;
 
 /** Analyze a raw extracted price string without ever guessing. */
 export function analyzePrice(raw: unknown): PriceAnalysis {
-  if (raw === null || raw === undefined) return { price: null, ambiguous: false };
+  if (raw === null || raw === undefined)
+    return { price: null, ambiguous: false };
   const text = String(raw);
   if (!text.trim()) return { price: null, ambiguous: false };
 
-  if (PACK_OF_RE.test(text) || QUANTITY_LEAD_RE.test(text) || MULTIPLY_RE.test(text)) {
+  if (
+    PACK_OF_RE.test(text) ||
+    QUANTITY_LEAD_RE.test(text) ||
+    MULTIPLY_RE.test(text)
+  ) {
     return { price: null, ambiguous: true, reason: 'quantity' };
   }
   if (RANGE_RE.test(text)) {

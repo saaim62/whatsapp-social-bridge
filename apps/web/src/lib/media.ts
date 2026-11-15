@@ -1,4 +1,4 @@
-import { API_URL } from "@/lib/api";
+import { API_URL } from '@/lib/api';
 
 /**
  * Resolve the display URL for a media asset (P1-5).

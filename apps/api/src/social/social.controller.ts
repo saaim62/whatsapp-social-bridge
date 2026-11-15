@@ -1,4 +1,15 @@
-import { Controller, Get, Post, Body, Query, Req, Res, UseGuards, Request, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+  Request,
+  Delete,
+} from '@nestjs/common';
 import { Response } from 'express';
 import { SocialService } from './social.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -18,19 +29,27 @@ export class SocialController {
   // The state parameter is a server-side nonce bound to the initiating user
   // (see SocialService.getMetaOAuthUrl) — it carries no user data itself.
   @Get('oauth/facebook/callback')
-  async handleOAuthCallback(@Query('code') code: string, @Query('state') state: string, @Res() res: Response) {
+  async handleOAuthCallback(
+    @Query('code') code: string,
+    @Query('state') state: string,
+    @Res() res: Response,
+  ) {
     if (!code || !state) {
       return res.status(400).json({ error: 'Missing code or state' });
     }
-    
+
     try {
       await this.socialService.handleMetaOAuthCallback(code, state);
       // Redirect to the frontend settings on success
-      const frontendUrl = process.env.FRONTEND_URL || 'http://130.110.113.71:3000';
+      const frontendUrl =
+        process.env.FRONTEND_URL || 'http://130.110.113.71:3000';
       return res.redirect(`${frontendUrl}/settings?social=success`);
     } catch (err: any) {
-      const frontendUrl = process.env.FRONTEND_URL || 'http://130.110.113.71:3000';
-      return res.redirect(`${frontendUrl}/settings?social=error&message=${encodeURIComponent(err.message)}`);
+      const frontendUrl =
+        process.env.FRONTEND_URL || 'http://130.110.113.71:3000';
+      return res.redirect(
+        `${frontendUrl}/settings?social=error&message=${encodeURIComponent(err.message)}`,
+      );
     }
   }
 

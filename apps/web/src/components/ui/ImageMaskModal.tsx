@@ -1,10 +1,18 @@
-"use client";
+'use client';
 
-import { useState, useRef, useEffect, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { X, Crop, Check, ChevronLeft, ChevronRight, RotateCcw, Sparkles } from "lucide-react";
-import { API_URL, fetchWithAuth } from "@/lib/api";
-import { mediaSrcFor } from "@/lib/media";
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  X,
+  Crop,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  RotateCcw,
+  Sparkles,
+} from 'lucide-react';
+import { API_URL, fetchWithAuth } from '@/lib/api';
+import { mediaSrcFor } from '@/lib/media';
 
 interface Box {
   left: number;
@@ -33,7 +41,7 @@ export function ImageMaskModal({
   initialIndex?: number;
   onImageUpdated?: (mediaId: string) => void;
 }) {
-  const images = mediaList.filter((m) => !m.mimeType?.startsWith("video/"));
+  const images = mediaList.filter((m) => !m.mimeType?.startsWith('video/'));
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
@@ -42,10 +50,14 @@ export function ImageMaskModal({
   const [isSaving, setIsSaving] = useState(false);
   const [isReverting, setIsReverting] = useState(false);
   const [successToast, setSuccessToast] = useState<string | null>(null);
-  const [imageTimestamps, setImageTimestamps] = useState<Record<string, number>>({});
-  
+  const [imageTimestamps, setImageTimestamps] = useState<
+    Record<string, number>
+  >({});
+
   const imgRef = useRef<HTMLImageElement>(null);
-  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(
+    null,
+  );
 
   useEffect(() => {
     if (isOpen) {
@@ -65,7 +77,9 @@ export function ImageMaskModal({
   }, [currentIndex]);
 
   const currentMedia = images[currentIndex];
-  const currentTimestamp = currentMedia ? (imageTimestamps[currentMedia.id] || 0) : 0;
+  const currentTimestamp = currentMedia
+    ? imageTimestamps[currentMedia.id] || 0
+    : 0;
 
   const showToast = (msg: string) => {
     setSuccessToast(msg);
@@ -90,46 +104,52 @@ export function ImageMaskModal({
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "ArrowLeft") handlePrev();
-      if (e.key === "ArrowRight") handleNext();
-      if (e.key === "Escape") onClose();
+      if (e.key === 'ArrowLeft') handlePrev();
+      if (e.key === 'ArrowRight') handleNext();
+      if (e.key === 'Escape') onClose();
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, handlePrev, handleNext, onClose]);
 
   if (!isOpen || !currentMedia) return null;
 
-  const getCoordinates = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+  const getCoordinates = (
+    e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>,
+  ) => {
     const rect = e.currentTarget.getBoundingClientRect();
     let clientX, clientY;
-    
-    if ("touches" in e) {
+
+    if ('touches' in e) {
       clientX = e.touches[0].clientX;
       clientY = e.touches[0].clientY;
     } else {
       clientX = (e as React.MouseEvent).clientX;
       clientY = (e as React.MouseEvent).clientY;
     }
-    
+
     return {
       x: clientX - rect.left,
       y: clientY - rect.top,
     };
   };
 
-  const handlePointerDown = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+  const handlePointerDown = (
+    e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>,
+  ) => {
     const { x, y } = getCoordinates(e);
     setStartPos({ x, y });
     setCurrentBox({ left: x, top: y, width: 0, height: 0 });
     setIsDrawing(true);
   };
 
-  const handlePointerMove = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+  const handlePointerMove = (
+    e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>,
+  ) => {
     if (!isDrawing) return;
     const rect = e.currentTarget.getBoundingClientRect();
     let { x, y } = getCoordinates(e);
-    
+
     // clamp
     x = Math.max(0, Math.min(x, rect.width));
     y = Math.max(0, Math.min(y, rect.height));
@@ -143,7 +163,12 @@ export function ImageMaskModal({
   };
 
   const handleMouseUp = () => {
-    if (isDrawing && currentBox && currentBox.width > 8 && currentBox.height > 8) {
+    if (
+      isDrawing &&
+      currentBox &&
+      currentBox.width > 8 &&
+      currentBox.height > 8
+    ) {
       setBoxes((prev) => [...prev, currentBox]);
     }
     setCurrentBox(null);
@@ -166,17 +191,23 @@ export function ImageMaskModal({
     }));
 
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/batches/media/${currentMedia.id}/mask`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ boxes: realBoxes }),
-      });
+      const res = await fetchWithAuth(
+        `${API_URL}/api/batches/media/${currentMedia.id}/mask`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ boxes: realBoxes }),
+        },
+      );
       if (res.ok) {
         // Cache bust local image without closing modal or reloading full page!
         const newTimestamp = Date.now();
-        setImageTimestamps((prev) => ({ ...prev, [currentMedia.id]: newTimestamp }));
+        setImageTimestamps((prev) => ({
+          ...prev,
+          [currentMedia.id]: newTimestamp,
+        }));
         setBoxes([]);
-        showToast("Blur applied successfully!");
+        showToast('Blur applied successfully!');
         onImageUpdated?.(currentMedia.id);
       } else {
         const errorData = await res.json().catch(() => null);
@@ -184,7 +215,7 @@ export function ImageMaskModal({
       }
     } catch (err) {
       console.error(err);
-      alert("Error applying mask");
+      alert('Error applying mask');
     } finally {
       setIsSaving(false);
     }
@@ -194,14 +225,20 @@ export function ImageMaskModal({
     if (!currentMedia) return;
     setIsReverting(true);
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/batches/media/${currentMedia.id}/revert`, {
-        method: "POST",
-      });
+      const res = await fetchWithAuth(
+        `${API_URL}/api/batches/media/${currentMedia.id}/revert`,
+        {
+          method: 'POST',
+        },
+      );
       if (res.ok) {
         const newTimestamp = Date.now();
-        setImageTimestamps((prev) => ({ ...prev, [currentMedia.id]: newTimestamp }));
+        setImageTimestamps((prev) => ({
+          ...prev,
+          [currentMedia.id]: newTimestamp,
+        }));
         setBoxes([]);
-        showToast("Auto-blur removed! Restored original.");
+        showToast('Auto-blur removed! Restored original.');
         onImageUpdated?.(currentMedia.id);
       } else {
         const errorData = await res.json().catch(() => null);
@@ -209,7 +246,7 @@ export function ImageMaskModal({
       }
     } catch (err) {
       console.error(err);
-      alert("Error reverting mask");
+      alert('Error reverting mask');
     } finally {
       setIsReverting(false);
     }
@@ -217,8 +254,8 @@ export function ImageMaskModal({
 
   const baseImageUrl = mediaSrcFor(currentMedia);
   const imageUrl = baseImageUrl
-    ? `${baseImageUrl}${currentTimestamp ? `?t=${currentTimestamp}` : ""}`
-    : "";
+    ? `${baseImageUrl}${currentTimestamp ? `?t=${currentTimestamp}` : ''}`
+    : '';
 
   return (
     <AnimatePresence>
@@ -249,7 +286,7 @@ export function ImageMaskModal({
                 </p>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-2">
               <button
                 onClick={onClose}
@@ -322,7 +359,7 @@ export function ImageMaskModal({
                 className="max-w-full max-h-[52vh] sm:max-h-[60vh] object-contain block pointer-events-none select-none"
                 draggable={false}
               />
-              
+
               {boxes.map((box, i) => (
                 <div
                   key={i}
@@ -359,8 +396,8 @@ export function ImageMaskModal({
                   onClick={() => setCurrentIndex(idx)}
                   className={`w-2.5 h-2.5 rounded-full transition-all ${
                     idx === currentIndex
-                      ? "bg-brand-600 scale-125 w-5"
-                      : "bg-slate-300 hover:bg-slate-400"
+                      ? 'bg-brand-600 scale-125 w-5'
+                      : 'bg-slate-300 hover:bg-slate-400'
                   }`}
                   title={`Go to image ${idx + 1}`}
                 />
@@ -378,7 +415,7 @@ export function ImageMaskModal({
                 title="Restore unblurred original image"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
-                {isReverting ? "Restoring..." : "Remove Auto Blur"}
+                {isReverting ? 'Restoring...' : 'Remove Auto Blur'}
               </button>
 
               {boxes.length > 0 && (
@@ -398,14 +435,14 @@ export function ImageMaskModal({
               >
                 Done
               </button>
-              
+
               <button
                 onClick={handleSave}
                 disabled={boxes.length === 0 || isSaving}
                 className="bg-brand-600 text-white font-bold rounded-xl hover:bg-brand-700 px-4 sm:px-6 py-2 text-xs sm:text-sm whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
                 {isSaving ? (
-                  "Applying Blur..."
+                  'Applying Blur...'
                 ) : (
                   <>
                     <Check className="w-4 h-4 mr-1.5 inline" />

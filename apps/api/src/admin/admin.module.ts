@@ -8,6 +8,12 @@ import { OwnerGuard } from '../auth/guards/owner.guard';
 
 @Module({
   controllers: [AdminController],
-  providers: [AdminService, PrismaService, StorageService, AdminGuard, OwnerGuard],
+  providers: [
+    AdminService,
+    PrismaService,
+    StorageService,
+    AdminGuard,
+    OwnerGuard,
+  ],
 })
 export class AdminModule {}

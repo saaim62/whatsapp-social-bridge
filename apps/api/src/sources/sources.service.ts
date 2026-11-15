@@ -40,14 +40,19 @@ export class SourcesService {
     if (!name) return true;
     const trimmed = name.trim();
     // Pure digits, or digits with + and spaces
-    return /^[+\d\s\-().]+$/.test(trimmed) && trimmed.replace(/\D/g, '').length >= 6;
+    return (
+      /^[+\d\s\-().]+$/.test(trimmed) && trimmed.replace(/\D/g, '').length >= 6
+    );
   }
 
   /**
    * Returns true if a name is "bad" — masked, raw number, or missing.
    * Bad names should be replaced with better ones when available.
    */
-  private isBadName(name: string | null | undefined, jidLocalPart?: string): boolean {
+  private isBadName(
+    name: string | null | undefined,
+    jidLocalPart?: string,
+  ): boolean {
     if (!name || name === 'Unknown') return true;
     if (jidLocalPart && name === jidLocalPart) return true;
     if (this.isMaskedNumber(name)) return true;
@@ -62,7 +67,12 @@ export class SourcesService {
   private pickBestContactName(contact: any): string | null {
     // Priority: verifiedName > name (saved contact) > notify/pushName (self-set)
     // But skip masked/raw for the first pass
-    const candidates = [contact.verifiedName, contact.name, contact.notify, contact.pushName];
+    const candidates = [
+      contact.verifiedName,
+      contact.name,
+      contact.notify,
+      contact.pushName,
+    ];
 
     // First pass: real human-readable names only
     for (const name of candidates) {
@@ -141,7 +151,10 @@ export class SourcesService {
       // ── Step 0: Clean up junk ──
       // Remove status@broadcast and 0@s.whatsapp.net sources
       await this.prisma.whatsappSource.deleteMany({
-        where: { userId, jid: { in: ['status@broadcast', '0@s.whatsapp.net'] } },
+        where: {
+          userId,
+          jid: { in: ['status@broadcast', '0@s.whatsapp.net'] },
+        },
       });
 
       // ── Step 1: Deduplicate sources ──
@@ -154,24 +167,27 @@ export class SourcesService {
       // ── Step 2: Sync active groups ──
       const groups = await client.groupFetchAllParticipating();
       let syncedCount = 0;
-      
+
       const meId = client.user?.id?.split(':')[0];
       const activeGroupJids: string[] = [];
 
       for (const jid in groups) {
         const groupMeta = groups[jid];
         if (!groupMeta) continue;
-        
+
         let isActiveParticipant = true;
         if (meId && groupMeta.participants) {
           const myLid = client.authState?.creds?.me?.lid?.split(':')[0] || '';
           isActiveParticipant = groupMeta.participants.some((p: any) => {
-             return p.id.includes(meId) || 
-                    (client.user?.id && p.id.includes(client.user.id.split('@')[0])) || 
-                    (myLid && p.id.includes(myLid));
+            return (
+              p.id.includes(meId) ||
+              (client.user?.id &&
+                p.id.includes(client.user.id.split('@')[0])) ||
+              (myLid && p.id.includes(myLid))
+            );
           });
         }
-        
+
         if (!isActiveParticipant) continue;
         activeGroupJids.push(jid);
 
@@ -187,7 +203,7 @@ export class SourcesService {
             name: displayName,
             type: 'GROUP',
             isEnabled: false,
-          }
+          },
         });
         syncedCount++;
       }
@@ -199,21 +215,21 @@ export class SourcesService {
             userId,
             type: 'GROUP',
             jid: { notIn: activeGroupJids },
-          }
+          },
         });
       }
 
       // ── Step 3: Sync individual contacts ──
       const contacts = await this.prisma.whatsappContact.findMany({
-        where: { userId }
+        where: { userId },
       });
-      
+
       let individualCount = 0;
       for (const contact of contacts) {
         // Only standard user JIDs — @lid sources are created automatically when messages arrive
         if (!contact.jid.endsWith('@s.whatsapp.net')) continue;
         if (!this.isUsableJid(contact.jid)) continue;
-        
+
         // Determine the best display name for this contact
         const localPart = contact.jid.split('@')[0];
         let displayName: string;
@@ -223,7 +239,7 @@ export class SourcesService {
         } else {
           displayName = contact.name;
         }
-        
+
         await this.prisma.whatsappSource.upsert({
           where: { userId_jid: { userId, jid: contact.jid } },
           update: { name: displayName },
@@ -233,7 +249,7 @@ export class SourcesService {
             name: displayName,
             type: 'INDIVIDUAL',
             isEnabled: false,
-          }
+          },
         });
         individualCount++;
       }
@@ -241,10 +257,15 @@ export class SourcesService {
       // ── Step 4: Heal all bad names ──
       await this.healSourceNames(userId);
 
-      this.logger.log(`Synced ${syncedCount} groups and ${individualCount} contacts for user ${userId}.`);
+      this.logger.log(
+        `Synced ${syncedCount} groups and ${individualCount} contacts for user ${userId}.`,
+      );
       return { success: true, count: syncedCount + individualCount };
     } catch (err) {
-      this.logger.error(`Failed to sync WhatsApp groups/contacts for user ${userId}`, err);
+      this.logger.error(
+        `Failed to sync WhatsApp groups/contacts for user ${userId}`,
+        err,
+      );
       return { success: false, message: 'Failed to sync from WhatsApp' };
     }
   }
@@ -255,7 +276,10 @@ export class SourcesService {
    */
   private async recoverDiskLidMappings(userId: string) {
     try {
-      const sessionDir = path.join(process.cwd(), `sessions/user_${userId}_auth`);
+      const sessionDir = path.join(
+        process.cwd(),
+        `sessions/user_${userId}_auth`,
+      );
       if (!fs.existsSync(sessionDir)) return;
 
       const files = fs.readdirSync(sessionDir);
@@ -263,42 +287,55 @@ export class SourcesService {
 
       for (const file of files) {
         if (file.startsWith('lid-mapping-') && file.endsWith('_reverse.json')) {
-          const lid = file.replace('lid-mapping-', '').replace('_reverse.json', '');
+          const lid = file
+            .replace('lid-mapping-', '')
+            .replace('_reverse.json', '');
           const content = fs.readFileSync(path.join(sessionDir, file), 'utf8');
           const phone = JSON.parse(content);
-          
+
           const lidJid = lid + '@lid';
           const phoneJid = phone + '@s.whatsapp.net';
-          
+
           // Find if we have a name for either of them
-          const lidContact = await this.prisma.whatsappContact.findUnique({ where: { userId_jid: { userId, jid: lidJid } } });
-          const phoneContact = await this.prisma.whatsappContact.findUnique({ where: { userId_jid: { userId, jid: phoneJid } } });
-          
+          const lidContact = await this.prisma.whatsappContact.findUnique({
+            where: { userId_jid: { userId, jid: lidJid } },
+          });
+          const phoneContact = await this.prisma.whatsappContact.findUnique({
+            where: { userId_jid: { userId, jid: phoneJid } },
+          });
+
           let bestName: string | null = null;
-          if (lidContact && !this.isBadName(lidContact.name, lid)) bestName = lidContact.name;
-          if (phoneContact && !this.isBadName(phoneContact.name, phone)) bestName = phoneContact.name;
-          
+          if (lidContact && !this.isBadName(lidContact.name, lid))
+            bestName = lidContact.name;
+          if (phoneContact && !this.isBadName(phoneContact.name, phone))
+            bestName = phoneContact.name;
+
           if (bestName) {
             // Upsert both with the real name
             await this.prisma.whatsappContact.upsert({
               where: { userId_jid: { userId, jid: lidJid } },
               update: { name: bestName },
-              create: { userId, jid: lidJid, name: bestName }
+              create: { userId, jid: lidJid, name: bestName },
             });
             await this.prisma.whatsappContact.upsert({
               where: { userId_jid: { userId, jid: phoneJid } },
               update: { name: bestName },
-              create: { userId, jid: phoneJid, name: bestName }
+              create: { userId, jid: phoneJid, name: bestName },
             });
             mapped++;
           }
         }
       }
       if (mapped > 0) {
-        this.logger.log(`Recovered ${mapped} LID contact mappings from disk for user ${userId}.`);
+        this.logger.log(
+          `Recovered ${mapped} LID contact mappings from disk for user ${userId}.`,
+        );
       }
     } catch (err) {
-      this.logger.error(`Failed to recover LID mappings for user ${userId}`, err);
+      this.logger.error(
+        `Failed to recover LID mappings for user ${userId}`,
+        err,
+      );
     }
   }
 
@@ -343,10 +380,10 @@ export class SourcesService {
 
       // Keep the first (best), delete the rest
       const keepId = entries[0].id;
-      const deleteIds = entries.slice(1).map(e => e.id);
-      
+      const deleteIds = entries.slice(1).map((e) => e.id);
+
       // Transfer isEnabled=true to the keeper if any duplicate had it enabled
-      const anyEnabled = entries.some(e => e.isEnabled);
+      const anyEnabled = entries.some((e) => e.isEnabled);
       if (anyEnabled && !entries[0].isEnabled) {
         await this.prisma.whatsappSource.update({
           where: { id: keepId },
@@ -361,7 +398,9 @@ export class SourcesService {
     }
 
     if (deletedCount > 0) {
-      this.logger.log(`Deduplicated: removed ${deletedCount} duplicate sources for user ${userId}`);
+      this.logger.log(
+        `Deduplicated: removed ${deletedCount} duplicate sources for user ${userId}`,
+      );
     }
   }
 
@@ -379,21 +418,24 @@ export class SourcesService {
   async healSourceNames(userId: string) {
     try {
       const sources = await this.prisma.whatsappSource.findMany({
-        where: { userId, type: 'INDIVIDUAL' }
+        where: { userId, type: 'INDIVIDUAL' },
       });
       let healed = 0;
       for (const source of sources) {
         const localPart = source.jid.split('@')[0];
-        
+
         // Try to find a real name in the contacts cache
         const contact = await this.prisma.whatsappContact.findUnique({
-          where: { userId_jid: { userId, jid: source.jid } }
+          where: { userId_jid: { userId, jid: source.jid } },
         });
 
         let newName: string | null = null;
         if (contact && !this.isBadName(contact.name, localPart)) {
           newName = contact.name;
-        } else if (this.isBadName(source.name, localPart) && source.jid.endsWith('@s.whatsapp.net')) {
+        } else if (
+          this.isBadName(source.name, localPart) &&
+          source.jid.endsWith('@s.whatsapp.net')
+        ) {
           // For phone-number JIDs with bad names, format the number nicely
           newName = this.formatPhoneNumber(localPart);
         }
@@ -402,10 +444,13 @@ export class SourcesService {
           // If the user manually edited this source name, we should avoid overwriting it.
           // We assume a manual edit happened if the name is good (not bad) and not matching the contact exactly,
           // but just to be safe, if the current name is bad, we overwrite it.
-          if (this.isBadName(source.name, localPart) || (contact && source.name !== contact.name)) {
+          if (
+            this.isBadName(source.name, localPart) ||
+            (contact && source.name !== contact.name)
+          ) {
             await this.prisma.whatsappSource.update({
               where: { id: source.id },
-              data: { name: newName }
+              data: { name: newName },
             });
             healed++;
           }
@@ -463,13 +508,18 @@ export class SourcesService {
             } catch (err) {
               // Ignore unique constraint or other minor errors during bulk sync
             }
-          })
+          }),
         );
         syncedCount += chunk.length;
       }
-      this.logger.log(`Synced ${syncedCount} address book contacts for user ${userId}.`);
+      this.logger.log(
+        `Synced ${syncedCount} address book contacts for user ${userId}.`,
+      );
     } catch (err) {
-      this.logger.error(`Failed to sync address book contacts for user ${userId}`, err);
+      this.logger.error(
+        `Failed to sync address book contacts for user ${userId}`,
+        err,
+      );
     }
   }
 
@@ -477,12 +527,16 @@ export class SourcesService {
    * If a WhatsappSource exists for this JID and has a bad name,
    * update it with the given good name.
    */
-  private async healSourceFromContact(userId: string, jid: string, goodName: string) {
+  private async healSourceFromContact(
+    userId: string,
+    jid: string,
+    goodName: string,
+  ) {
     if (this.isBadName(goodName, jid.split('@')[0])) return; // Don't "heal" with another bad name
-    
+
     try {
       const source = await this.prisma.whatsappSource.findUnique({
-        where: { userId_jid: { userId, jid } }
+        where: { userId_jid: { userId, jid } },
       });
       if (!source) return;
 
@@ -490,9 +544,11 @@ export class SourcesService {
       if (this.isBadName(source.name, localPart)) {
         await this.prisma.whatsappSource.update({
           where: { id: source.id },
-          data: { name: goodName }
+          data: { name: goodName },
         });
-        this.logger.log(`Healed source name for ${jid}: "${source.name}" → "${goodName}"`);
+        this.logger.log(
+          `Healed source name for ${jid}: "${source.name}" → "${goodName}"`,
+        );
       }
     } catch (err) {
       // ignore
@@ -511,7 +567,11 @@ export class SourcesService {
    * DISABLED sources so they show up in the UI for the user to enable
    * (or not) explicitly.
    */
-  async isSourceAllowed(jid: string, pushName: string | undefined, userId: string): Promise<boolean> {
+  async isSourceAllowed(
+    jid: string,
+    pushName: string | undefined,
+    userId: string,
+  ): Promise<boolean> {
     if (!jid) return false;
     if (!this.isUsableJid(jid)) return false;
 
@@ -535,9 +595,9 @@ export class SourcesService {
 
       // Try the contact cache FIRST (official phonebook name)
       const contact = await this.prisma.whatsappContact.findUnique({
-        where: { userId_jid: { userId, jid } }
+        where: { userId_jid: { userId, jid } },
       });
-      
+
       if (contact && !this.isBadName(contact.name, localPart)) {
         resolvedName = contact.name;
       } else if (pushName && !this.isBadName(pushName, localPart)) {
@@ -590,7 +650,7 @@ export class SourcesService {
         let betterName: string | null = null;
 
         const contact = await this.prisma.whatsappContact.findUnique({
-          where: { userId_jid: { userId, jid } }
+          where: { userId_jid: { userId, jid } },
         });
         if (contact && !this.isBadName(contact.name, localPart)) {
           betterName = contact.name;
@@ -601,10 +661,12 @@ export class SourcesService {
         if (betterName) {
           await this.prisma.whatsappSource.update({
             where: { id: source.id },
-            data: { name: betterName }
+            data: { name: betterName },
           });
           source.name = betterName;
-          this.logger.log(`Auto-healed source name for ${jid} → "${betterName}"`);
+          this.logger.log(
+            `Auto-healed source name for ${jid} → "${betterName}"`,
+          );
         }
       }
     }

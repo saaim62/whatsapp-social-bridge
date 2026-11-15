@@ -51,7 +51,11 @@ describe('BatchService.setManualPrice — recorded price revision', () => {
   }
 
   it('editing a derived price (2400 → 2500) records the override and mirrors it into the structured selling price', async () => {
-    setup({ price: 'Rs. 1,850', selling_price: 'Rs. 2,400', selling_price_value: 2400 });
+    setup({
+      price: 'Rs. 1,850',
+      selling_price: 'Rs. 2,400',
+      selling_price_value: 2400,
+    });
     const result = await service.setManualPrice('batch-1', 'user-1', 2500);
     expect(result).toEqual({ success: true, price: 2500 });
     expect(store.extractedData.manual_price_override).toBe(2500);
@@ -60,7 +64,11 @@ describe('BatchService.setManualPrice — recorded price revision', () => {
   });
 
   it('recording a price for an ambiguous batch clears the needs-review flags', async () => {
-    setup({ price: '2 pcs 1850', price_needs_review: true, price_ambiguity: 'quantity' });
+    setup({
+      price: '2 pcs 1850',
+      price_needs_review: true,
+      price_ambiguity: 'quantity',
+    });
     const result = await service.setManualPrice('batch-1', 'user-1', 3000);
     expect(result.success).toBe(true);
     expect(store.extractedData.manual_price_override).toBe(3000);

@@ -8,7 +8,12 @@ import { SourcesModule } from '../sources/sources.module';
 import { StorageService } from '../storage/storage.service';
 
 @Module({
-  imports: [BatchModule, ConfigModule, SettingsModule, forwardRef(() => SourcesModule)],
+  imports: [
+    BatchModule,
+    ConfigModule,
+    SettingsModule,
+    forwardRef(() => SourcesModule),
+  ],
   controllers: [WhatsappController],
   providers: [WhatsappService, StorageService],
   exports: [WhatsappService],

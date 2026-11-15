@@ -40,10 +40,15 @@ function makeStatefulPrisma(seedUsers: any[]) {
       updateMany: jest.fn(async ({ where, data }: any) => {
         let count = 0;
         for (const u of store) {
-          if (where.verificationToken !== undefined && u.verificationToken !== where.verificationToken) continue;
+          if (
+            where.verificationToken !== undefined &&
+            u.verificationToken !== where.verificationToken
+          )
+            continue;
           if (where.verificationTokenExpiresAt?.gt) {
             const exp = u.verificationTokenExpiresAt;
-            if (!exp || !(new Date(exp) > where.verificationTokenExpiresAt.gt)) continue;
+            if (!exp || !(new Date(exp) > where.verificationTokenExpiresAt.gt))
+              continue;
           }
           Object.assign(u, data);
           count++;
@@ -74,12 +79,15 @@ describe('AuthService resend verification (stateful round trip)', () => {
     const service = new AuthService(prisma as any, { sign: jest.fn() } as any);
 
     // Stranded: the original token can never verify — its expiry is NULL.
-    await expect(service.verifyEmail(OLD_TOKEN)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.verifyEmail(OLD_TOKEN)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
     expect(store[0].isEmailVerified).toBe(false);
 
     // Resend issues a fresh token with a real ~24h expiry, replacing the old one.
     const before = Date.now();
-    const newToken = await service.generateVerificationToken('legacy@example.com');
+    const newToken =
+      await service.generateVerificationToken('legacy@example.com');
     expect(newToken).toMatch(/^[0-9a-f]{64}$/);
     expect(newToken).not.toBe(OLD_TOKEN);
     const exp = new Date(store[0].verificationTokenExpiresAt).getTime();
@@ -88,14 +96,18 @@ describe('AuthService resend verification (stateful round trip)', () => {
     expect(store[0].verificationToken).toBe(newToken);
 
     // The old token is dead even after the resend.
-    await expect(service.verifyEmail(OLD_TOKEN)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.verifyEmail(OLD_TOKEN)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
 
     // The new token verifies, exactly once.
     const res = await service.verifyEmail(newToken as string);
     expect(res.message).toMatch(/successfully verified/);
     expect(store[0].isEmailVerified).toBe(true);
     expect(store[0].verificationToken).toBeNull();
-    await expect(service.verifyEmail(newToken as string)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.verifyEmail(newToken as string),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('an expired-token user (missed the 24h window) recovers the same way', async () => {
@@ -108,19 +120,32 @@ describe('AuthService resend verification (stateful round trip)', () => {
     const { prisma, store } = makeStatefulPrisma([user]);
     const service = new AuthService(prisma as any, { sign: jest.fn() } as any);
 
-    await expect(service.verifyEmail(OLD_TOKEN)).rejects.toBeInstanceOf(BadRequestException);
-    const newToken = await service.generateVerificationToken('expired@example.com');
+    await expect(service.verifyEmail(OLD_TOKEN)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    const newToken = await service.generateVerificationToken(
+      'expired@example.com',
+    );
     expect(newToken).toBeTruthy();
-    await expect(service.verifyEmail(newToken as string)).resolves.toBeDefined();
+    await expect(
+      service.verifyEmail(newToken as string),
+    ).resolves.toBeDefined();
     expect(store[0].isEmailVerified).toBe(true);
   });
 
   it('already-verified accounts get no token and are left untouched', async () => {
-    const user = { ...preMigrationUser(), id: 'user-verified', email: 'done@example.com', isEmailVerified: true };
+    const user = {
+      ...preMigrationUser(),
+      id: 'user-verified',
+      email: 'done@example.com',
+      isEmailVerified: true,
+    };
     const { prisma, store } = makeStatefulPrisma([user]);
     const service = new AuthService(prisma as any, { sign: jest.fn() } as any);
 
-    await expect(service.generateVerificationToken('done@example.com')).resolves.toBeNull();
+    await expect(
+      service.generateVerificationToken('done@example.com'),
+    ).resolves.toBeNull();
     expect(prisma.user.update).not.toHaveBeenCalled();
     expect(store[0].verificationToken).toBe(OLD_TOKEN);
   });
@@ -128,26 +153,40 @@ describe('AuthService resend verification (stateful round trip)', () => {
   it('unknown emails get no token', async () => {
     const { prisma } = makeStatefulPrisma([preMigrationUser()]);
     const service = new AuthService(prisma as any, { sign: jest.fn() } as any);
-    await expect(service.generateVerificationToken('nobody@example.com')).resolves.toBeNull();
+    await expect(
+      service.generateVerificationToken('nobody@example.com'),
+    ).resolves.toBeNull();
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
 });
 
 describe('AuthController resend-verification (uniform, non-enumerating response)', () => {
   function makeController(token: string | null) {
-    const authService = { generateVerificationToken: jest.fn().mockResolvedValue(token) };
-    const emailService = { sendVerificationEmail: jest.fn().mockResolvedValue(undefined) };
-    const controller = new AuthController(authService as any, emailService as any);
+    const authService = {
+      generateVerificationToken: jest.fn().mockResolvedValue(token),
+    };
+    const emailService = {
+      sendVerificationEmail: jest.fn().mockResolvedValue(undefined),
+    };
+    const controller = new AuthController(
+      authService as any,
+      emailService as any,
+    );
     return { controller, authService, emailService };
   }
 
   it('sends the email only when a token was issued, and answers identically in all cases', async () => {
     const issued = makeController('b'.repeat(64));
-    const resIssued = await issued.controller.resendVerification('legacy@example.com');
-    expect(issued.emailService.sendVerificationEmail).toHaveBeenCalledWith('legacy@example.com', 'b'.repeat(64));
+    const resIssued =
+      await issued.controller.resendVerification('legacy@example.com');
+    expect(issued.emailService.sendVerificationEmail).toHaveBeenCalledWith(
+      'legacy@example.com',
+      'b'.repeat(64),
+    );
 
     const notIssued = makeController(null);
-    const resUnknown = await notIssued.controller.resendVerification('nobody@example.com');
+    const resUnknown =
+      await notIssued.controller.resendVerification('nobody@example.com');
     expect(notIssued.emailService.sendVerificationEmail).not.toHaveBeenCalled();
 
     expect(resIssued).toEqual(resUnknown);
@@ -167,7 +206,9 @@ describe('AuthThrottleGuard rate limiting (resend-verification)', () => {
   it('allows 5 resend attempts per window, then throws 429', () => {
     const guard = new AuthThrottleGuard();
     for (let i = 0; i < 5; i++) {
-      expect(guard.canActivate(ctx('/api/account/resend-verification'))).toBe(true);
+      expect(guard.canActivate(ctx('/api/account/resend-verification'))).toBe(
+        true,
+      );
     }
     try {
       guard.canActivate(ctx('/api/account/resend-verification'));

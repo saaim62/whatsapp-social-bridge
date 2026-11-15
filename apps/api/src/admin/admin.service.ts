@@ -343,7 +343,9 @@ export class AdminService {
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: {
-          _count: { select: { batches: true, sources: true, socialAccounts: true } },
+          _count: {
+            select: { batches: true, sources: true, socialAccounts: true },
+          },
           batches: {
             select: { mediaAssets: { select: { fileSize: true } } },
           },
@@ -370,7 +372,9 @@ export class AdminService {
     const user = await this.prisma.user.findUnique({
       where: { id },
       include: {
-        _count: { select: { batches: true, sources: true, socialAccounts: true } },
+        _count: {
+          select: { batches: true, sources: true, socialAccounts: true },
+        },
         settings: true,
         batches: {
           select: { mediaAssets: { select: { fileSize: true } } },
@@ -424,7 +428,9 @@ export class AdminService {
   // ------------------------------------------------------------- actions
   async extendTrial(actor: Actor, userId: string, days: number) {
     if (!Number.isInteger(days) || days < 1 || days > 365) {
-      throw new BadRequestException('Days must be a whole number between 1 and 365');
+      throw new BadRequestException(
+        'Days must be a whole number between 1 and 365',
+      );
     }
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
@@ -435,10 +441,15 @@ export class AdminService {
       where: { id: userId },
       data: { trialEndsAt },
     });
-    await this.audit(actor, 'EXTEND_TRIAL', { id: user.id, email: user.email }, {
-      days,
-      trialEndsAt,
-    });
+    await this.audit(
+      actor,
+      'EXTEND_TRIAL',
+      { id: user.id, email: user.email },
+      {
+        days,
+        trialEndsAt,
+      },
+    );
     return {
       id: updated.id,
       email: updated.email,
@@ -496,7 +507,11 @@ export class AdminService {
     };
   }
 
-  async updateStorageLimit(actor: Actor, userId: string, storageLimitBytes: number) {
+  async updateStorageLimit(
+    actor: Actor,
+    userId: string,
+    storageLimitBytes: number,
+  ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
@@ -508,10 +523,18 @@ export class AdminService {
       where: { id: userId },
       data: { storageLimitBytes: BigInt(storageLimitBytes) },
     });
-    await this.audit(actor, 'SET_STORAGE', { id: user.id, email: user.email }, {
-      storageLimitBytes,
-    });
-    return { success: true, storageLimitBytes: Number(updated.storageLimitBytes) };
+    await this.audit(
+      actor,
+      'SET_STORAGE',
+      { id: user.id, email: user.email },
+      {
+        storageLimitBytes,
+      },
+    );
+    return {
+      success: true,
+      storageLimitBytes: Number(updated.storageLimitBytes),
+    };
   }
 
   // ----------------------------------------------------------------- team
@@ -520,7 +543,9 @@ export class AdminService {
       where: { role: { in: ['ADMIN', 'OWNER'] } },
       orderBy: [{ role: 'desc' }, { createdAt: 'asc' }],
       include: {
-        _count: { select: { batches: true, sources: true, socialAccounts: true } },
+        _count: {
+          select: { batches: true, sources: true, socialAccounts: true },
+        },
       },
     });
     return members.map((u) => ({
@@ -543,7 +568,9 @@ export class AdminService {
     if (role !== 'ADMIN' && role !== 'USER') {
       throw new BadRequestException('Role must be ADMIN or USER');
     }
-    const target = await this.prisma.user.findUnique({ where: { id: targetUserId } });
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+    });
     if (!target) throw new NotFoundException('User not found');
     if (target.role === 'OWNER') {
       throw new ForbiddenException('Owner accounts cannot be changed');
@@ -555,10 +582,15 @@ export class AdminService {
       where: { id: targetUserId },
       data: { role },
     });
-    await this.audit(actor, 'SET_ROLE', { id: target.id, email: target.email }, {
-      from: target.role,
-      to: role,
-    });
+    await this.audit(
+      actor,
+      'SET_ROLE',
+      { id: target.id, email: target.email },
+      {
+        from: target.role,
+        to: role,
+      },
+    );
     return { id: updated.id, email: updated.email, role: updated.role };
   }
 
@@ -585,7 +617,11 @@ export class AdminService {
       redisStatus = 'up';
       // BullMQ key layout: bull:<queue>:wait|active are lists,
       // delayed|failed are sorted sets, prioritized is a sorted set.
-      for (const name of ['batch-processing', 'history-sync-queue', 'image-blur']) {
+      for (const name of [
+        'batch-processing',
+        'history-sync-queue',
+        'image-blur',
+      ]) {
         const [wait, prioritized, active, delayed, failed] = await Promise.all([
           redis.llen(`bull:${name}:wait`),
           redis.zcard(`bull:${name}:prioritized`),
@@ -606,16 +642,18 @@ export class AdminService {
       redis.disconnect();
     }
 
-    const [failedBatches, failedPublications7d, r2Accounts] = await Promise.all([
-      this.prisma.productBatch.count({ where: { status: 'FAILED' } }),
-      this.prisma.publication.count({
-        where: {
-          status: 'FAILED',
-          createdAt: { gte: new Date(Date.now() - 7 * 86400_000) },
-        },
-      }),
-      this.storageService.getStorageStats(),
-    ]);
+    const [failedBatches, failedPublications7d, r2Accounts] = await Promise.all(
+      [
+        this.prisma.productBatch.count({ where: { status: 'FAILED' } }),
+        this.prisma.publication.count({
+          where: {
+            status: 'FAILED',
+            createdAt: { gte: new Date(Date.now() - 7 * 86400_000) },
+          },
+        }),
+        this.storageService.getStorageStats(),
+      ],
+    );
 
     return {
       database,

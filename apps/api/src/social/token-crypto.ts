@@ -27,7 +27,9 @@ export function isEncryptedToken(stored: unknown): boolean {
 
 /** True when a stored value still needs encrypting (non-empty plaintext). */
 export function tokenNeedsEncryption(stored: unknown): boolean {
-  return typeof stored === 'string' && stored.length > 0 && !isEncryptedToken(stored);
+  return (
+    typeof stored === 'string' && stored.length > 0 && !isEncryptedToken(stored)
+  );
 }
 
 function loadKey(): Buffer | null {
@@ -93,7 +95,8 @@ export function decryptToken(stored: string): string {
   const decipher = createDecipheriv('aes-256-gcm', key, iv);
   decipher.setAuthTag(tag);
   // Throws on tampered ciphertext/tag (GCM authentication failure).
-  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString(
-    'utf8',
-  );
+  return Buffer.concat([
+    decipher.update(ciphertext),
+    decipher.final(),
+  ]).toString('utf8');
 }

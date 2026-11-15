@@ -21,7 +21,7 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
   }
 
   const headers = new Headers(options.headers || {});
-  
+
   if (session?.accessToken) {
     headers.set('Authorization', `Bearer ${session.accessToken}`);
   }

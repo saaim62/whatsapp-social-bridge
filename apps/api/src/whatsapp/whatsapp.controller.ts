@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Body, UseGuards, Request, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  UseGuards,
+  Request,
+  Delete,
+} from '@nestjs/common';
 import { WhatsappService } from './whatsapp.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
@@ -11,7 +19,7 @@ export class WhatsappController {
   getStatus(@Request() req: any) {
     const userId = req.user.userId;
     const client = this.whatsappService.getClient(userId);
-    
+
     if (!client) {
       // Initialize if missing (e.g. user registered after module init)
       this.whatsappService.initializeWhatsApp(userId).catch(console.error);
@@ -24,19 +32,24 @@ export class WhatsappController {
     if (isReady && client?.user?.id) {
       phoneNumber = client.user.id.split(':')[0].split('@')[0];
     }
-    
+
     return {
       isReady,
       qrUrl,
-      phoneNumber
+      phoneNumber,
     };
   }
 
   @UseGuards(JwtAuthGuard)
   @Post('resync-history')
   async resyncHistory(@Request() req: any, @Body() body: any) {
-    const customDepth = body?.depthHours ? parseInt(body.depthHours, 10) : undefined;
-    return this.whatsappService.resyncHistoricalBuffer(req.user.userId, customDepth);
+    const customDepth = body?.depthHours
+      ? parseInt(body.depthHours, 10)
+      : undefined;
+    return this.whatsappService.resyncHistoricalBuffer(
+      req.user.userId,
+      customDepth,
+    );
   }
 
   @UseGuards(JwtAuthGuard)

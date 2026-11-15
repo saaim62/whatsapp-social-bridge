@@ -16,7 +16,7 @@ export default function RegisterPage() {
     city: '',
     country: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
   });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -27,9 +27,9 @@ export default function RegisterPage() {
     e.preventDefault();
     setLoading(true);
     setError('');
-    
+
     if (formData.password !== formData.confirmPassword) {
-      setError("Passwords do not match");
+      setError('Passwords do not match');
       setLoading(false);
       return;
     }
@@ -43,8 +43,8 @@ export default function RegisterPage() {
           email: formData.email,
           city: formData.city,
           country: formData.country,
-          password: formData.password
-        })
+          password: formData.password,
+        }),
       });
 
       const data = await res.json();
@@ -62,13 +62,12 @@ export default function RegisterPage() {
   };
 
   const updateField = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   return (
     <div className="min-h-dvh w-full relative flex items-center justify-center bg-transparent selection:bg-gold-500/30 py-12">
-
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
@@ -80,7 +79,7 @@ export default function RegisterPage() {
           <div className="relative z-10">
             <AnimatePresence mode="wait">
               {success ? (
-                <motion.div 
+                <motion.div
                   key="success"
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -89,11 +88,15 @@ export default function RegisterPage() {
                   <div className="w-20 h-20 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-6 ring-4 ring-emerald-500/10">
                     <CheckCircle2 className="w-10 h-10" />
                   </div>
-                  <h2 className="text-3xl font-bold text-white mb-4">Registration Successful!</h2>
+                  <h2 className="text-3xl font-bold text-white mb-4">
+                    Registration Successful!
+                  </h2>
                   <p className="text-white/60 mb-8 leading-relaxed max-w-sm mx-auto">
-                    We've sent a verification email to <strong>{formData.email}</strong>. Please check your inbox and click the link to verify your account.
+                    We've sent a verification email to{' '}
+                    <strong>{formData.email}</strong>. Please check your inbox
+                    and click the link to verify your account.
                   </p>
-                  <Link 
+                  <Link
                     href="/login"
                     className="inline-flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 text-white font-semibold py-3 px-8 rounded-xl transition-colors border border-white/10"
                   >
@@ -101,7 +104,11 @@ export default function RegisterPage() {
                   </Link>
                 </motion.div>
               ) : (
-                <motion.div key="form" initial={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
+                <motion.div
+                  key="form"
+                  initial={{ opacity: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                >
                   <div className="text-center mb-10">
                     <h2 className="text-3xl font-extrabold text-white tracking-tight">
                       Create an account
@@ -113,7 +120,7 @@ export default function RegisterPage() {
 
                   <form className="space-y-5" onSubmit={handleSubmit}>
                     {error && (
-                      <motion.div 
+                      <motion.div
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}
                         className="rounded-xl bg-red-500/10 border border-red-500/20 p-4 text-sm text-red-400 text-center"
@@ -133,8 +140,8 @@ export default function RegisterPage() {
                           value={formData.name}
                           onChange={(e) => updateField('name', e.target.value)}
                         />
-                        <label 
-                          htmlFor="name" 
+                        <label
+                          htmlFor="name"
                           className="absolute left-5 -top-2.5 bg-[#1a1a1a] px-2 text-xs font-medium text-white/50 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:bg-transparent peer-focus:-top-2.5 peer-focus:text-xs peer-focus:bg-[#1a1a1a] peer-focus:text-gold-400 rounded"
                         >
                           Full Name
@@ -151,8 +158,8 @@ export default function RegisterPage() {
                           value={formData.email}
                           onChange={(e) => updateField('email', e.target.value)}
                         />
-                        <label 
-                          htmlFor="email" 
+                        <label
+                          htmlFor="email"
                           className="absolute left-5 -top-2.5 bg-[#1a1a1a] px-2 text-xs font-medium text-white/50 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:bg-transparent peer-focus:-top-2.5 peer-focus:text-xs peer-focus:bg-[#1a1a1a] peer-focus:text-gold-400 rounded"
                         >
                           Email address
@@ -169,8 +176,8 @@ export default function RegisterPage() {
                           value={formData.city}
                           onChange={(e) => updateField('city', e.target.value)}
                         />
-                        <label 
-                          htmlFor="city" 
+                        <label
+                          htmlFor="city"
                           className="absolute left-5 -top-2.5 bg-[#1a1a1a] px-2 text-xs font-medium text-white/50 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:bg-transparent peer-focus:-top-2.5 peer-focus:text-xs peer-focus:bg-[#1a1a1a] peer-focus:text-gold-400 rounded"
                         >
                           City
@@ -185,10 +192,12 @@ export default function RegisterPage() {
                           className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white placeholder-transparent focus:bg-white/10 focus:border-gold-500/50 focus:ring-2 focus:ring-gold-500/20 outline-none transition-all peer"
                           placeholder="Country"
                           value={formData.country}
-                          onChange={(e) => updateField('country', e.target.value)}
+                          onChange={(e) =>
+                            updateField('country', e.target.value)
+                          }
                         />
-                        <label 
-                          htmlFor="country" 
+                        <label
+                          htmlFor="country"
                           className="absolute left-5 -top-2.5 bg-[#1a1a1a] px-2 text-xs font-medium text-white/50 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:bg-transparent peer-focus:-top-2.5 peer-focus:text-xs peer-focus:bg-[#1a1a1a] peer-focus:text-gold-400 rounded"
                         >
                           Country
@@ -198,15 +207,17 @@ export default function RegisterPage() {
                       <div className="relative group">
                         <input
                           id="password"
-                          type={showPassword ? "text" : "password"}
+                          type={showPassword ? 'text' : 'password'}
                           required
                           className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white placeholder-transparent focus:bg-white/10 focus:border-gold-500/50 focus:ring-2 focus:ring-gold-500/20 outline-none transition-all peer pr-12"
                           placeholder="Password"
                           value={formData.password}
-                          onChange={(e) => updateField('password', e.target.value)}
+                          onChange={(e) =>
+                            updateField('password', e.target.value)
+                          }
                         />
-                        <label 
-                          htmlFor="password" 
+                        <label
+                          htmlFor="password"
                           className="absolute left-5 -top-2.5 bg-[#1a1a1a] px-2 text-xs font-medium text-white/50 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:bg-transparent peer-focus:-top-2.5 peer-focus:text-xs peer-focus:bg-[#1a1a1a] peer-focus:text-gold-400 rounded"
                         >
                           Password
@@ -216,22 +227,28 @@ export default function RegisterPage() {
                           onClick={() => setShowPassword(!showPassword)}
                           className="absolute right-4 top-4 text-white/30 hover:text-white/70 transition-colors"
                         >
-                          {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                          {showPassword ? (
+                            <EyeOff className="w-5 h-5" />
+                          ) : (
+                            <Eye className="w-5 h-5" />
+                          )}
                         </button>
                       </div>
 
                       <div className="relative group">
                         <input
                           id="confirmPassword"
-                          type={showPassword ? "text" : "password"}
+                          type={showPassword ? 'text' : 'password'}
                           required
                           className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white placeholder-transparent focus:bg-white/10 focus:border-gold-500/50 focus:ring-2 focus:ring-gold-500/20 outline-none transition-all peer"
                           placeholder="Confirm Password"
                           value={formData.confirmPassword}
-                          onChange={(e) => updateField('confirmPassword', e.target.value)}
+                          onChange={(e) =>
+                            updateField('confirmPassword', e.target.value)
+                          }
                         />
-                        <label 
-                          htmlFor="confirmPassword" 
+                        <label
+                          htmlFor="confirmPassword"
                           className="absolute left-5 -top-2.5 bg-[#1a1a1a] px-2 text-xs font-medium text-white/50 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:bg-transparent peer-focus:-top-2.5 peer-focus:text-xs peer-focus:bg-[#1a1a1a] peer-focus:text-gold-400 rounded"
                         >
                           Confirm Password
@@ -262,11 +279,14 @@ export default function RegisterPage() {
             </AnimatePresence>
           </div>
         </div>
-        
+
         {!success && (
           <div className="text-center mt-8 text-white/50 text-sm">
             Already have an account?{' '}
-            <Link href="/login" className="font-semibold text-white hover:text-gold-300 transition-colors underline decoration-white/20 underline-offset-4">
+            <Link
+              href="/login"
+              className="font-semibold text-white hover:text-gold-300 transition-colors underline decoration-white/20 underline-offset-4"
+            >
               Sign in
             </Link>
           </div>

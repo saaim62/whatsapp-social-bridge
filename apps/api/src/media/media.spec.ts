@@ -11,8 +11,12 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
  */
 describe('MediaSigningService', () => {
   const config = {
-    get: jest.fn((key: string) =>
-      ({ MEDIA_SIGNING_SECRET: 'test-signing-secret', PUBLIC_API_URL: 'https://api.example.com' })[key],
+    get: jest.fn(
+      (key: string) =>
+        ({
+          MEDIA_SIGNING_SECRET: 'test-signing-secret',
+          PUBLIC_API_URL: 'https://api.example.com',
+        })[key],
     ),
   };
   const signing = new MediaSigningService(config as any);
@@ -44,8 +48,12 @@ describe('MediaSigningService', () => {
 
 describe('MediaController', () => {
   const config = {
-    get: jest.fn((key: string) =>
-      ({ MEDIA_SIGNING_SECRET: 'test-signing-secret', PUBLIC_API_URL: 'https://api.example.com' })[key],
+    get: jest.fn(
+      (key: string) =>
+        ({
+          MEDIA_SIGNING_SECRET: 'test-signing-secret',
+          PUBLIC_API_URL: 'https://api.example.com',
+        })[key],
     ),
   };
   const signing = new MediaSigningService(config as any);
@@ -75,13 +83,18 @@ describe('MediaController', () => {
 
   it('the authenticated endpoint is behind the JWT guard', () => {
     // '__guards__' is Nest's GUARDS_METADATA key.
-    const guards = Reflect.getMetadata('__guards__', MediaController.prototype.serveOwned);
+    const guards = Reflect.getMetadata(
+      '__guards__',
+      MediaController.prototype.serveOwned,
+    );
     expect(guards).toContain(JwtAuthGuard);
   });
 
   it('owner can fetch their own media', async () => {
     await controller.serveOwned('asset-1', { user: { userId: 'user-1' } }, res);
-    expect(res.redirect).toHaveBeenCalledWith('https://cdn.example.com/photo.jpg');
+    expect(res.redirect).toHaveBeenCalledWith(
+      'https://cdn.example.com/photo.jpg',
+    );
   });
 
   it('another tenant gets 404 (existence is not leaked)', async () => {
@@ -95,7 +108,9 @@ describe('MediaController', () => {
   it('a signed URL works before expiry', async () => {
     const token = signing.sign('a:asset-1', 900);
     await controller.serveSigned(token, res);
-    expect(res.redirect).toHaveBeenCalledWith('https://cdn.example.com/photo.jpg');
+    expect(res.redirect).toHaveBeenCalledWith(
+      'https://cdn.example.com/photo.jpg',
+    );
   });
 
   it('a signed URL is rejected after expiry and when tampered', async () => {

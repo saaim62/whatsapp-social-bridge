@@ -13,10 +13,13 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password) return null;
         try {
-          const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001'}/api/account/login`, {
-            email: credentials.email,
-            password: credentials.password,
-          });
+          const res = await axios.post(
+            `${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001'}/api/account/login`,
+            {
+              email: credentials.email,
+              password: credentials.password,
+            },
+          );
           const user = res.data;
           if (user && user.access_token) {
             return {
@@ -30,7 +33,7 @@ export const authOptions: NextAuthOptions = {
           }
           return null;
         } catch (e: any) {
-          const message = e.response?.data?.message || "Invalid credentials";
+          const message = e.response?.data?.message || 'Invalid credentials';
           throw new Error(message);
         }
       },

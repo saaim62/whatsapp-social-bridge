@@ -21,7 +21,7 @@ export default function ForgotPasswordPage() {
       const res = await fetch(`${API_URL}/api/account/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
+        body: JSON.stringify({ email }),
       });
 
       const data = await res.json();
@@ -41,11 +41,14 @@ export default function ForgotPasswordPage() {
   return (
     <div className="min-h-dvh w-full relative flex items-center justify-center bg-transparent selection:bg-gold-500/30">
       <div className="absolute inset-0 z-0">
-        <div className="absolute top-1/4 -left-1/4 w-[800px] h-[800px] bg-brand-500/20 rounded-full blur-[120px] mix-blend-screen animate-pulse" style={{ animationDuration: '4s' }} />
+        <div
+          className="absolute top-1/4 -left-1/4 w-[800px] h-[800px] bg-brand-500/20 rounded-full blur-[120px] mix-blend-screen animate-pulse"
+          style={{ animationDuration: '4s' }}
+        />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[url('/noise.png')] opacity-20 mix-blend-overlay pointer-events-none" />
       </div>
 
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
@@ -57,7 +60,7 @@ export default function ForgotPasswordPage() {
           <div className="relative z-10">
             <AnimatePresence mode="wait">
               {success ? (
-                <motion.div 
+                <motion.div
                   key="success"
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -66,11 +69,14 @@ export default function ForgotPasswordPage() {
                   <div className="w-20 h-20 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-6 ring-4 ring-emerald-500/10">
                     <CheckCircle2 className="w-10 h-10" />
                   </div>
-                  <h2 className="text-2xl font-bold text-white mb-4">Check Your Email</h2>
+                  <h2 className="text-2xl font-bold text-white mb-4">
+                    Check Your Email
+                  </h2>
                   <p className="text-white/60 mb-8 leading-relaxed max-w-sm mx-auto">
-                    We've sent a password reset link to <strong>{email}</strong> if it exists in our system.
+                    We've sent a password reset link to <strong>{email}</strong>{' '}
+                    if it exists in our system.
                   </p>
-                  <Link 
+                  <Link
                     href="/login"
                     className="inline-flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 text-white font-semibold py-3 px-8 rounded-xl transition-colors border border-white/10 w-full"
                   >
@@ -78,7 +84,11 @@ export default function ForgotPasswordPage() {
                   </Link>
                 </motion.div>
               ) : (
-                <motion.div key="form" initial={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
+                <motion.div
+                  key="form"
+                  initial={{ opacity: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                >
                   <div className="text-center mb-10">
                     <h2 className="text-3xl font-extrabold text-white tracking-tight">
                       Reset Password
@@ -90,7 +100,7 @@ export default function ForgotPasswordPage() {
 
                   <form className="space-y-5" onSubmit={handleSubmit}>
                     {error && (
-                      <motion.div 
+                      <motion.div
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}
                         className="rounded-xl bg-red-500/10 border border-red-500/20 p-4 text-sm text-red-400 text-center"
@@ -109,8 +119,8 @@ export default function ForgotPasswordPage() {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                       />
-                      <label 
-                        htmlFor="email" 
+                      <label
+                        htmlFor="email"
                         className="absolute left-5 -top-2.5 bg-[#1a1a1a] px-2 text-xs font-medium text-white/50 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:bg-transparent peer-focus:-top-2.5 peer-focus:text-xs peer-focus:bg-[#1a1a1a] peer-focus:text-gold-400 rounded"
                       >
                         Email address
@@ -140,11 +150,14 @@ export default function ForgotPasswordPage() {
             </AnimatePresence>
           </div>
         </div>
-        
+
         {!success && (
           <div className="text-center mt-8 text-white/50 text-sm">
             Remembered your password?{' '}
-            <Link href="/login" className="font-semibold text-white hover:text-gold-300 transition-colors underline decoration-white/20 underline-offset-4">
+            <Link
+              href="/login"
+              className="font-semibold text-white hover:text-gold-300 transition-colors underline decoration-white/20 underline-offset-4"
+            >
               Sign in
             </Link>
           </div>

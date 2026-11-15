@@ -1,6 +1,10 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+} from '@aws-sdk/client-s3';
 import Redis from 'ioredis';
 import * as path from 'path';
 
@@ -35,12 +39,23 @@ export class StorageService implements OnModuleInit {
 
   private loadAccount(index: number) {
     const prefix = `R2_ACC${index}_`;
-    const clean = (val?: string) => val ? val.replace(/^["']|["']$/g, '').trim() : undefined;
-    const accountId = clean(this.configService.get<string>(`${prefix}ACCOUNT_ID`));
-    const accessKeyId = clean(this.configService.get<string>(`${prefix}ACCESS_KEY_ID`));
-    const secretAccessKey = clean(this.configService.get<string>(`${prefix}SECRET_ACCESS_KEY`));
-    const bucketName = clean(this.configService.get<string>(`${prefix}BUCKET_NAME`));
-    const publicUrl = clean(this.configService.get<string>(`${prefix}PUBLIC_URL`));
+    const clean = (val?: string) =>
+      val ? val.replace(/^["']|["']$/g, '').trim() : undefined;
+    const accountId = clean(
+      this.configService.get<string>(`${prefix}ACCOUNT_ID`),
+    );
+    const accessKeyId = clean(
+      this.configService.get<string>(`${prefix}ACCESS_KEY_ID`),
+    );
+    const secretAccessKey = clean(
+      this.configService.get<string>(`${prefix}SECRET_ACCESS_KEY`),
+    );
+    const bucketName = clean(
+      this.configService.get<string>(`${prefix}BUCKET_NAME`),
+    );
+    const publicUrl = clean(
+      this.configService.get<string>(`${prefix}PUBLIC_URL`),
+    );
 
     if (accountId && accessKeyId && secretAccessKey && bucketName) {
       const client = new S3Client({
@@ -57,9 +72,13 @@ export class StorageService implements OnModuleInit {
         bucketName,
         publicUrl: publicUrl || '',
       });
-      this.logger.log(`Initialized R2 Account ${index} (Bucket: ${bucketName})`);
+      this.logger.log(
+        `Initialized R2 Account ${index} (Bucket: ${bucketName})`,
+      );
     } else {
-      this.logger.warn(`R2 Account ${index} credentials incomplete: accountId=${!!accountId}, key=${!!accessKeyId}, secret=${!!secretAccessKey}, bucket=${!!bucketName}`);
+      this.logger.warn(
+        `R2 Account ${index} credentials incomplete: accountId=${!!accountId}, key=${!!accessKeyId}, secret=${!!secretAccessKey}, bucket=${!!bucketName}`,
+      );
     }
   }
 
@@ -72,7 +91,10 @@ export class StorageService implements OnModuleInit {
     }
   }
 
-  private async incrementAccountUsage(accountId: string, bytes: number): Promise<void> {
+  private async incrementAccountUsage(
+    accountId: string,
+    bytes: number,
+  ): Promise<void> {
     try {
       await this.redisClient.incrby(`r2_usage:${accountId}`, bytes);
     } catch (e) {
@@ -80,7 +102,10 @@ export class StorageService implements OnModuleInit {
     }
   }
 
-  private async decrementAccountUsage(accountId: string, bytes: number): Promise<void> {
+  private async decrementAccountUsage(
+    accountId: string,
+    bytes: number,
+  ): Promise<void> {
     try {
       const current = await this.getAccountUsage(accountId);
       if (current >= bytes) {
@@ -93,7 +118,9 @@ export class StorageService implements OnModuleInit {
     }
   }
 
-  private async selectAvailableAccount(fileSizeBytes: number): Promise<R2Account> {
+  private async selectAvailableAccount(
+    fileSizeBytes: number,
+  ): Promise<R2Account> {
     for (const account of this.accounts) {
       const usage = await this.getAccountUsage(account.id);
       if (usage + fileSizeBytes < this.MAX_BYTES_PER_ACCOUNT) {
@@ -107,7 +134,11 @@ export class StorageService implements OnModuleInit {
     throw new Error('No R2 accounts configured');
   }
 
-  async uploadBuffer(buffer: Buffer, filename: string, mimeType: string): Promise<string> {
+  async uploadBuffer(
+    buffer: Buffer,
+    filename: string,
+    mimeType: string,
+  ): Promise<string> {
     if (this.accounts.length === 0) {
       throw new Error('No R2 accounts configured');
     }
@@ -125,10 +156,10 @@ export class StorageService implements OnModuleInit {
       });
 
       await account.client.send(command);
-      
+
       // Track usage
       await this.incrementAccountUsage(account.id, fileSizeBytes);
-      
+
       // Save which account this file belongs to in Redis (for deletion later)
       try {
         await this.redisClient.set(`r2_file_account:${filename}`, account.id);
@@ -138,13 +169,18 @@ export class StorageService implements OnModuleInit {
       }
 
       if (account.publicUrl) {
-        const baseUrl = account.publicUrl.endsWith('/') ? account.publicUrl.slice(0, -1) : account.publicUrl;
+        const baseUrl = account.publicUrl.endsWith('/')
+          ? account.publicUrl.slice(0, -1)
+          : account.publicUrl;
         return `${baseUrl}/${filename}`;
       }
-      
+
       return filename;
     } catch (error) {
-      this.logger.error(`Failed to upload ${filename} to R2 account ${account.id}`, error);
+      this.logger.error(
+        `Failed to upload ${filename} to R2 account ${account.id}`,
+        error,
+      );
       throw error;
     }
   }
@@ -172,10 +208,10 @@ export class StorageService implements OnModuleInit {
     let accountId: string | null = null;
     try {
       accountId = await this.redisClient.get(`r2_file_account:${filename}`);
-    } catch (e) { }
+    } catch (e) {}
 
     const targetAccounts = accountId
-      ? this.accounts.filter(a => a.id === accountId)
+      ? this.accounts.filter((a) => a.id === accountId)
       : this.accounts;
 
     for (const account of targetAccounts) {
@@ -185,18 +221,25 @@ export class StorageService implements OnModuleInit {
           Key: filename,
         });
         await account.client.send(command);
-        this.logger.log(`Deleted ${filename} from Cloudflare R2 bucket: ${account.bucketName}`);
+        this.logger.log(
+          `Deleted ${filename} from Cloudflare R2 bucket: ${account.bucketName}`,
+        );
 
         try {
-          const sizeStr = await this.redisClient.get(`r2_file_size:${filename}`);
+          const sizeStr = await this.redisClient.get(
+            `r2_file_size:${filename}`,
+          );
           if (sizeStr) {
             await this.decrementAccountUsage(account.id, parseInt(sizeStr, 10));
           }
           await this.redisClient.del(`r2_file_account:${filename}`);
           await this.redisClient.del(`r2_file_size:${filename}`);
-        } catch (e) { }
+        } catch (e) {}
       } catch (error) {
-        this.logger.error(`Failed to delete ${filename} from R2 account ${account.id}`, error);
+        this.logger.error(
+          `Failed to delete ${filename} from R2 account ${account.id}`,
+          error,
+        );
       }
     }
   }

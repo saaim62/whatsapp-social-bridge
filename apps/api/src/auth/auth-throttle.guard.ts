@@ -22,7 +22,11 @@ interface Bucket {
 export class AuthThrottleGuard implements CanActivate {
   private readonly buckets = new Map<string, Bucket>();
 
-  private readonly rules: Array<{ match: string; limit: number; windowMs: number }> = [
+  private readonly rules: Array<{
+    match: string;
+    limit: number;
+    windowMs: number;
+  }> = [
     { match: '/login', limit: 10, windowMs: 5 * 60 * 1000 },
     { match: '/register', limit: 5, windowMs: 10 * 60 * 1000 },
     { match: '/forgot-password', limit: 5, windowMs: 10 * 60 * 1000 },

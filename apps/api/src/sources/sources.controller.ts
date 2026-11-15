@@ -31,9 +31,16 @@ export class SourcesController {
     @Body() body: { isEnabled: boolean },
   ) {
     if (typeof body.isEnabled !== 'boolean') {
-      throw new HttpException('isEnabled must be a boolean', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        'isEnabled must be a boolean',
+        HttpStatus.BAD_REQUEST,
+      );
     }
-    return this.sourcesService.toggleSource(id, body.isEnabled, req.user.userId);
+    return this.sourcesService.toggleSource(
+      id,
+      body.isEnabled,
+      req.user.userId,
+    );
   }
 
   @Patch(':id/name')
@@ -43,7 +50,10 @@ export class SourcesController {
     @Body() body: { name: string },
   ) {
     if (!body.name || typeof body.name !== 'string') {
-      throw new HttpException('name must be a non-empty string', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        'name must be a non-empty string',
+        HttpStatus.BAD_REQUEST,
+      );
     }
     return this.sourcesService.updateSourceName(id, body.name, req.user.userId);
   }
@@ -52,7 +62,10 @@ export class SourcesController {
   async syncGroups(@Request() req: any) {
     const result = await this.sourcesService.syncGroups(req.user.userId);
     if (!result.success) {
-      throw new HttpException(result.message || 'Failed to sync', HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(
+        result.message || 'Failed to sync',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
     return result;
   }
@@ -63,9 +76,15 @@ export class SourcesController {
   }
 
   @Post('bulk-delete')
-  async bulkDeleteSources(@Request() req: any, @Body() body: { ids: string[] }) {
+  async bulkDeleteSources(
+    @Request() req: any,
+    @Body() body: { ids: string[] },
+  ) {
     if (!body.ids || !Array.isArray(body.ids)) {
-      throw new HttpException('ids must be an array of strings', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        'ids must be an array of strings',
+        HttpStatus.BAD_REQUEST,
+      );
     }
     return this.sourcesService.bulkDelete(body.ids, req.user.userId);
   }

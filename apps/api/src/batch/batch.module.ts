@@ -25,4 +25,3 @@ import { MediaModule } from '../media/media.module';
   exports: [BatchService],
 })
 export class BatchModule {}
-

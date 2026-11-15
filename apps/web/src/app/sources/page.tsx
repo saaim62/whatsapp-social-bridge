@@ -1,29 +1,41 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
-import { API_URL, fetchWithAuth } from "@/lib/api";
-import { Search, RefreshCw, Radio, Users, User, Power, Loader2, Trash2, Pencil, Check, X } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect } from 'react';
+import { API_URL, fetchWithAuth } from '@/lib/api';
+import {
+  Search,
+  RefreshCw,
+  Radio,
+  Users,
+  User,
+  Power,
+  Loader2,
+  Trash2,
+  Pencil,
+  Check,
+  X,
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 /**
  * Formats a raw WhatsApp JID into a human-friendly subtitle string.
  */
 function formatJid(jid: string): string {
-  if (!jid) return "";
-  if (jid.endsWith("@s.whatsapp.net")) {
-    const num = jid.replace("@s.whatsapp.net", "");
+  if (!jid) return '';
+  if (jid.endsWith('@s.whatsapp.net')) {
+    const num = jid.replace('@s.whatsapp.net', '');
     return `+${num}`;
   }
-  if (jid.endsWith("@g.us")) {
-    const id = jid.replace("@g.us", "");
+  if (jid.endsWith('@g.us')) {
+    const id = jid.replace('@g.us', '');
     // Truncate long group IDs
     return id.length > 20 ? `${id.substring(0, 16)}...` : id;
   }
-  if (jid.endsWith("@newsletter")) {
-    const id = jid.replace("@newsletter", "");
+  if (jid.endsWith('@newsletter')) {
+    const id = jid.replace('@newsletter', '');
     return id.length > 20 ? `${id.substring(0, 16)}...` : id;
   }
-  if (jid.endsWith("@lid")) {
+  if (jid.endsWith('@lid')) {
     return `WhatsApp ID`;
   }
   return jid;
@@ -40,7 +52,8 @@ function hasProperName(name: string, jid: string): boolean {
   if (/[∙•·]{2,}/.test(name)) return false; // Masked WhatsApp number
   const trimmed = name.trim();
   // Pure digits or digits with symbols like + () -
-  if (/^[+\d\s\-().]+$/.test(trimmed) && trimmed.replace(/\D/g, '').length >= 6) return false;
+  if (/^[+\d\s\-().]+$/.test(trimmed) && trimmed.replace(/\D/g, '').length >= 6)
+    return false;
   return true;
 }
 
@@ -49,13 +62,22 @@ function hasProperName(name: string, jid: string): boolean {
  */
 function getTypeBadge(type: string): { label: string; className: string } {
   switch (type) {
-    case "GROUP":
-      return { label: "Group", className: "bg-brand-500/10 text-brand-400 border-brand-500/20" };
-    case "CHANNEL":
-      return { label: "Channel", className: "bg-violet-500/10 text-violet-400 border-violet-500/20" };
-    case "INDIVIDUAL":
+    case 'GROUP':
+      return {
+        label: 'Group',
+        className: 'bg-brand-500/10 text-brand-400 border-brand-500/20',
+      };
+    case 'CHANNEL':
+      return {
+        label: 'Channel',
+        className: 'bg-violet-500/10 text-violet-400 border-violet-500/20',
+      };
+    case 'INDIVIDUAL':
     default:
-      return { label: "Contact", className: "bg-blue-500/10 text-blue-400 border-blue-500/20" };
+      return {
+        label: 'Contact',
+        className: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+      };
   }
 }
 
@@ -63,10 +85,12 @@ export default function SourcesPage() {
   const [sources, setSources] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterType, setFilterType] = useState<"ALL" | "CONTACTS_NAMED" | "GROUPS" | "CHANNELS" | "NUMBERS">("ALL");
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState<
+    'ALL' | 'CONTACTS_NAMED' | 'GROUPS' | 'CHANNELS' | 'NUMBERS'
+  >('ALL');
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
+  const [editName, setEditName] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isDeletingBulk, setIsDeletingBulk] = useState(false);
 
@@ -91,19 +115,19 @@ export default function SourcesPage() {
   const toggleSource = async (id: string, currentStatus: boolean) => {
     // Optimistic UI update
     setSources((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, isEnabled: !currentStatus } : s))
+      prev.map((s) => (s.id === id ? { ...s, isEnabled: !currentStatus } : s)),
     );
     try {
       await fetchWithAuth(`${API_URL}/api/sources/${id}/toggle`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isEnabled: !currentStatus }),
       });
     } catch (err) {
       console.error(err);
       // Revert on error
       setSources((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, isEnabled: currentStatus } : s))
+        prev.map((s) => (s.id === id ? { ...s, isEnabled: currentStatus } : s)),
       );
     }
   };
@@ -111,46 +135,50 @@ export default function SourcesPage() {
   const deleteSource = async (id: string) => {
     // Optimistic UI update
     const previous = [...sources];
-    setSources(sources.filter(s => s.id !== id));
+    setSources(sources.filter((s) => s.id !== id));
     try {
-      await fetchWithAuth(`${API_URL}/api/sources/${id}`, { method: "DELETE" });
+      await fetchWithAuth(`${API_URL}/api/sources/${id}`, { method: 'DELETE' });
     } catch (err) {
       console.error(err);
       setSources(previous);
-      alert("Failed to delete source");
+      alert('Failed to delete source');
     }
   };
 
   const saveSourceName = async (id: string) => {
     if (!editName.trim()) return;
     const previous = [...sources];
-    setSources(sources.map(s => s.id === id ? { ...s, name: editName.trim() } : s));
+    setSources(
+      sources.map((s) => (s.id === id ? { ...s, name: editName.trim() } : s)),
+    );
     setEditingId(null);
     try {
       await fetchWithAuth(`${API_URL}/api/sources/${id}/name`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: editName.trim() }),
       });
     } catch (err) {
       console.error(err);
       setSources(previous);
-      alert("Failed to update name");
+      alert('Failed to update name');
     }
   };
 
   const syncGroups = async () => {
     setSyncing(true);
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/sources/sync`, { method: "POST" });
+      const res = await fetchWithAuth(`${API_URL}/api/sources/sync`, {
+        method: 'POST',
+      });
       if (res.ok) {
         await fetchSources();
       } else {
-        alert("Failed to sync. Make sure your WhatsApp is connected.");
+        alert('Failed to sync. Make sure your WhatsApp is connected.');
       }
     } catch (err) {
       console.error(err);
-      alert("Failed to sync groups");
+      alert('Failed to sync groups');
     } finally {
       setSyncing(false);
     }
@@ -158,7 +186,7 @@ export default function SourcesPage() {
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
-      setSelectedIds(new Set(filteredSources.map(s => s.id)));
+      setSelectedIds(new Set(filteredSources.map((s) => s.id)));
     } else {
       setSelectedIds(new Set());
     }
@@ -176,80 +204,90 @@ export default function SourcesPage() {
 
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return;
-    if (!confirm(`Are you sure you want to delete ${selectedIds.size} sources?`)) return;
-    
+    if (
+      !confirm(`Are you sure you want to delete ${selectedIds.size} sources?`)
+    )
+      return;
+
     setIsDeletingBulk(true);
     const idsToDelete = Array.from(selectedIds);
     const previous = [...sources];
-    
-    setSources(sources.filter(s => !selectedIds.has(s.id)));
+
+    setSources(sources.filter((s) => !selectedIds.has(s.id)));
     setSelectedIds(new Set());
-    
+
     try {
       const res = await fetchWithAuth(`${API_URL}/api/sources/bulk-delete`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: idsToDelete }),
       });
-      if (!res.ok) throw new Error("Failed to delete");
+      if (!res.ok) throw new Error('Failed to delete');
     } catch (err) {
       console.error(err);
       setSources(previous);
-      alert("Failed to delete selected sources");
+      alert('Failed to delete selected sources');
     } finally {
       setIsDeletingBulk(false);
     }
   };
 
-  const filteredSources = sources.filter((s) => {
-    // text search
-    if (searchQuery) {
-      if (!s.name.toLowerCase().includes(searchQuery.toLowerCase()) && 
-          !s.jid.toLowerCase().includes(searchQuery.toLowerCase())) {
-        return false;
+  const filteredSources = sources
+    .filter((s) => {
+      // text search
+      if (searchQuery) {
+        if (
+          !s.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+          !s.jid.toLowerCase().includes(searchQuery.toLowerCase())
+        ) {
+          return false;
+        }
       }
-    }
-    
-    // Type filter
-    if (filterType === "GROUPS" && s.type !== "GROUP") return false;
-    if (filterType === "CHANNELS" && s.type !== "CHANNEL") return false;
-    if (filterType === "CONTACTS_NAMED") {
-      if (s.type !== "INDIVIDUAL") return false;
-      if (!hasProperName(s.name, s.jid)) return false;
-    }
-    if (filterType === "NUMBERS") {
-      if (s.type !== "INDIVIDUAL") return false;
-      if (hasProperName(s.name, s.jid)) return false;
-    }
-    
-    return true;
-  }).sort((a, b) => {
-    // Sorting order:
-    // 1. Contacts with proper names
-    // 2. Groups
-    // 3. Channels
-    // 4. Numbers (unnamed contacts)
-    const aNamed = a.type === "INDIVIDUAL" && hasProperName(a.name, a.jid);
-    const bNamed = b.type === "INDIVIDUAL" && hasProperName(b.name, b.jid);
-    
-    if (aNamed && !bNamed) return -1;
-    if (!aNamed && bNamed) return 1;
-    
-    if (a.type === "GROUP" && b.type !== "GROUP") return -1;
-    if (a.type !== "GROUP" && b.type === "GROUP") return 1;
-    
-    if (a.type === "CHANNEL" && b.type !== "CHANNEL") return -1;
-    if (a.type !== "CHANNEL" && b.type === "CHANNEL") return 1;
-    
-    // Within the same category, sort alphabetically by name
-    return (a.name || "").localeCompare(b.name || "");
-  });
+
+      // Type filter
+      if (filterType === 'GROUPS' && s.type !== 'GROUP') return false;
+      if (filterType === 'CHANNELS' && s.type !== 'CHANNEL') return false;
+      if (filterType === 'CONTACTS_NAMED') {
+        if (s.type !== 'INDIVIDUAL') return false;
+        if (!hasProperName(s.name, s.jid)) return false;
+      }
+      if (filterType === 'NUMBERS') {
+        if (s.type !== 'INDIVIDUAL') return false;
+        if (hasProperName(s.name, s.jid)) return false;
+      }
+
+      return true;
+    })
+    .sort((a, b) => {
+      // Sorting order:
+      // 1. Contacts with proper names
+      // 2. Groups
+      // 3. Channels
+      // 4. Numbers (unnamed contacts)
+      const aNamed = a.type === 'INDIVIDUAL' && hasProperName(a.name, a.jid);
+      const bNamed = b.type === 'INDIVIDUAL' && hasProperName(b.name, b.jid);
+
+      if (aNamed && !bNamed) return -1;
+      if (!aNamed && bNamed) return 1;
+
+      if (a.type === 'GROUP' && b.type !== 'GROUP') return -1;
+      if (a.type !== 'GROUP' && b.type === 'GROUP') return 1;
+
+      if (a.type === 'CHANNEL' && b.type !== 'CHANNEL') return -1;
+      if (a.type !== 'CHANNEL' && b.type === 'CHANNEL') return 1;
+
+      // Within the same category, sort alphabetically by name
+      return (a.name || '').localeCompare(b.name || '');
+    });
 
   const getIcon = (type: string) => {
     switch (type) {
-      case "GROUP": return <Users className="w-5 h-5 text-brand-500" />;
-      case "CHANNEL": return <Radio className="w-5 h-5 text-violet-500" />;
-      default: return <User className="w-5 h-5 text-blue-500" />;
+      case 'GROUP':
+        return <Users className="w-5 h-5 text-brand-500" />;
+      case 'CHANNEL':
+        return <Radio className="w-5 h-5 text-violet-500" />;
+      default:
+        return <User className="w-5 h-5 text-blue-500" />;
     }
   };
 
@@ -263,7 +301,6 @@ export default function SourcesPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      
       {/* Header Panel */}
       <div className="glass-card p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 border-b-2 border-b-electric-cyan/20">
         <div>
@@ -272,11 +309,12 @@ export default function SourcesPage() {
             Active Data Sources
           </h2>
           <p className="text-sm text-slate-400 mt-2 max-w-xl">
-            Toggle which WhatsApp contacts, groups, and channels are allowed to send products into the bridge.
-            Disabled sources will have their messages ignored.
+            Toggle which WhatsApp contacts, groups, and channels are allowed to
+            send products into the bridge. Disabled sources will have their
+            messages ignored.
           </p>
         </div>
-        
+
         <button
           onClick={syncGroups}
           disabled={syncing}
@@ -287,32 +325,33 @@ export default function SourcesPage() {
           ) : (
             <RefreshCw className="w-4 h-4" />
           )}
-          {syncing ? "Syncing..." : "Sync Contacts & Groups"}
+          {syncing ? 'Syncing...' : 'Sync Contacts & Groups'}
         </button>
       </div>
 
       {/* Main Board */}
       <div className="glass-card overflow-hidden flex flex-col min-h-[500px]">
-        
         {/* Filters */}
         <div className="px-4 py-3 border-b border-graphite-border bg-graphite-darker/50 flex flex-wrap gap-2">
-          {["ALL", "CONTACTS_NAMED", "GROUPS", "CHANNELS", "NUMBERS"].map((type) => (
-            <button
-              key={type}
-              onClick={() => setFilterType(type as any)}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all ${
-                filterType === type
-                  ? "bg-electric-cyan/20 text-electric-cyan border-electric-cyan/50 shadow-[0_0_10px_rgba(0,255,255,0.1)]"
-                  : "bg-graphite border-graphite-border text-slate-400 hover:text-white hover:border-slate-600"
-              }`}
-            >
-              {type === "ALL" && "All"}
-              {type === "CONTACTS_NAMED" && "Contacts (Named)"}
-              {type === "GROUPS" && "Groups"}
-              {type === "CHANNELS" && "Channels"}
-              {type === "NUMBERS" && "Numbers Only"}
-            </button>
-          ))}
+          {['ALL', 'CONTACTS_NAMED', 'GROUPS', 'CHANNELS', 'NUMBERS'].map(
+            (type) => (
+              <button
+                key={type}
+                onClick={() => setFilterType(type as any)}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all ${
+                  filterType === type
+                    ? 'bg-electric-cyan/20 text-electric-cyan border-electric-cyan/50 shadow-[0_0_10px_rgba(0,255,255,0.1)]'
+                    : 'bg-graphite border-graphite-border text-slate-400 hover:text-white hover:border-slate-600'
+                }`}
+              >
+                {type === 'ALL' && 'All'}
+                {type === 'CONTACTS_NAMED' && 'Contacts (Named)'}
+                {type === 'GROUPS' && 'Groups'}
+                {type === 'CHANNELS' && 'Channels'}
+                {type === 'NUMBERS' && 'Numbers Only'}
+              </button>
+            ),
+          )}
         </div>
 
         {/* Toolbar */}
@@ -331,7 +370,10 @@ export default function SourcesPage() {
             <label className="flex items-center gap-2 text-sm font-medium text-slate-400 cursor-pointer hover:text-white transition-colors">
               <input
                 type="checkbox"
-                checked={filteredSources.length > 0 && selectedIds.size === filteredSources.length}
+                checked={
+                  filteredSources.length > 0 &&
+                  selectedIds.size === filteredSources.length
+                }
                 onChange={handleSelectAll}
                 className="w-4 h-4 text-electric-cyan rounded border-slate-600 bg-graphite-darker checked:bg-electric-cyan focus:ring-electric-cyan"
               />
@@ -347,7 +389,11 @@ export default function SourcesPage() {
                   disabled={isDeletingBulk}
                   className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/30 hover:border-red-500 rounded-lg text-sm font-bold transition-all disabled:opacity-50"
                 >
-                  {isDeletingBulk ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  {isDeletingBulk ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
                   Delete ({selectedIds.size})
                 </motion.button>
               )}
@@ -363,9 +409,12 @@ export default function SourcesPage() {
                 <div className="absolute inset-0 bg-electric-cyan/5 blur-xl" />
                 <Power className="w-8 h-8 text-slate-600 relative z-10" />
               </div>
-              <p className="font-heading font-bold text-white text-lg mb-2">No Sources Found</p>
+              <p className="font-heading font-bold text-white text-lg mb-2">
+                No Sources Found
+              </p>
               <p className="text-sm text-center max-w-sm text-slate-400">
-                Click &quot;Sync Contacts &amp; Groups&quot; to load your WhatsApp contacts and groups.
+                Click &quot;Sync Contacts &amp; Groups&quot; to load your
+                WhatsApp contacts and groups.
               </p>
             </div>
           ) : (
@@ -382,8 +431,8 @@ export default function SourcesPage() {
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.95 }}
                       className={`flex items-center justify-between p-4 rounded-xl border backdrop-blur-md transition-all duration-300 ${
-                        source.isEnabled 
-                          ? 'bg-electric-cyan/5 border-electric-cyan/30 shadow-[0_0_15px_rgba(0,255,255,0.05)]' 
+                        source.isEnabled
+                          ? 'bg-electric-cyan/5 border-electric-cyan/30 shadow-[0_0_15px_rgba(0,255,255,0.05)]'
                           : 'bg-graphite/40 border-graphite-border opacity-70 hover:opacity-100'
                       }`}
                     >
@@ -394,49 +443,67 @@ export default function SourcesPage() {
                           onChange={() => toggleSelection(source.id)}
                           className="w-4 h-4 text-electric-cyan rounded border-slate-600 bg-graphite-darker checked:bg-electric-cyan focus:ring-electric-cyan ml-1 cursor-pointer"
                         />
-                        
+
                         {/* Icon with Popover */}
                         <div className="relative group/icon cursor-pointer z-20">
-                          <div className={`p-3 rounded-xl border relative overflow-hidden transition-all duration-300 hover:scale-105 hover:shadow-[0_0_15px_rgba(0,255,255,0.2)] hover:border-electric-cyan ${
-                            source.isEnabled 
-                              ? 'bg-graphite border-electric-cyan/30' 
-                              : 'bg-graphite-darker border-graphite-border'
-                          }`}>
+                          <div
+                            className={`p-3 rounded-xl border relative overflow-hidden transition-all duration-300 hover:scale-105 hover:shadow-[0_0_15px_rgba(0,255,255,0.2)] hover:border-electric-cyan ${
+                              source.isEnabled
+                                ? 'bg-graphite border-electric-cyan/30'
+                                : 'bg-graphite-darker border-graphite-border'
+                            }`}
+                          >
                             {source.isEnabled && (
-                               <div className="absolute inset-0 bg-electric-cyan/10 blur-md" />
+                              <div className="absolute inset-0 bg-electric-cyan/10 blur-md" />
                             )}
                             <div className="relative z-10">
                               {getIcon(source.type)}
                             </div>
                           </div>
-                          
+
                           {/* Popover Tooltip */}
                           <div className="absolute top-full left-0 mt-3 w-72 p-4 rounded-xl bg-graphite-darker border border-graphite-border shadow-2xl opacity-0 invisible group-hover/icon:opacity-100 group-hover/icon:visible transition-all duration-300 group-hover/icon:translate-y-0 translate-y-2 pointer-events-none z-50">
                             <div className="flex flex-col gap-3">
                               <div>
-                                <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Full Name</p>
-                                <p className="text-sm font-bold text-white break-words mt-0.5">{source.name}</p>
+                                <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                                  Full Name
+                                </p>
+                                <p className="text-sm font-bold text-white break-words mt-0.5">
+                                  {source.name}
+                                </p>
                               </div>
                               <div>
-                                <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">WhatsApp ID / Number</p>
-                                <p className="text-sm font-mono text-electric-cyan break-all mt-0.5">{source.jid}</p>
+                                <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                                  WhatsApp ID / Number
+                                </p>
+                                <p className="text-sm font-mono text-electric-cyan break-all mt-0.5">
+                                  {source.jid}
+                                </p>
                               </div>
                               <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                  <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Type</p>
-                                  <p className="text-sm text-slate-300 mt-0.5 capitalize">{source.type.toLowerCase()}</p>
+                                  <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                                    Type
+                                  </p>
+                                  <p className="text-sm text-slate-300 mt-0.5 capitalize">
+                                    {source.type.toLowerCase()}
+                                  </p>
                                 </div>
                                 <div>
-                                  <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Status</p>
-                                  <p className={`text-sm mt-0.5 font-bold ${source.isEnabled ? "text-electric-emerald" : "text-slate-500"}`}>
-                                    {source.isEnabled ? "Active" : "Ignored"}
+                                  <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                                    Status
+                                  </p>
+                                  <p
+                                    className={`text-sm mt-0.5 font-bold ${source.isEnabled ? 'text-electric-emerald' : 'text-slate-500'}`}
+                                  >
+                                    {source.isEnabled ? 'Active' : 'Ignored'}
                                   </p>
                                 </div>
                               </div>
                             </div>
                           </div>
                         </div>
-                        
+
                         <div className="min-w-0 flex-1">
                           {editingId === source.id ? (
                             <div className="flex items-center gap-2">
@@ -444,26 +511,40 @@ export default function SourcesPage() {
                                 type="text"
                                 value={editName}
                                 onChange={(e) => setEditName(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && saveSourceName(source.id)}
+                                onKeyDown={(e) =>
+                                  e.key === 'Enter' && saveSourceName(source.id)
+                                }
                                 className="px-2 py-1 text-sm font-bold text-white bg-graphite-darker border border-electric-cyan rounded focus:outline-none w-full"
                                 autoFocus
                               />
-                              <button onClick={() => saveSourceName(source.id)} className="p-1.5 text-electric-emerald bg-electric-emerald/10 hover:bg-electric-emerald/20 border border-electric-emerald/20 rounded-md transition-colors">
+                              <button
+                                onClick={() => saveSourceName(source.id)}
+                                className="p-1.5 text-electric-emerald bg-electric-emerald/10 hover:bg-electric-emerald/20 border border-electric-emerald/20 rounded-md transition-colors"
+                              >
                                 <Check className="w-3.5 h-3.5" />
                               </button>
-                              <button onClick={() => setEditingId(null)} className="p-1.5 text-slate-400 bg-graphite hover:text-white border border-graphite-border rounded-md transition-colors">
+                              <button
+                                onClick={() => setEditingId(null)}
+                                className="p-1.5 text-slate-400 bg-graphite hover:text-white border border-graphite-border rounded-md transition-colors"
+                              >
                                 <X className="w-3.5 h-3.5" />
                               </button>
                             </div>
                           ) : (
                             <div className="flex items-center gap-2 group/name">
-                              <p className={`font-bold truncate transition-colors ${
-                                 source.isEnabled ? 'text-white' : 'text-slate-300'
-                              }`}>
+                              <p
+                                className={`font-bold truncate transition-colors ${
+                                  source.isEnabled
+                                    ? 'text-white'
+                                    : 'text-slate-300'
+                                }`}
+                              >
                                 {source.name}
                               </p>
                               {/* Type badge */}
-                              <span className={`hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold border shrink-0 ${badge.className}`}>
+                              <span
+                                className={`hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold border shrink-0 ${badge.className}`}
+                              >
                                 {badge.label}
                               </span>
                               <button
@@ -480,12 +561,14 @@ export default function SourcesPage() {
                           )}
                           {/* Friendly JID subtitle */}
                           <p className="text-xs font-medium text-slate-400 truncate mt-1 font-mono flex items-center gap-1.5">
-                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${source.isEnabled ? 'bg-electric-cyan shadow-[0_0_5px_#00E5FF]' : 'bg-slate-600'}`} />
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full shrink-0 ${source.isEnabled ? 'bg-electric-cyan shadow-[0_0_5px_#00E5FF]' : 'bg-slate-600'}`}
+                            />
                             {friendlyJid}
                           </p>
                         </div>
                       </div>
-                      
+
                       <div className="flex items-center gap-3 shrink-0 ml-2">
                         <button
                           onClick={() => deleteSource(source.id)}
@@ -494,21 +577,23 @@ export default function SourcesPage() {
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
-                        
+
                         {/* Toggle */}
                         <button
-                          onClick={() => toggleSource(source.id, source.isEnabled)}
+                          onClick={() =>
+                            toggleSource(source.id, source.isEnabled)
+                          }
                           className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors duration-300 shadow-inner outline-none ${
-                            source.isEnabled 
-                              ? 'bg-electric-cyan/20 border border-electric-cyan/50' 
+                            source.isEnabled
+                              ? 'bg-electric-cyan/20 border border-electric-cyan/50'
                               : 'bg-graphite-darker border border-graphite-border'
                           }`}
                         >
                           <span className="sr-only">Toggle source</span>
                           <span
                             className={`inline-block h-6 w-6 transform rounded-full transition-transform duration-300 shadow-md ${
-                              source.isEnabled 
-                                ? 'translate-x-7 bg-electric-cyan shadow-[0_0_10px_#00E5FF]' 
+                              source.isEnabled
+                                ? 'translate-x-7 bg-electric-cyan shadow-[0_0_10px_#00E5FF]'
                                 : 'translate-x-1 bg-slate-500'
                             }`}
                           />

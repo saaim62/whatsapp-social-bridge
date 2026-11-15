@@ -1,24 +1,35 @@
-"use client";
+'use client';
 
-import { useState, useRef, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Bell, CheckCircle2, AlertTriangle, Info, Check, X } from "lucide-react";
-import { useNotifications } from "@/contexts/NotificationContext";
-import { formatDistanceToNow } from "date-fns";
+import { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Bell,
+  CheckCircle2,
+  AlertTriangle,
+  Info,
+  Check,
+  X,
+} from 'lucide-react';
+import { useNotifications } from '@/contexts/NotificationContext';
+import { formatDistanceToNow } from 'date-fns';
 
 export function NotificationDropdown() {
   const [isOpen, setIsOpen] = useState(false);
-  const { dbNotifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const { dbNotifications, unreadCount, markAsRead, markAllAsRead } =
+    useNotifications();
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setIsOpen(false);
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   return (
@@ -30,7 +41,7 @@ export function NotificationDropdown() {
         <Bell className="w-5 h-5 text-slate-400 group-hover:text-electric-cyan transition-colors" />
         {unreadCount > 0 && (
           <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-[0_0_10px_rgba(239,68,68,0.6)] border border-obsidian">
-            {unreadCount > 9 ? "9+" : unreadCount}
+            {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
       </button>
@@ -41,7 +52,12 @@ export function NotificationDropdown() {
             initial={{ opacity: 0, y: 15, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 15, scale: 0.95 }}
-            transition={{ duration: 0.2, type: 'spring', stiffness: 300, damping: 25 }}
+            transition={{
+              duration: 0.2,
+              type: 'spring',
+              stiffness: 300,
+              damping: 25,
+            }}
             className="absolute right-0 mt-3 w-80 sm:w-96 glass-panel border border-graphite-border shadow-[0_10px_50px_rgba(0,0,0,0.8)] rounded-2xl overflow-hidden z-[100]"
           >
             <div className="p-4 border-b border-graphite-border flex items-center justify-between bg-graphite/80 backdrop-blur-md">
@@ -64,8 +80,12 @@ export function NotificationDropdown() {
               {dbNotifications.length === 0 ? (
                 <div className="p-8 text-center text-slate-500 flex flex-col items-center justify-center">
                   <Bell className="w-10 h-10 mb-3 opacity-20 text-electric-cyan" />
-                  <p className="text-sm font-medium tracking-wider uppercase">Telemetry Nominal</p>
-                  <p className="text-xs text-slate-600 mt-1">No alerts detected.</p>
+                  <p className="text-sm font-medium tracking-wider uppercase">
+                    Telemetry Nominal
+                  </p>
+                  <p className="text-xs text-slate-600 mt-1">
+                    No alerts detected.
+                  </p>
                 </div>
               ) : (
                 dbNotifications.map((notification) => {
@@ -73,36 +93,43 @@ export function NotificationDropdown() {
                     <>
                       <div
                         className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 border ${
-                          notification.type === "success"
-                            ? "bg-electric-emerald/10 border-electric-emerald/30 text-electric-emerald shadow-[0_0_10px_rgba(0,255,102,0.1)]"
-                            : notification.type === "error"
-                            ? "bg-red-500/10 border-red-500/30 text-red-500 shadow-[0_0_10px_rgba(239,68,68,0.1)]"
-                            : notification.type === "warning"
-                            ? "bg-orange-500/10 border-orange-500/30 text-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.1)]"
-                            : "bg-electric-cyan/10 border-electric-cyan/30 text-electric-cyan shadow-[0_0_10px_rgba(0,240,255,0.1)]"
+                          notification.type === 'success'
+                            ? 'bg-electric-emerald/10 border-electric-emerald/30 text-electric-emerald shadow-[0_0_10px_rgba(0,255,102,0.1)]'
+                            : notification.type === 'error'
+                              ? 'bg-red-500/10 border-red-500/30 text-red-500 shadow-[0_0_10px_rgba(239,68,68,0.1)]'
+                              : notification.type === 'warning'
+                                ? 'bg-orange-500/10 border-orange-500/30 text-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.1)]'
+                                : 'bg-electric-cyan/10 border-electric-cyan/30 text-electric-cyan shadow-[0_0_10px_rgba(0,240,255,0.1)]'
                         }`}
                       >
-                        {notification.type === "success" ? (
+                        {notification.type === 'success' ? (
                           <CheckCircle2 className="w-4 h-4" />
-                        ) : notification.type === "error" ? (
+                        ) : notification.type === 'error' ? (
                           <X className="w-4 h-4" />
-                        ) : notification.type === "warning" ? (
+                        ) : notification.type === 'warning' ? (
                           <AlertTriangle className="w-4 h-4" />
                         ) : (
                           <Info className="w-4 h-4" />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className={`text-sm ${notification.isRead ? "text-slate-400" : "font-bold text-white group-hover:text-electric-cyan transition-colors"}`}>
+                        <p
+                          className={`text-sm ${notification.isRead ? 'text-slate-400' : 'font-bold text-white group-hover:text-electric-cyan transition-colors'}`}
+                        >
                           {notification.title}
                         </p>
                         {notification.message && (
-                          <p className={`text-xs mt-1 line-clamp-2 leading-relaxed ${notification.isRead ? "text-slate-500" : "text-slate-300"}`}>
+                          <p
+                            className={`text-xs mt-1 line-clamp-2 leading-relaxed ${notification.isRead ? 'text-slate-500' : 'text-slate-300'}`}
+                          >
                             {notification.message}
                           </p>
                         )}
                         <p className="text-[10px] text-slate-500 mt-2 font-mono uppercase tracking-wider">
-                          T-{formatDistanceToNow(new Date(notification.createdAt))}
+                          T-
+                          {formatDistanceToNow(
+                            new Date(notification.createdAt),
+                          )}
                         </p>
                       </div>
                       {!notification.isRead && (
@@ -120,9 +147,9 @@ export function NotificationDropdown() {
                   );
 
                   const wrapperClasses = `p-3 rounded-xl flex gap-3 transition-colors border group ${
-                    notification.isRead 
-                      ? "border-transparent opacity-60 hover:bg-graphite" 
-                      : "border-graphite-border bg-graphite/40 hover:bg-graphite hover:border-electric-cyan/30"
+                    notification.isRead
+                      ? 'border-transparent opacity-60 hover:bg-graphite'
+                      : 'border-graphite-border bg-graphite/40 hover:bg-graphite hover:border-electric-cyan/30'
                   }`;
 
                   return notification.link ? (

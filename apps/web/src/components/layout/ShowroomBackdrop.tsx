@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef } from 'react';
 
-import { useSceneStore } from "@/lib/scene-store";
+import { useSceneStore } from '@/lib/scene-store';
 
 /**
  * The app backdrop: the black marble showroom plate Saim approved
@@ -34,7 +34,7 @@ export default function ShowroomBackdrop() {
   useEffect(() => {
     const el = layerRef.current;
     if (!el) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
     let tx = 0; // mouse target
     let ty = 0;
@@ -47,7 +47,7 @@ export default function ShowroomBackdrop() {
       tx = (e.clientX / window.innerWidth - 0.5) * 2; // -1..1
       ty = (e.clientY / window.innerHeight - 0.5) * 2;
     };
-    window.addEventListener("pointermove", onMove, { passive: true });
+    window.addEventListener('pointermove', onMove, { passive: true });
 
     const tick = (now: number) => {
       // 1) idle zoom loop — constant-rate push-in / pull-back (~72s)
@@ -71,12 +71,15 @@ export default function ShowroomBackdrop() {
 
     return () => {
       cancelAnimationFrame(raf);
-      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener('pointermove', onMove);
     };
   }, []);
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-[1] overflow-hidden" aria-hidden>
+    <div
+      className="pointer-events-none fixed inset-0 z-[1] overflow-hidden"
+      aria-hidden
+    >
       <div ref={layerRef} className="absolute -inset-4 will-change-transform">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img

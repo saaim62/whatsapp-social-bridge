@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import { useEffect, useState, useRef, useCallback } from "react";
-import Image from "next/image";
-import { useParams, useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useState, useRef, useCallback } from 'react';
+import Image from 'next/image';
+import { useParams, useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   DndContext,
   closestCenter,
@@ -41,12 +41,12 @@ import {
   Layers,
   Edit2,
   Search,
-} from "lucide-react";
-import { API_URL, fetchWithAuth } from "@/lib/api";
-import { mediaSrcFor } from "@/lib/media";
-import { StatusBadge } from "@/components/ui/StatusBadge";
-import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
-import { ImageMaskModal } from "@/components/ui/ImageMaskModal";
+} from 'lucide-react';
+import { API_URL, fetchWithAuth } from '@/lib/api';
+import { mediaSrcFor } from '@/lib/media';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { ImageMaskModal } from '@/components/ui/ImageMaskModal';
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -56,39 +56,48 @@ export default function ProductDetailPage() {
   const [mediaOrder, setMediaOrder] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [confirmDeleteMediaId, setConfirmDeleteMediaId] = useState<string | null>(null);
+  const [confirmDeleteMediaId, setConfirmDeleteMediaId] = useState<
+    string | null
+  >(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
-  const [overridePrice, setOverridePrice] = useState("");
-  const [editedInstagram, setEditedInstagram] = useState("");
-  const [editedFacebook, setEditedFacebook] = useState("");
-  const [editedStory, setEditedStory] = useState("");
-  
+  const [overridePrice, setOverridePrice] = useState('');
+  const [editedInstagram, setEditedInstagram] = useState('');
+  const [editedFacebook, setEditedFacebook] = useState('');
+  const [editedStory, setEditedStory] = useState('');
+
   // Modal & Selection state
   const [isMaskModalOpen, setIsMaskModalOpen] = useState(false);
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
-  const [publishTargets, setPublishTargets] = useState<string[]>(['FACEBOOK', 'INSTAGRAM']);
+  const [publishTargets, setPublishTargets] = useState<string[]>([
+    'FACEBOOK',
+    'INSTAGRAM',
+  ]);
   const [maskModalInitialIndex, setMaskModalInitialIndex] = useState(0);
-  const [selectedMediaIds, setSelectedMediaIds] = useState<Set<string>>(new Set());
-  const [mediaTimestamps, setMediaTimestamps] = useState<Record<string, number>>({});
+  const [selectedMediaIds, setSelectedMediaIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [mediaTimestamps, setMediaTimestamps] = useState<
+    Record<string, number>
+  >({});
   const [revertingMediaId, setRevertingMediaId] = useState<string | null>(null);
   const [isBulkReverting, setIsBulkReverting] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
-  
+
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
   const [batchesList, setBatchesList] = useState<any[]>([]);
-  const [targetBatchId, setTargetBatchId] = useState("");
-  const [moveSearchQuery, setMoveSearchQuery] = useState("");
+  const [targetBatchId, setTargetBatchId] = useState('');
+  const [moveSearchQuery, setMoveSearchQuery] = useState('');
   const [isMovingMedia, setIsMovingMedia] = useState(false);
   const [retainAIOnMove, setRetainAIOnMove] = useState(false);
 
   const [isSendModalOpen, setIsSendModalOpen] = useState(false);
-  const [targetEmailsInput, setTargetEmailsInput] = useState("");
+  const [targetEmailsInput, setTargetEmailsInput] = useState('');
   const [emailHistory, setEmailHistory] = useState<string[]>([]);
   const [isSending, setIsSending] = useState(false);
-  
+
   const [isRenaming, setIsRenaming] = useState(false);
-  const [renameInput, setRenameInput] = useState("");
-  
+  const [renameInput, setRenameInput] = useState('');
+
   const [isWorkerOnline, setIsWorkerOnline] = useState(false);
 
   // Saved Meta publishing destination (P0-4), shown in the publish
@@ -98,14 +107,14 @@ export default function ProductDetailPage() {
   const [metaAccount, setMetaAccount] = useState<any>(null);
 
   useEffect(() => {
-    const history = localStorage.getItem("sentEmailsHistory");
+    const history = localStorage.getItem('sentEmailsHistory');
     if (history) setEmailHistory(JSON.parse(history));
   }, []);
 
   useEffect(() => {
     fetchWithAuth(`${API_URL}/api/social/accounts`)
-      .then(r => r.json())
-      .then(data => {
+      .then((r) => r.json())
+      .then((data) => {
         if (Array.isArray(data)) {
           setMetaAccount(data.find((a: any) => a.platform === 'META') ?? null);
         }
@@ -121,7 +130,7 @@ export default function ProductDetailPage() {
         setIsWorkerOnline(data.isWorkerOnline);
       }
     } catch (err) {
-      console.error("Failed to fetch worker status", err);
+      console.error('Failed to fetch worker status', err);
     }
   }, []);
 
@@ -130,7 +139,7 @@ export default function ProductDetailPage() {
     const interval = setInterval(fetchWorkerStatus, 15000);
     return () => clearInterval(interval);
   }, [fetchWorkerStatus]);
-  
+
   const sensors = useSensors(
     useSensor(MouseSensor, {
       activationConstraint: {
@@ -145,7 +154,7 @@ export default function ProductDetailPage() {
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
-    })
+    }),
   );
 
   const handleDragEnd = useCallback(
@@ -161,23 +170,25 @@ export default function ProductDetailPage() {
 
           // Save to backend asynchronously
           fetchWithAuth(`${API_URL}/api/batches/${id}/media/reorder`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ orderedMediaIds: newOrder.map((a) => a.id) }),
-          }).catch((err) => console.error("Failed to reorder media", err));
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              orderedMediaIds: newOrder.map((a) => a.id),
+            }),
+          }).catch((err) => console.error('Failed to reorder media', err));
 
           return newOrder;
         });
       }
     },
-    [id]
+    [id],
   );
-  
+
   const hasInitializedEdits = useRef(false);
 
   const applyPrice = (text: string) => {
-    if (!text) return "";
-    return text.replace(/\{\{PRICE\}\}/g, overridePrice || "");
+    if (!text) return '';
+    return text.replace(/\{\{PRICE\}\}/g, overridePrice || '');
   };
 
   const fetchBatchData = useCallback(async () => {
@@ -185,13 +196,15 @@ export default function ProductDetailPage() {
       const res = await fetchWithAuth(`${API_URL}/api/batches/${id}`);
       if (res.ok) {
         const data = await res.json();
-        
+
         // Auto-bust browser cache when media finishes processing
         setBatch((prev: any) => {
           if (prev?.mediaAssets) {
             const newTimestamps: Record<string, number> = {};
             for (const asset of data.mediaAssets || []) {
-              const prevAsset = prev.mediaAssets.find((a: any) => a.id === asset.id);
+              const prevAsset = prev.mediaAssets.find(
+                (a: any) => a.id === asset.id,
+              );
               if (prevAsset?.isProcessing && !asset.isProcessing) {
                 newTimestamps[asset.id] = Date.now();
               }
@@ -202,22 +215,27 @@ export default function ProductDetailPage() {
           }
           return data;
         });
-        
-        setMediaOrder(prev => {
+
+        setMediaOrder((prev) => {
           // If the fetched assets match the current ones, keep current order (don't disrupt dragging)
-          if (prev.length === data.mediaAssets.length && prev.every((p, i) => p.id === data.mediaAssets[i].id)) {
-             // We can just update the underlying data objects but keep order
-             return prev.map(p => data.mediaAssets.find((a: any) => a.id === p.id) || p);
+          if (
+            prev.length === data.mediaAssets.length &&
+            prev.every((p, i) => p.id === data.mediaAssets[i].id)
+          ) {
+            // We can just update the underlying data objects but keep order
+            return prev.map(
+              (p) => data.mediaAssets.find((a: any) => a.id === p.id) || p,
+            );
           }
           // Otherwise initialize to the fetched order
           return data.mediaAssets || [];
         });
-        
+
         if (!hasInitializedEdits.current) {
           if (data.generatedContent) {
-            setEditedInstagram(data.generatedContent.instagramCaption || "");
-            setEditedFacebook(data.generatedContent.facebookCaption || "");
-            setEditedStory(data.generatedContent.storyText || "");
+            setEditedInstagram(data.generatedContent.instagramCaption || '');
+            setEditedFacebook(data.generatedContent.facebookCaption || '');
+            setEditedStory(data.generatedContent.storyText || '');
             hasInitializedEdits.current = true;
           }
           if (data.extractedData?.selling_price) {
@@ -234,7 +252,7 @@ export default function ProductDetailPage() {
         return data;
       }
     } catch (err) {
-      console.error("Failed to fetch batch data", err);
+      console.error('Failed to fetch batch data', err);
     } finally {
       setLoading(false);
     }
@@ -244,7 +262,7 @@ export default function ProductDetailPage() {
     let interval: NodeJS.Timeout;
 
     fetchBatchData().then((data) => {
-      if (data && data.status !== "PUBLISHED" && data.status !== "FAILED") {
+      if (data && data.status !== 'PUBLISHED' && data.status !== 'FAILED') {
         interval = setInterval(fetchBatchData, 3000);
       }
     });
@@ -258,7 +276,7 @@ export default function ProductDetailPage() {
 
   const approveAndPublish = async () => {
     setIsPublishModalOpen(false);
-    setBatch((prev: any) => ({ ...prev, status: "PUBLISHING" }));
+    setBatch((prev: any) => ({ ...prev, status: 'PUBLISHING' }));
     try {
       // Price-revision consistency: the price recorded on the batch
       // (structured selling price) must be the same revision the
@@ -276,40 +294,46 @@ export default function ProductDetailPage() {
         const s = Number(batch.extractedData?.selling_price_value);
         return Number.isFinite(s) && s > 0 ? s : null;
       })();
-      const typedPrice = parseFloat((overridePrice || "").replace(/[^0-9.]/g, ""));
+      const typedPrice = parseFloat(
+        (overridePrice || '').replace(/[^0-9.]/g, ''),
+      );
       if (
         Number.isFinite(typedPrice) &&
         typedPrice > 0 &&
         Math.round(typedPrice) !== recordedValue
       ) {
         await fetchWithAuth(`${API_URL}/api/batches/${id}/price`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ price: Math.round(typedPrice) }),
         });
       }
-      if (batch.status === 'READY' || batch.status === 'FAILED' || batch.status === 'RECEIVED') {
+      if (
+        batch.status === 'READY' ||
+        batch.status === 'FAILED' ||
+        batch.status === 'RECEIVED'
+      ) {
         await fetchWithAuth(`${API_URL}/api/batches/${id}/approve`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             instagramCaption: applyPrice(editedInstagram),
             facebookCaption: applyPrice(editedFacebook),
             storyText: applyPrice(editedStory),
-            targets: publishTargets
+            targets: publishTargets,
           }),
         });
       } else {
         // Just publish since it's already approved
         await fetchWithAuth(`${API_URL}/api/batches/${id}/publish`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ targets: publishTargets }),
         });
       }
     } catch (e) {
       console.error(e);
-      alert("Failed to queue publish job.");
+      alert('Failed to queue publish job.');
     }
   };
 
@@ -321,12 +345,18 @@ export default function ProductDetailPage() {
   const handleSingleRevert = async (mediaId: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    if (!confirm("Are you sure you want to restore the original unblurred image?")) return;
-    
+
+    if (
+      !confirm('Are you sure you want to restore the original unblurred image?')
+    )
+      return;
+
     setRevertingMediaId(mediaId);
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/batches/media/${mediaId}/revert`, { method: "POST" });
+      const res = await fetchWithAuth(
+        `${API_URL}/api/batches/media/${mediaId}/revert`,
+        { method: 'POST' },
+      );
       if (res.ok) {
         handleImageUpdated(mediaId);
       } else {
@@ -335,36 +365,42 @@ export default function ProductDetailPage() {
       }
     } catch (err) {
       console.error(err);
-      alert("Error reverting blur");
+      alert('Error reverting blur');
     } finally {
       setRevertingMediaId(null);
     }
   };
 
-  const handleTriggerAutoBlur = async (mediaId: string, e: React.MouseEvent) => {
+  const handleTriggerAutoBlur = async (
+    mediaId: string,
+    e: React.MouseEvent,
+  ) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/batches/media/${mediaId}/trigger-auto-blur`, { method: "POST" });
+      const res = await fetchWithAuth(
+        `${API_URL}/api/batches/media/${mediaId}/trigger-auto-blur`,
+        { method: 'POST' },
+      );
       if (res.ok) {
         // Optimistically update UI to show processing loader
         setBatch((prev: any) => {
           if (!prev?.mediaAssets) return prev;
           return {
             ...prev,
-            mediaAssets: prev.mediaAssets.map((asset: any) => 
-              asset.id === mediaId ? { ...asset, isProcessing: true } : asset
-            )
+            mediaAssets: prev.mediaAssets.map((asset: any) =>
+              asset.id === mediaId ? { ...asset, isProcessing: true } : asset,
+            ),
           };
         });
       } else {
         const error = await res.json();
-        alert(error.message || "Failed to trigger auto blur");
+        alert(error.message || 'Failed to trigger auto blur');
       }
     } catch (err) {
       console.error(err);
-      alert("Failed to trigger auto blur");
+      alert('Failed to trigger auto blur');
     }
   };
 
@@ -378,7 +414,9 @@ export default function ProductDetailPage() {
     }
 
     try {
-      await fetchWithAuth(`${API_URL}/api/batches/media/${mediaId}/delete`, { method: "POST" });
+      await fetchWithAuth(`${API_URL}/api/batches/media/${mediaId}/delete`, {
+        method: 'POST',
+      });
       setBatch((prev: any) => ({
         ...prev,
         mediaAssets: prev.mediaAssets.filter((a: any) => a.id !== mediaId),
@@ -414,14 +452,15 @@ export default function ProductDetailPage() {
   };
 
   const isVideoAsset = (asset: any) => {
-    if (asset.mimeType?.startsWith("video/")) return true;
+    if (asset.mimeType?.startsWith('video/')) return true;
     if (asset.localPath?.toLowerCase().match(/\.(mp4|mov|webm)$/)) return true;
-    if (asset.originalUrl?.toLowerCase().match(/\.(mp4|mov|webm)$/)) return true;
+    if (asset.originalUrl?.toLowerCase().match(/\.(mp4|mov|webm)$/))
+      return true;
     return false;
   };
 
   const imageAssets = (batch?.mediaAssets || []).filter(
-    (a: any) => !isVideoAsset(a)
+    (a: any) => !isVideoAsset(a),
   );
 
   const toggleSelectAll = () => {
@@ -439,8 +478,10 @@ export default function ProductDetailPage() {
     try {
       await Promise.all(
         ids.map((mediaId) =>
-          fetchWithAuth(`${API_URL}/api/batches/media/${mediaId}/revert`, { method: "POST" })
-        )
+          fetchWithAuth(`${API_URL}/api/batches/media/${mediaId}/revert`, {
+            method: 'POST',
+          }),
+        ),
       );
       const now = Date.now();
       setMediaTimestamps((prev) => {
@@ -453,8 +494,8 @@ export default function ProductDetailPage() {
       setSelectedMediaIds(new Set());
       await fetchBatchData();
     } catch (err) {
-      console.error("Bulk revert error", err);
-      alert("Failed to revert some images");
+      console.error('Bulk revert error', err);
+      alert('Failed to revert some images');
     } finally {
       setIsBulkReverting(false);
     }
@@ -473,19 +514,25 @@ export default function ProductDetailPage() {
     try {
       await Promise.all(
         ids.map((mediaId) =>
-          fetchWithAuth(`${API_URL}/api/batches/media/${mediaId}/delete`, { method: "POST" })
-        )
+          fetchWithAuth(`${API_URL}/api/batches/media/${mediaId}/delete`, {
+            method: 'POST',
+          }),
+        ),
       );
       setBatch((prev: any) => ({
         ...prev,
-        mediaAssets: prev.mediaAssets.filter((a: any) => !selectedMediaIds.has(a.id)),
+        mediaAssets: prev.mediaAssets.filter(
+          (a: any) => !selectedMediaIds.has(a.id),
+        ),
       }));
-      setMediaOrder((prev) => prev.filter((a: any) => !selectedMediaIds.has(a.id)));
+      setMediaOrder((prev) =>
+        prev.filter((a: any) => !selectedMediaIds.has(a.id)),
+      );
       setSelectedMediaIds(new Set());
       await fetchBatchData();
     } catch (err) {
-      console.error("Bulk delete error", err);
-      alert("Failed to delete some images");
+      console.error('Bulk delete error', err);
+      alert('Failed to delete some images');
     } finally {
       setIsBulkDeleting(false);
       setConfirmBulkDelete(false);
@@ -513,52 +560,66 @@ export default function ProductDetailPage() {
       await Promise.all(
         ids.map((mediaId) =>
           fetchWithAuth(`${API_URL}/api/batches/media/${mediaId}/move`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ targetBatchId, retainAI: retainAIOnMove }),
-          })
-        )
+          }),
+        ),
       );
       setBatch((prev: any) => ({
         ...prev,
-        mediaAssets: prev.mediaAssets.filter((a: any) => !selectedMediaIds.has(a.id)),
+        mediaAssets: prev.mediaAssets.filter(
+          (a: any) => !selectedMediaIds.has(a.id),
+        ),
       }));
-      setMediaOrder((prev) => prev.filter((a: any) => !selectedMediaIds.has(a.id)));
+      setMediaOrder((prev) =>
+        prev.filter((a: any) => !selectedMediaIds.has(a.id)),
+      );
       setSelectedMediaIds(new Set());
       setIsMoveModalOpen(false);
       await fetchBatchData();
     } catch (err) {
-      console.error("Bulk move error", err);
-      alert("Failed to move some images");
+      console.error('Bulk move error', err);
+      alert('Failed to move some images');
     } finally {
       setIsMovingMedia(false);
     }
   };
 
   const handleClearAIContent = async () => {
-    if (!confirm("Are you sure you want to clear AI generated content? This will remove generated captions and extracted metadata.")) return;
+    if (
+      !confirm(
+        'Are you sure you want to clear AI generated content? This will remove generated captions and extracted metadata.',
+      )
+    )
+      return;
     try {
-      await fetchWithAuth(`${API_URL}/api/batches/${id}/clear-ai`, { method: "POST" });
-      setEditedInstagram("");
-      setEditedFacebook("");
-      setEditedStory("");
-      setOverridePrice("");
+      await fetchWithAuth(`${API_URL}/api/batches/${id}/clear-ai`, {
+        method: 'POST',
+      });
+      setEditedInstagram('');
+      setEditedFacebook('');
+      setEditedStory('');
+      setOverridePrice('');
       await fetchBatchData();
     } catch (err) {
       console.error(err);
-      alert("Failed to clear AI content");
+      alert('Failed to clear AI content');
     }
   };
 
   const handleRenameProduct = async () => {
-    if (!renameInput.trim() || renameInput === batch.extractedData?.product_name) {
+    if (
+      !renameInput.trim() ||
+      renameInput === batch.extractedData?.product_name
+    ) {
       setIsRenaming(false);
       return;
     }
     try {
       await fetchWithAuth(`${API_URL}/api/batches/${id}/rename`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: renameInput.trim() }),
       });
       setBatch((prev: any) => ({
@@ -570,65 +631,77 @@ export default function ProductDetailPage() {
       }));
     } catch (err) {
       console.error(err);
-      alert("Failed to rename product");
+      alert('Failed to rename product');
     } finally {
       setIsRenaming(false);
     }
   };
 
-  const [convertingMediaId, setConvertingMediaId] = useState<string | null>(null);
+  const [convertingMediaId, setConvertingMediaId] = useState<string | null>(
+    null,
+  );
 
   const handleForceImage = async (mediaId: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setConvertingMediaId(mediaId);
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/batches/media/${mediaId}/force-image`, {
-        method: "POST"
-      });
+      const res = await fetchWithAuth(
+        `${API_URL}/api/batches/media/${mediaId}/force-image`,
+        {
+          method: 'POST',
+        },
+      );
       const data = await res.json().catch(() => null);
       if (res.ok && data?.success) {
         setMediaTimestamps((prev) => ({ ...prev, [mediaId]: Date.now() }));
         await fetchBatchData();
-        alert("Converted video frame to image successfully!");
+        alert('Converted video frame to image successfully!');
       } else {
         alert(`Failed to convert: ${data?.message || 'Server error'}`);
       }
     } catch (err) {
       console.error(err);
-      alert("Failed to force image conversion");
+      alert('Failed to force image conversion');
     } finally {
       setConvertingMediaId(null);
     }
   };
 
   const openSendModal = () => {
-    setTargetEmailsInput("");
+    setTargetEmailsInput('');
     setIsSendModalOpen(true);
   };
 
   const handleSendToUser = async () => {
-    const emails = targetEmailsInput.split(',').map(e => e.trim()).filter(e => e);
+    const emails = targetEmailsInput
+      .split(',')
+      .map((e) => e.trim())
+      .filter((e) => e);
     if (emails.length === 0) return;
     setIsSending(true);
     try {
       const res = await fetchWithAuth(`${API_URL}/api/batches/${id}/send`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ targetEmails: emails }),
       });
       if (res.ok) {
         setIsSendModalOpen(false);
-        const newHistory = Array.from(new Set([...emails, ...emailHistory])).slice(0, 10);
+        const newHistory = Array.from(
+          new Set([...emails, ...emailHistory]),
+        ).slice(0, 10);
         setEmailHistory(newHistory);
-        localStorage.setItem("sentEmailsHistory", JSON.stringify(newHistory));
-        alert("Product cloned and sent successfully!");
+        localStorage.setItem('sentEmailsHistory', JSON.stringify(newHistory));
+        alert('Product cloned and sent successfully!');
       } else {
-        alert("Failed to send product. Ensure the emails belong to registered users.");
+        alert(
+          'Failed to send product. Ensure the emails belong to registered users.',
+        );
       }
     } catch (err) {
       console.error(err);
-      alert("Error sending product.");
+      alert('Error sending product.');
     } finally {
       setIsSending(false);
     }
@@ -640,9 +713,11 @@ export default function ProductDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] bg-graphite/40 rounded-2xl border border-graphite-border">
         <AlertCircle className="w-16 h-16 text-slate-500 mb-4" />
-        <h2 className="text-xl font-heading font-bold text-white">Node Not Found</h2>
+        <h2 className="text-xl font-heading font-bold text-white">
+          Node Not Found
+        </h2>
         <button
-          onClick={() => router.push("/products")}
+          onClick={() => router.push('/products')}
           className="mt-4 btn-glass border-electric-cyan/30 text-electric-cyan hover:border-electric-cyan hover:bg-electric-cyan/10"
         >
           Return to Matrix
@@ -651,7 +726,7 @@ export default function ProductDetailPage() {
     );
   }
 
-  const isEditable = batch.status === "READY" || batch.status === "FAILED";
+  const isEditable = batch.status === 'READY' || batch.status === 'FAILED';
 
   return (
     <div className="-mx-4 md:-mx-10 min-h-dvh bg-graphite flex flex-col relative overflow-hidden">
@@ -663,38 +738,67 @@ export default function ProductDetailPage() {
       <div className="sticky top-0 z-30 bg-graphite-darker/80 backdrop-blur-xl border-b border-graphite-border px-4 sm:px-8 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4 flex-1 min-w-0">
           <button
-            onClick={() => router.push("/products")}
+            onClick={() => router.push('/products')}
             className="w-10 h-10 rounded-xl bg-graphite border border-graphite-border flex items-center justify-center text-slate-400 hover:text-white hover:border-slate-500 transition-all flex-shrink-0 shadow-sm"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
-          
+
           <div className="flex-1 min-w-0">
-             <div className="flex items-center gap-3">
-               <h1 className="text-lg sm:text-xl font-heading font-bold text-white truncate">
-                 {batch.extractedData?.product_name || "Unidentified Asset"}
-               </h1>
-               <div className="hidden sm:flex items-center gap-2">
-                 <StatusBadge status={batch.status} />
-                 {batch.publications?.some((p: any) => p.status === 'FAILED') && (
-                   <div className="text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-1 rounded text-xs font-bold" title={batch.publications.find((p: any) => p.status === 'FAILED')?.error}>
-                     <AlertTriangle className="w-3 h-3 inline mr-1" />
-                     {batch.publications.find((p: any) => p.status === 'FAILED')?.platform} Error
-                   </div>
-                 )}
-               </div>
-             </div>
-             <div className="flex items-center gap-2 mt-1 text-xs text-slate-400 font-mono">
-               <span>Source: <span className="text-slate-300">{batch.senderName || "WhatsApp"}</span></span>
-               <span className="text-graphite-border px-1">•</span>
-               <span className="text-amber-500">T-{Math.max(0, 14 - Math.floor((new Date().getTime() - new Date(batch.createdAt).getTime()) / (1000 * 60 * 60 * 24)))} days to auto-purge</span>
-             </div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-lg sm:text-xl font-heading font-bold text-white truncate">
+                {batch.extractedData?.product_name || 'Unidentified Asset'}
+              </h1>
+              <div className="hidden sm:flex items-center gap-2">
+                <StatusBadge status={batch.status} />
+                {batch.publications?.some(
+                  (p: any) => p.status === 'FAILED',
+                ) && (
+                  <div
+                    className="text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-1 rounded text-xs font-bold"
+                    title={
+                      batch.publications.find((p: any) => p.status === 'FAILED')
+                        ?.error
+                    }
+                  >
+                    <AlertTriangle className="w-3 h-3 inline mr-1" />
+                    {
+                      batch.publications.find((p: any) => p.status === 'FAILED')
+                        ?.platform
+                    }{' '}
+                    Error
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 mt-1 text-xs text-slate-400 font-mono">
+              <span>
+                Source:{' '}
+                <span className="text-slate-300">
+                  {batch.senderName || 'WhatsApp'}
+                </span>
+              </span>
+              <span className="text-graphite-border px-1">•</span>
+              <span className="text-amber-500">
+                T-
+                {Math.max(
+                  0,
+                  14 -
+                    Math.floor(
+                      (new Date().getTime() -
+                        new Date(batch.createdAt).getTime()) /
+                        (1000 * 60 * 60 * 24),
+                    ),
+                )}{' '}
+                days to auto-purge
+              </span>
+            </div>
           </div>
         </div>
 
         <div className="flex items-center gap-3 flex-shrink-0">
           <div className="sm:hidden block">
-             <StatusBadge status={batch.status} />
+            <StatusBadge status={batch.status} />
           </div>
           <button
             onClick={openSendModal}
@@ -717,25 +821,23 @@ export default function ProductDetailPage() {
           </button>
           <button
             onClick={openPublishModal}
-            disabled={batch.status === "PUBLISHING"}
+            disabled={batch.status === 'PUBLISHING'}
             className="btn-glow flex items-center gap-2 disabled:opacity-50"
           >
             <Save className="w-4 h-4 hidden sm:block" />
             <span className="hidden sm:inline font-bold tracking-wide text-sm">
-              {isEditable ? "Commit & Execute" : "Republish"}
+              {isEditable ? 'Commit & Execute' : 'Republish'}
             </span>
             <span className="sm:hidden font-bold">
-              {isEditable ? "Commit" : "Republish"}
+              {isEditable ? 'Commit' : 'Republish'}
             </span>
           </button>
         </div>
       </div>
 
       <div className="flex-1 px-4 sm:px-8 py-6 sm:py-8 max-w-[1600px] w-full mx-auto relative z-10">
-        
         {/* Studio Grid Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 h-full">
-          
           {/* Left Column: Asset Gallery & Studio */}
           <div className="lg:col-span-7 flex flex-col gap-6">
             <motion.div
@@ -749,7 +851,10 @@ export default function ProductDetailPage() {
                 <div className="flex items-center gap-2">
                   <ImageIcon className="w-5 h-5 text-electric-cyan" />
                   <h2 className="font-heading font-bold text-white uppercase tracking-wider text-sm">
-                    Visual Assets <span className="text-slate-500 ml-1">({batch.mediaAssets?.length || 0})</span>
+                    Visual Assets{' '}
+                    <span className="text-slate-500 ml-1">
+                      ({batch.mediaAssets?.length || 0})
+                    </span>
                   </h2>
                 </div>
 
@@ -778,7 +883,7 @@ export default function ProductDetailPage() {
                 {selectedMediaIds.size > 0 && (
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
+                    animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
                     className="bg-electric-cyan-dim border-b border-electric-cyan/20 px-6 py-3 flex flex-wrap items-center justify-between gap-4 sticky top-[60px] z-20 backdrop-blur-xl"
                   >
@@ -801,7 +906,7 @@ export default function ProductDetailPage() {
                         className="btn-glass px-3 py-1.5 text-xs text-white border-white/20 hover:border-white/40 hover:bg-white/10 flex items-center gap-1.5"
                       >
                         <RotateCcw className="w-3 h-3 text-electric-cyan" />
-                        {isBulkReverting ? "Reverting..." : "Remove Blurs"}
+                        {isBulkReverting ? 'Reverting...' : 'Remove Blurs'}
                       </button>
 
                       <button
@@ -811,10 +916,10 @@ export default function ProductDetailPage() {
                       >
                         <Trash2 className="w-3 h-3" />
                         {isBulkDeleting
-                          ? "Deleting..."
+                          ? 'Deleting...'
                           : confirmBulkDelete
-                          ? "Confirm Delete?"
-                          : "Delete Assets"}
+                            ? 'Confirm Delete?'
+                            : 'Delete Assets'}
                       </button>
                     </div>
                   </motion.div>
@@ -831,7 +936,7 @@ export default function ProductDetailPage() {
                     measuring={{
                       droppable: {
                         strategy: MeasuringStrategy.Always,
-                      }
+                      },
                     }}
                   >
                     <SortableContext
@@ -842,14 +947,16 @@ export default function ProductDetailPage() {
                         {mediaOrder.map((asset: any, index: number) => {
                           const isImage = !isVideoAsset(asset);
                           const imageIndex = isImage
-                            ? imageAssets.findIndex((a: any) => a.id === asset.id)
+                            ? imageAssets.findIndex(
+                                (a: any) => a.id === asset.id,
+                              )
                             : -1;
                           const isSelected = selectedMediaIds.has(asset.id);
                           const timestamp = mediaTimestamps[asset.id] || 0;
                           const baseMediaSrc = mediaSrcFor(asset);
                           const mediaSrc = baseMediaSrc
-                            ? `${baseMediaSrc}${timestamp ? `?t=${timestamp}` : ""}`
-                            : "";
+                            ? `${baseMediaSrc}${timestamp ? `?t=${timestamp}` : ''}`
+                            : '';
 
                           return (
                             <SortableMediaItem
@@ -869,16 +976,19 @@ export default function ProductDetailPage() {
                                 setIsMaskModalOpen(true);
                               }}
                               onSingleRevert={handleSingleRevert}
-                              onStopBlur={async (assetId: string, e: React.MouseEvent) => {
+                              onStopBlur={async (
+                                assetId: string,
+                                e: React.MouseEvent,
+                              ) => {
                                 e.preventDefault();
                                 try {
                                   await fetchWithAuth(
                                     `${API_URL}/api/batches/media/${assetId}/stop-blur`,
-                                    { method: "POST" }
+                                    { method: 'POST' },
                                   );
                                   fetchBatchData();
                                 } catch (err) {
-                                  console.error("Failed to stop blur", err);
+                                  console.error('Failed to stop blur', err);
                                 }
                               }}
                               onForceImage={handleForceImage}
@@ -893,8 +1003,10 @@ export default function ProductDetailPage() {
                   </DndContext>
                 ) : (
                   <div className="h-full flex flex-col items-center justify-center text-slate-500 min-h-[300px]">
-                     <Layers className="w-12 h-12 mb-4 opacity-20" />
-                     <p className="text-sm font-medium">No media assets available.</p>
+                    <Layers className="w-12 h-12 mb-4 opacity-20" />
+                    <p className="text-sm font-medium">
+                      No media assets available.
+                    </p>
                   </div>
                 )}
               </div>
@@ -903,7 +1015,6 @@ export default function ProductDetailPage() {
 
           {/* Right Column: AI Extraction & Copy Settings */}
           <div className="lg:col-span-5 flex flex-col gap-6">
-            
             {/* Context/Extraction Panel */}
             <motion.div
               initial={{ opacity: 0, y: 16 }}
@@ -914,14 +1025,17 @@ export default function ProductDetailPage() {
               <div className="px-6 py-4 border-b border-graphite-border bg-graphite/40 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-electric-magenta" />
-                  <h2 className="font-heading font-bold text-white text-sm uppercase tracking-wider">Payload Data</h2>
+                  <h2 className="font-heading font-bold text-white text-sm uppercase tracking-wider">
+                    Payload Data
+                  </h2>
                 </div>
               </div>
               <div className="p-6 grid gap-6">
-                
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-graphite-darker/50 border border-graphite-border p-4 rounded-xl flex flex-col justify-between group/rename relative">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Asset Name</label>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                      Asset Name
+                    </label>
                     {isRenaming ? (
                       <div className="flex mt-1 items-center gap-2">
                         <input
@@ -930,23 +1044,28 @@ export default function ProductDetailPage() {
                           value={renameInput}
                           onChange={(e) => setRenameInput(e.target.value)}
                           onKeyDown={(e) => {
-                            if (e.key === "Enter") handleRenameProduct();
-                            if (e.key === "Escape") setIsRenaming(false);
+                            if (e.key === 'Enter') handleRenameProduct();
+                            if (e.key === 'Escape') setIsRenaming(false);
                           }}
                           className="w-full bg-graphite border border-electric-cyan/50 rounded px-2 py-1 text-white text-sm focus:outline-none"
                         />
-                        <button onClick={handleRenameProduct} className="text-electric-cyan p-1 hover:bg-electric-cyan/10 rounded">
+                        <button
+                          onClick={handleRenameProduct}
+                          className="text-electric-cyan p-1 hover:bg-electric-cyan/10 rounded"
+                        >
                           <CheckCircle2 className="w-4 h-4" />
                         </button>
                       </div>
                     ) : (
                       <div className="flex mt-1 items-start justify-between gap-2">
                         <p className="font-bold text-white text-lg leading-tight">
-                          {batch.extractedData?.product_name || "Unidentified"}
+                          {batch.extractedData?.product_name || 'Unidentified'}
                         </p>
                         <button
                           onClick={() => {
-                            setRenameInput(batch.extractedData?.product_name || "");
+                            setRenameInput(
+                              batch.extractedData?.product_name || '',
+                            );
                             setIsRenaming(true);
                           }}
                           className="text-slate-400 hover:text-electric-cyan opacity-0 group-hover/rename:opacity-100 transition-opacity p-1"
@@ -957,9 +1076,11 @@ export default function ProductDetailPage() {
                       </div>
                     )}
                   </div>
-                  
+
                   <div className="bg-electric-cyan/5 border border-electric-cyan/20 p-4 rounded-xl">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-electric-cyan">Override Price</label>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-electric-cyan">
+                      Override Price
+                    </label>
                     <input
                       type="text"
                       value={overridePrice}
@@ -967,30 +1088,41 @@ export default function ProductDetailPage() {
                       placeholder="Enter the selling price — required to publish"
                       className="w-full bg-graphite/50 border border-graphite-border rounded-lg mt-2 px-3 py-1.5 text-white focus:border-electric-cyan focus:ring-1 focus:ring-electric-cyan text-sm transition-all"
                     />
-                    {batch.extractedData?.price_needs_review && !overridePrice && (
-                      <p className="text-[11px] text-amber-400 mt-2">
-                        The supplier price could not be read unambiguously — enter the selling price to publish this product.
-                      </p>
-                    )}
+                    {batch.extractedData?.price_needs_review &&
+                      !overridePrice && (
+                        <p className="text-[11px] text-amber-400 mt-2">
+                          The supplier price could not be read unambiguously —
+                          enter the selling price to publish this product.
+                        </p>
+                      )}
                   </div>
                 </div>
 
                 {batch.extractedData?.features?.length > 0 && (
                   <div>
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 block">Extracted Vector Tags</label>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 block">
+                      Extracted Vector Tags
+                    </label>
                     <div className="flex flex-wrap gap-2">
-                      {batch.extractedData.features.map((feat: string, i: number) => (
-                        <span key={i} className="text-xs font-mono text-slate-300 bg-graphite border border-graphite-border px-2 py-1 rounded-md">
-                           {feat}
-                        </span>
-                      ))}
+                      {batch.extractedData.features.map(
+                        (feat: string, i: number) => (
+                          <span
+                            key={i}
+                            className="text-xs font-mono text-slate-300 bg-graphite border border-graphite-border px-2 py-1 rounded-md"
+                          >
+                            {feat}
+                          </span>
+                        ),
+                      )}
                     </div>
                   </div>
                 )}
-                
+
                 {batch.rawText && (
                   <div>
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 block">Raw Network Stream</label>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 block">
+                      Raw Network Stream
+                    </label>
                     <pre className="text-xs text-slate-400 bg-graphite-darker p-3 rounded-xl border border-graphite-border font-mono whitespace-pre-wrap max-h-32 overflow-y-auto">
                       {batch.rawText}
                     </pre>
@@ -1007,7 +1139,9 @@ export default function ProductDetailPage() {
               className="glass-card overflow-hidden flex-1 flex flex-col"
             >
               <div className="px-6 py-4 border-b border-graphite-border bg-graphite/40 flex items-center justify-between">
-                <h2 className="font-heading font-bold text-white text-sm uppercase tracking-wider">Syndication Content</h2>
+                <h2 className="font-heading font-bold text-white text-sm uppercase tracking-wider">
+                  Syndication Content
+                </h2>
                 {isEditable && (
                   <span className="text-[10px] font-bold uppercase tracking-wider text-electric-emerald bg-electric-emerald/10 px-2.5 py-1 rounded-md border border-electric-emerald/20">
                     Active
@@ -1083,61 +1217,90 @@ export default function ProductDetailPage() {
               className="bg-graphite-darker border border-graphite-border rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl"
             >
               <div className="p-6">
-                <h3 className="text-xl font-heading font-bold text-white mb-2">Publish Product</h3>
-                <p className="text-sm text-slate-400 mb-6">Select which platforms to syndicate this content to.</p>
+                <h3 className="text-xl font-heading font-bold text-white mb-2">
+                  Publish Product
+                </h3>
+                <p className="text-sm text-slate-400 mb-6">
+                  Select which platforms to syndicate this content to.
+                </p>
 
                 <div className="space-y-3">
-                  <label className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-colors ${publishTargets.includes('FACEBOOK') ? 'bg-blue-500/10 border-blue-500/50' : 'bg-graphite border-graphite-border hover:border-slate-600'}`}>
+                  <label
+                    className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-colors ${publishTargets.includes('FACEBOOK') ? 'bg-blue-500/10 border-blue-500/50' : 'bg-graphite border-graphite-border hover:border-slate-600'}`}
+                  >
                     <input
                       type="checkbox"
                       checked={publishTargets.includes('FACEBOOK')}
                       onChange={(e) => {
-                        if (e.target.checked) setPublishTargets(prev => [...prev, 'FACEBOOK']);
-                        else setPublishTargets(prev => prev.filter(t => t !== 'FACEBOOK'));
+                        if (e.target.checked)
+                          setPublishTargets((prev) => [...prev, 'FACEBOOK']);
+                        else
+                          setPublishTargets((prev) =>
+                            prev.filter((t) => t !== 'FACEBOOK'),
+                          );
                       }}
                       className="w-5 h-5 rounded border-slate-600 bg-graphite-darker text-electric-cyan focus:ring-electric-cyan focus:ring-offset-graphite-darker"
                     />
                     <div className="flex-1">
                       <p className="font-bold text-white">Facebook</p>
-                      <p className="text-xs text-slate-400">Post to linked Page</p>
+                      <p className="text-xs text-slate-400">
+                        Post to linked Page
+                      </p>
                     </div>
                   </label>
 
-                  <label className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-colors ${publishTargets.includes('INSTAGRAM') ? 'bg-fuchsia-500/10 border-fuchsia-500/50' : 'bg-graphite border-graphite-border hover:border-slate-600'}`}>
+                  <label
+                    className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-colors ${publishTargets.includes('INSTAGRAM') ? 'bg-fuchsia-500/10 border-fuchsia-500/50' : 'bg-graphite border-graphite-border hover:border-slate-600'}`}
+                  >
                     <input
                       type="checkbox"
                       checked={publishTargets.includes('INSTAGRAM')}
                       onChange={(e) => {
-                        if (e.target.checked) setPublishTargets(prev => [...prev, 'INSTAGRAM']);
-                        else setPublishTargets(prev => prev.filter(t => t !== 'INSTAGRAM'));
+                        if (e.target.checked)
+                          setPublishTargets((prev) => [...prev, 'INSTAGRAM']);
+                        else
+                          setPublishTargets((prev) =>
+                            prev.filter((t) => t !== 'INSTAGRAM'),
+                          );
                       }}
                       className="w-5 h-5 rounded border-slate-600 bg-graphite-darker text-electric-cyan focus:ring-electric-cyan focus:ring-offset-graphite-darker"
                     />
                     <div className="flex-1">
                       <p className="font-bold text-white">Instagram</p>
-                      <p className="text-xs text-slate-400">Post to linked IG Account</p>
+                      <p className="text-xs text-slate-400">
+                        Post to linked IG Account
+                      </p>
                     </div>
                   </label>
                 </div>
 
-                {metaAccount && (
-                  metaAccount.facebookPageId ? (
+                {metaAccount &&
+                  (metaAccount.facebookPageId ? (
                     <p className="text-sm text-slate-400 mt-5">
-                      Publishing to:{" "}
+                      Publishing to:{' '}
                       <span className="text-slate-100 font-semibold">
-                        {metaAccount.facebookPageName || metaAccount.facebookPageId}
+                        {metaAccount.facebookPageName ||
+                          metaAccount.facebookPageId}
                       </span>
                       {metaAccount.instagramUsername && (
-                        <> — Instagram <span className="text-slate-100">@{metaAccount.instagramUsername}</span></>
+                        <>
+                          {' '}
+                          — Instagram{' '}
+                          <span className="text-slate-100">
+                            @{metaAccount.instagramUsername}
+                          </span>
+                        </>
                       )}
                     </p>
                   ) : (
                     <p className="text-sm text-amber-400 mt-5">
-                      No publishing destination selected — publishing will be blocked.{" "}
-                      <a href="/settings" className="underline font-semibold">Choose your Page in Settings</a>
+                      No publishing destination selected — publishing will be
+                      blocked.{' '}
+                      <a href="/settings" className="underline font-semibold">
+                        Choose your Page in Settings
+                      </a>
                     </p>
-                  )
-                )}
+                  ))}
 
                 <div className="flex items-center gap-3 mt-8">
                   <button
@@ -1151,7 +1314,7 @@ export default function ProductDetailPage() {
                     disabled={publishTargets.length === 0}
                     className="flex-1 py-2.5 rounded-xl bg-electric-cyan text-graphite-darker font-bold hover:bg-white transition-colors disabled:opacity-50"
                   >
-                    {isEditable ? "Execute" : "Republish"}
+                    {isEditable ? 'Execute' : 'Republish'}
                   </button>
                 </div>
               </div>
@@ -1176,8 +1339,14 @@ export default function ProductDetailPage() {
               className="bg-graphite-darker border border-graphite-border rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl"
             >
               <div className="p-6">
-                <h3 className="text-xl font-heading font-bold text-white mb-2">Move Media</h3>
-                <p className="text-sm text-slate-400 mb-6">Select a destination product for the selected {selectedMediaIds.size} assets.</p>                <div className="space-y-4">
+                <h3 className="text-xl font-heading font-bold text-white mb-2">
+                  Move Media
+                </h3>
+                <p className="text-sm text-slate-400 mb-6">
+                  Select a destination product for the selected{' '}
+                  {selectedMediaIds.size} assets.
+                </p>{' '}
+                <div className="space-y-4">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
@@ -1192,8 +1361,9 @@ export default function ProductDetailPage() {
                   <div className="max-h-60 overflow-y-auto rounded-xl border border-graphite-border bg-graphite custom-scrollbar">
                     {batchesList
                       .filter((b) => {
-                        const name = b.extractedData?.product_name?.toLowerCase() || "";
-                        const sender = b.senderName?.toLowerCase() || "";
+                        const name =
+                          b.extractedData?.product_name?.toLowerCase() || '';
+                        const sender = b.senderName?.toLowerCase() || '';
                         const q = moveSearchQuery.toLowerCase();
                         return name.includes(q) || sender.includes(q);
                       })
@@ -1202,19 +1372,24 @@ export default function ProductDetailPage() {
                           key={b.id}
                           onClick={() => setTargetBatchId(b.id)}
                           className={`px-4 py-3 cursor-pointer border-b border-graphite-border last:border-b-0 hover:bg-white/5 transition-colors ${
-                            targetBatchId === b.id ? "bg-electric-cyan/10 border-l-2 border-l-electric-cyan" : ""
+                            targetBatchId === b.id
+                              ? 'bg-electric-cyan/10 border-l-2 border-l-electric-cyan'
+                              : ''
                           }`}
                         >
                           <div className="font-bold text-white text-sm truncate">
-                            {b.extractedData?.product_name || "Unknown Product"}
+                            {b.extractedData?.product_name || 'Unknown Product'}
                           </div>
                           <div className="text-xs text-slate-400 mt-1">
-                            {b.senderName || "WhatsApp"} • {new Date(b.createdAt).toLocaleDateString()}
+                            {b.senderName || 'WhatsApp'} •{' '}
+                            {new Date(b.createdAt).toLocaleDateString()}
                           </div>
                         </div>
                       ))}
                     {batchesList.length === 0 && (
-                      <div className="p-4 text-sm text-slate-500 text-center">No other products found.</div>
+                      <div className="p-4 text-sm text-slate-500 text-center">
+                        No other products found.
+                      </div>
                     )}
                   </div>
                   <label className="flex items-center gap-3 p-3 rounded-xl border border-graphite-border cursor-pointer transition-colors hover:border-slate-600">
@@ -1225,12 +1400,15 @@ export default function ProductDetailPage() {
                       className="w-4 h-4 rounded border-slate-600 bg-graphite-darker text-electric-cyan"
                     />
                     <div className="flex-1">
-                      <p className="font-bold text-white text-sm">Retain AI Data</p>
-                      <p className="text-xs text-slate-400">Keep generated AI info on these assets</p>
+                      <p className="font-bold text-white text-sm">
+                        Retain AI Data
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        Keep generated AI info on these assets
+                      </p>
                     </div>
                   </label>
                 </div>
-
                 <div className="flex items-center gap-3 mt-8">
                   <button
                     onClick={() => setIsMoveModalOpen(false)}
@@ -1243,7 +1421,7 @@ export default function ProductDetailPage() {
                     disabled={!targetBatchId || isMovingMedia}
                     className="flex-1 py-2.5 rounded-xl bg-electric-cyan text-graphite-darker font-bold hover:bg-white transition-colors disabled:opacity-50"
                   >
-                    {isMovingMedia ? "Moving..." : "Move"}
+                    {isMovingMedia ? 'Moving...' : 'Move'}
                   </button>
                 </div>
               </div>
@@ -1268,8 +1446,13 @@ export default function ProductDetailPage() {
               className="bg-graphite-darker border border-graphite-border rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl"
             >
               <div className="p-6">
-                <h3 className="text-xl font-heading font-bold text-white mb-2">Send to User</h3>
-                <p className="text-sm text-slate-400 mb-6">Enter the email addresses of the users you want to send this product to.</p>
+                <h3 className="text-xl font-heading font-bold text-white mb-2">
+                  Send to User
+                </h3>
+                <p className="text-sm text-slate-400 mb-6">
+                  Enter the email addresses of the users you want to send this
+                  product to.
+                </p>
 
                 <div className="space-y-4">
                   <input
@@ -1281,15 +1464,22 @@ export default function ProductDetailPage() {
                   />
                   {emailHistory.length > 0 && (
                     <div className="mt-3">
-                      <p className="text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Recent Contacts</p>
+                      <p className="text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">
+                        Recent Contacts
+                      </p>
                       <div className="flex flex-wrap gap-2">
-                        {emailHistory.map(email => (
+                        {emailHistory.map((email) => (
                           <button
                             key={email}
                             onClick={() => {
-                              const current = targetEmailsInput.split(',').map(e => e.trim()).filter(e => e);
+                              const current = targetEmailsInput
+                                .split(',')
+                                .map((e) => e.trim())
+                                .filter((e) => e);
                               if (!current.includes(email)) {
-                                setTargetEmailsInput([...current, email].join(', '));
+                                setTargetEmailsInput(
+                                  [...current, email].join(', '),
+                                );
                               }
                             }}
                             className="px-2 py-1 rounded-md bg-graphite border border-graphite-border text-xs text-slate-300 hover:text-white hover:border-electric-cyan transition-colors"
@@ -1314,7 +1504,7 @@ export default function ProductDetailPage() {
                     disabled={!targetEmailsInput.trim() || isSending}
                     className="flex-1 py-2.5 rounded-xl bg-electric-cyan text-graphite-darker font-bold hover:bg-white transition-colors disabled:opacity-50"
                   >
-                    {isSending ? "Sending..." : "Send"}
+                    {isSending ? 'Sending...' : 'Send'}
                   </button>
                 </div>
               </div>
@@ -1357,7 +1547,9 @@ function SortableMediaItem({
   // at native framerate. Only passive items (sliding out of the way) get a transition.
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
-    transition: isDragging ? undefined : (transition || 'transform 200ms cubic-bezier(0.25, 1, 0.5, 1)'),
+    transition: isDragging
+      ? undefined
+      : transition || 'transform 200ms cubic-bezier(0.25, 1, 0.5, 1)',
     zIndex: isDragging ? 999 : 1,
     position: 'relative' as const,
   };
@@ -1367,18 +1559,20 @@ function SortableMediaItem({
       ref={setNodeRef}
       style={style}
       className={`relative group rounded-xl overflow-hidden border aspect-square will-change-transform ${
-        isSelected ? "border-electric-cyan ring-2 ring-electric-cyan/30" : "border-graphite-border"
-      } ${isDragging ? "shadow-2xl shadow-electric-cyan/30 ring-2 ring-electric-cyan bg-graphite-darker opacity-90" : "bg-graphite-darker hover:border-electric-cyan/50"}`}
+        isSelected
+          ? 'border-electric-cyan ring-2 ring-electric-cyan/30'
+          : 'border-graphite-border'
+      } ${isDragging ? 'shadow-2xl shadow-electric-cyan/30 ring-2 ring-electric-cyan bg-graphite-darker opacity-90' : 'bg-graphite-darker hover:border-electric-cyan/50'}`}
     >
       {/* Visual drag indicator */}
       <div className="absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-10 flex justify-center pt-1 pointer-events-none">
         <div className="w-8 h-1 bg-white/30 rounded-full" />
       </div>
 
-      <div 
-        {...attributes} 
-        {...listeners} 
-        className="absolute inset-0 z-[5] cursor-grab active:cursor-grabbing" 
+      <div
+        {...attributes}
+        {...listeners}
+        className="absolute inset-0 z-[5] cursor-grab active:cursor-grabbing"
         style={{ touchAction: 'none' }}
       />
 
@@ -1394,7 +1588,7 @@ function SortableMediaItem({
           </div>
         )}
       </div>
-      
+
       {!isImage ? (
         <video
           src={mediaSrc}
@@ -1443,11 +1637,15 @@ function SortableMediaItem({
             onClick={(e) => onToggleSelect(asset.id, e)}
             className={`p-1.5 rounded-lg backdrop-blur-md shadow-sm transition-all border ${
               isSelected
-                ? "bg-electric-cyan/20 border-electric-cyan text-electric-cyan"
-                : "bg-graphite/60 border-graphite-border text-white/50 hover:bg-graphite hover:text-white"
+                ? 'bg-electric-cyan/20 border-electric-cyan text-electric-cyan'
+                : 'bg-graphite/60 border-graphite-border text-white/50 hover:bg-graphite hover:text-white'
             } cursor-pointer`}
           >
-            {isSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+            {isSelected ? (
+              <CheckSquare className="w-4 h-4" />
+            ) : (
+              <Square className="w-4 h-4" />
+            )}
           </button>
 
           <button
@@ -1476,9 +1674,9 @@ function SortableMediaItem({
                 onClick={(e) => onTriggerAutoBlur(asset.id, e)}
                 disabled={!isWorkerOnline}
                 className={`py-1.5 px-2 rounded-lg backdrop-blur-md text-xs font-semibold shadow-sm transition-all border text-center flex-1 cursor-pointer ${
-                  isWorkerOnline 
-                    ? "bg-purple-500/20 hover:bg-purple-500/40 text-purple-400 border-purple-500/30" 
-                    : "bg-graphite/40 text-slate-500 border-graphite-border cursor-not-allowed"
+                  isWorkerOnline
+                    ? 'bg-purple-500/20 hover:bg-purple-500/40 text-purple-400 border-purple-500/30'
+                    : 'bg-graphite/40 text-slate-500 border-graphite-border cursor-not-allowed'
                 }`}
               >
                 ✨ Auto Blur
@@ -1490,7 +1688,9 @@ function SortableMediaItem({
                 disabled={revertingMediaId === asset.id}
                 className="py-1.5 px-2.5 rounded-lg bg-electric-cyan/10 hover:bg-electric-cyan/20 backdrop-blur-md text-electric-cyan text-xs font-semibold shadow-sm transition-all border border-electric-cyan/30 flex items-center justify-center gap-1 disabled:opacity-50 cursor-pointer"
               >
-                <RotateCcw className={`w-3 h-3 ${revertingMediaId === asset.id ? "animate-spin" : ""}`} />
+                <RotateCcw
+                  className={`w-3 h-3 ${revertingMediaId === asset.id ? 'animate-spin' : ''}`}
+                />
                 <span className="hidden sm:inline">Unblur</span>
               </button>
             </div>
@@ -1504,8 +1704,12 @@ function SortableMediaItem({
               disabled={convertingMediaId === asset.id}
               className="w-full py-1.5 px-2 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/40 backdrop-blur-md text-indigo-400 hover:text-white text-xs font-semibold shadow-sm transition-all border border-indigo-500/30 text-center cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
             >
-              {convertingMediaId === asset.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              {convertingMediaId === asset.id ? "Extracting Frame..." : "Treat as Image (Override)"}
+              {convertingMediaId === asset.id && (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              )}
+              {convertingMediaId === asset.id
+                ? 'Extracting Frame...'
+                : 'Treat as Image (Override)'}
             </button>
           </div>
         )}
@@ -1535,11 +1739,13 @@ function CaptionBlock({
         <div
           className={`w-5 h-5 rounded-md bg-gradient-to-br ${gradient} shadow-sm border border-white/10`}
         />
-        <h3 className="text-sm font-bold text-slate-300 group-hover:text-white transition-colors">{platform}</h3>
+        <h3 className="text-sm font-bold text-slate-300 group-hover:text-white transition-colors">
+          {platform}
+        </h3>
       </div>
       {editable && onChange ? (
         <textarea
-          value={value || ""}
+          value={value || ''}
           onChange={(e) => onChange(e.target.value)}
           rows={rows}
           className="w-full bg-graphite-darker/50 border border-graphite-border rounded-xl px-4 py-3 text-sm text-slate-300 placeholder-slate-600 focus:outline-none focus:border-electric-cyan focus:ring-1 focus:ring-electric-cyan resize-y leading-relaxed transition-all"
@@ -1548,7 +1754,7 @@ function CaptionBlock({
       ) : (
         <div className="bg-graphite-darker/50 border border-graphite-border rounded-xl p-4">
           <p className="text-sm text-slate-400 whitespace-pre-wrap leading-relaxed">
-            {value || "Not generated yet"}
+            {value || 'Not generated yet'}
           </p>
         </div>
       )}

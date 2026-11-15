@@ -6,9 +6,7 @@ import { NotificationProvider } from '@/contexts/NotificationContext';
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider>
-      <NotificationProvider>
-        {children}
-      </NotificationProvider>
+      <NotificationProvider>{children}</NotificationProvider>
     </SessionProvider>
   );
 }

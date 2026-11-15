@@ -1,4 +1,4 @@
-export function LoadingSpinner({ label = "Loading..." }: { label?: string }) {
+export function LoadingSpinner({ label = 'Loading...' }: { label?: string }) {
   return (
     <div className="flex flex-col items-center justify-center min-h-[320px] gap-4">
       <div className="relative">

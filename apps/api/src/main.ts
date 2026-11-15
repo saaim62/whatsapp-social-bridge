@@ -7,11 +7,11 @@ async function bootstrap() {
     origin: ['http://localhost:3000', 'https://droproute.duckdns.org'],
     credentials: true,
   });
-  
+
   const server = app.getHttpServer();
   server.keepAliveTimeout = 65000;
   server.headersTimeout = 66000;
-  
+
   await app.listen(process.env.PORT ?? 3001);
 }
 bootstrap();

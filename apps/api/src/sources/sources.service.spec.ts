@@ -50,18 +50,28 @@ describe('SourcesService.isSourceAllowed — exact-identity authorization', () =
       whatsappSource: {
         findUnique: jest.fn(async ({ where }: any) => {
           const { userId, jid } = where.userId_jid;
-          return db.sources.find((s) => s.userId === userId && s.jid === jid) ?? null;
+          return (
+            db.sources.find((s) => s.userId === userId && s.jid === jid) ?? null
+          );
         }),
         findFirst: jest.fn(async ({ where }: any) => {
           return db.sources.find((s) => matchesWhere(s, where)) ?? null;
         }),
         create: jest.fn(async ({ data }: any) => {
-          if (db.sources.some((s) => s.userId === data.userId && s.jid === data.jid)) {
+          if (
+            db.sources.some(
+              (s) => s.userId === data.userId && s.jid === data.jid,
+            )
+          ) {
             const err: any = new Error('Unique constraint failed');
             err.code = 'P2002';
             throw err;
           }
-          const row = { id: `src-${db.sources.length + 1}`, createdAt: new Date(), ...data };
+          const row = {
+            id: `src-${db.sources.length + 1}`,
+            createdAt: new Date(),
+            ...data,
+          };
           db.sources.push(row);
           return row;
         }),
@@ -75,7 +85,10 @@ describe('SourcesService.isSourceAllowed — exact-identity authorization', () =
       whatsappContact: {
         findUnique: jest.fn(async ({ where }: any) => {
           const { userId, jid } = where.userId_jid;
-          return db.contacts.find((c) => c.userId === userId && c.jid === jid) ?? null;
+          return (
+            db.contacts.find((c) => c.userId === userId && c.jid === jid) ??
+            null
+          );
         }),
       },
     };
@@ -85,7 +98,14 @@ describe('SourcesService.isSourceAllowed — exact-identity authorization', () =
     db = {
       sources: [
         // The one and only "Ali" the user actually enabled.
-        { id: 'src-ali', userId: USER, jid: ALI_ENABLED_JID, name: 'Ali', type: 'INDIVIDUAL', isEnabled: true },
+        {
+          id: 'src-ali',
+          userId: USER,
+          jid: ALI_ENABLED_JID,
+          name: 'Ali',
+          type: 'INDIVIDUAL',
+          isEnabled: true,
+        },
       ],
       contacts: [
         { userId: USER, jid: ALI_ENABLED_JID, name: 'Ali' },
@@ -100,47 +120,78 @@ describe('SourcesService.isSourceAllowed — exact-identity authorization', () =
   beforeEach(seed);
 
   it('admits the exact enabled JID', async () => {
-    await expect(service.isSourceAllowed(ALI_ENABLED_JID, 'Ali', USER)).resolves.toBe(true);
+    await expect(
+      service.isSourceAllowed(ALI_ENABLED_JID, 'Ali', USER),
+    ).resolves.toBe(true);
   });
 
   it('rejects a different contact ID that shares the enabled contact’s display name', async () => {
-    await expect(service.isSourceAllowed(ALI_STRANGER_JID, 'Ali', USER)).resolves.toBe(false);
+    await expect(
+      service.isSourceAllowed(ALI_STRANGER_JID, 'Ali', USER),
+    ).resolves.toBe(false);
 
     const created = db.sources.find((s) => s.jid === ALI_STRANGER_JID);
     expect(created).toBeDefined();
     expect(created.isEnabled).toBe(false);
 
     // Second sighting (existing-source path) must also stay rejected.
-    await expect(service.isSourceAllowed(ALI_STRANGER_JID, 'Ali', USER)).resolves.toBe(false);
-    expect(db.sources.find((s) => s.jid === ALI_STRANGER_JID).isEnabled).toBe(false);
+    await expect(
+      service.isSourceAllowed(ALI_STRANGER_JID, 'Ali', USER),
+    ).resolves.toBe(false);
+    expect(db.sources.find((s) => s.jid === ALI_STRANGER_JID).isEnabled).toBe(
+      false,
+    );
   });
 
   it('rejects an unknown @lid sender whose display name matches an enabled contact', async () => {
-    await expect(service.isSourceAllowed(STRANGER_LID, 'Ali', USER)).resolves.toBe(false);
+    await expect(
+      service.isSourceAllowed(STRANGER_LID, 'Ali', USER),
+    ).resolves.toBe(false);
 
     const created = db.sources.find((s) => s.jid === STRANGER_LID);
     expect(created).toBeDefined();
     expect(created.isEnabled).toBe(false);
 
     // And again once the @lid source exists as a disabled row.
-    await expect(service.isSourceAllowed(STRANGER_LID, 'Ali', USER)).resolves.toBe(false);
-    expect(db.sources.find((s) => s.jid === STRANGER_LID).isEnabled).toBe(false);
+    await expect(
+      service.isSourceAllowed(STRANGER_LID, 'Ali', USER),
+    ).resolves.toBe(false);
+    expect(db.sources.find((s) => s.jid === STRANGER_LID).isEnabled).toBe(
+      false,
+    );
   });
 
   it('admits an @lid source the user explicitly enabled by its exact JID', async () => {
-    db.sources.push({ id: 'src-lid', userId: USER, jid: STRANGER_LID, name: 'Ali', type: 'INDIVIDUAL', isEnabled: true });
-    await expect(service.isSourceAllowed(STRANGER_LID, 'Ali', USER)).resolves.toBe(true);
+    db.sources.push({
+      id: 'src-lid',
+      userId: USER,
+      jid: STRANGER_LID,
+      name: 'Ali',
+      type: 'INDIVIDUAL',
+      isEnabled: true,
+    });
+    await expect(
+      service.isSourceAllowed(STRANGER_LID, 'Ali', USER),
+    ).resolves.toBe(true);
   });
 
   it('registers unknown groups as disabled and rejects them', async () => {
-    await expect(service.isSourceAllowed('120363000000@g.us', 'Some Group', USER)).resolves.toBe(false);
+    await expect(
+      service.isSourceAllowed('120363000000@g.us', 'Some Group', USER),
+    ).resolves.toBe(false);
     const created = db.sources.find((s) => s.jid === '120363000000@g.us');
     expect(created?.type).toBe('GROUP');
     expect(created?.isEnabled).toBe(false);
   });
 
   it('never enables a source belonging to a different user by name', async () => {
-    await expect(service.isSourceAllowed(ALI_STRANGER_JID, 'Ali', 'user-2')).resolves.toBe(false);
-    expect(db.sources.find((s) => s.jid === ALI_STRANGER_JID && s.userId === 'user-2')?.isEnabled).toBe(false);
+    await expect(
+      service.isSourceAllowed(ALI_STRANGER_JID, 'Ali', 'user-2'),
+    ).resolves.toBe(false);
+    expect(
+      db.sources.find(
+        (s) => s.jid === ALI_STRANGER_JID && s.userId === 'user-2',
+      )?.isEnabled,
+    ).toBe(false);
   });
 });

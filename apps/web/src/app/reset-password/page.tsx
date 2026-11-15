@@ -28,12 +28,12 @@ function ResetPasswordContent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token) return;
-    
+
     setLoading(true);
     setError('');
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match");
+      setError('Passwords do not match');
       setLoading(false);
       return;
     }
@@ -42,7 +42,7 @@ function ResetPasswordContent() {
       const res = await fetch(`${API_URL}/api/account/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, password })
+        body: JSON.stringify({ token, password }),
       });
 
       const data = await res.json();
@@ -62,11 +62,14 @@ function ResetPasswordContent() {
   return (
     <div className="min-h-dvh w-full relative flex items-center justify-center bg-transparent selection:bg-gold-500/30">
       <div className="absolute inset-0 z-0">
-        <div className="absolute top-1/4 -right-1/4 w-[800px] h-[800px] bg-brand-500/20 rounded-full blur-[120px] mix-blend-screen animate-pulse" style={{ animationDuration: '4s' }} />
+        <div
+          className="absolute top-1/4 -right-1/4 w-[800px] h-[800px] bg-brand-500/20 rounded-full blur-[120px] mix-blend-screen animate-pulse"
+          style={{ animationDuration: '4s' }}
+        />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[url('/noise.png')] opacity-20 mix-blend-overlay pointer-events-none" />
       </div>
 
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
@@ -78,7 +81,7 @@ function ResetPasswordContent() {
           <div className="relative z-10">
             <AnimatePresence mode="wait">
               {success ? (
-                <motion.div 
+                <motion.div
                   key="success"
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -87,11 +90,14 @@ function ResetPasswordContent() {
                   <div className="w-20 h-20 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-6 ring-4 ring-emerald-500/10">
                     <CheckCircle2 className="w-10 h-10" />
                   </div>
-                  <h2 className="text-2xl font-bold text-white mb-4">Password Reset!</h2>
+                  <h2 className="text-2xl font-bold text-white mb-4">
+                    Password Reset!
+                  </h2>
                   <p className="text-white/60 mb-8 leading-relaxed max-w-sm mx-auto">
-                    Your password has been successfully reset. You can now log in with your new credentials.
+                    Your password has been successfully reset. You can now log
+                    in with your new credentials.
                   </p>
-                  <Link 
+                  <Link
                     href="/login"
                     className="inline-flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 text-white font-semibold py-3 px-8 rounded-xl transition-colors border border-white/10 w-full"
                   >
@@ -99,7 +105,11 @@ function ResetPasswordContent() {
                   </Link>
                 </motion.div>
               ) : (
-                <motion.div key="form" initial={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
+                <motion.div
+                  key="form"
+                  initial={{ opacity: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                >
                   <div className="text-center mb-10">
                     <h2 className="text-3xl font-extrabold text-white tracking-tight">
                       New Password
@@ -111,7 +121,7 @@ function ResetPasswordContent() {
 
                   <form className="space-y-5" onSubmit={handleSubmit}>
                     {error && (
-                      <motion.div 
+                      <motion.div
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}
                         className="rounded-xl bg-red-500/10 border border-red-500/20 p-4 text-sm text-red-400 text-center"
@@ -123,7 +133,7 @@ function ResetPasswordContent() {
                     <div className="relative group">
                       <input
                         id="password"
-                        type={showPassword ? "text" : "password"}
+                        type={showPassword ? 'text' : 'password'}
                         required
                         className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white placeholder-transparent focus:bg-white/10 focus:border-gold-500/50 focus:ring-2 focus:ring-gold-500/20 outline-none transition-all peer pr-12"
                         placeholder="New Password"
@@ -131,8 +141,8 @@ function ResetPasswordContent() {
                         onChange={(e) => setPassword(e.target.value)}
                         disabled={!token}
                       />
-                      <label 
-                        htmlFor="password" 
+                      <label
+                        htmlFor="password"
                         className="absolute left-5 -top-2.5 bg-[#1a1a1a] px-2 text-xs font-medium text-white/50 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:bg-transparent peer-focus:-top-2.5 peer-focus:text-xs peer-focus:bg-[#1a1a1a] peer-focus:text-gold-400 rounded"
                       >
                         New Password
@@ -142,14 +152,18 @@ function ResetPasswordContent() {
                         onClick={() => setShowPassword(!showPassword)}
                         className="absolute right-4 top-4 text-white/30 hover:text-white/70 transition-colors"
                       >
-                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        {showPassword ? (
+                          <EyeOff className="w-5 h-5" />
+                        ) : (
+                          <Eye className="w-5 h-5" />
+                        )}
                       </button>
                     </div>
 
                     <div className="relative group">
                       <input
                         id="confirmPassword"
-                        type={showPassword ? "text" : "password"}
+                        type={showPassword ? 'text' : 'password'}
                         required
                         className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white placeholder-transparent focus:bg-white/10 focus:border-gold-500/50 focus:ring-2 focus:ring-gold-500/20 outline-none transition-all peer"
                         placeholder="Confirm Password"
@@ -157,8 +171,8 @@ function ResetPasswordContent() {
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         disabled={!token}
                       />
-                      <label 
-                        htmlFor="confirmPassword" 
+                      <label
+                        htmlFor="confirmPassword"
                         className="absolute left-5 -top-2.5 bg-[#1a1a1a] px-2 text-xs font-medium text-white/50 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:bg-transparent peer-focus:-top-2.5 peer-focus:text-xs peer-focus:bg-[#1a1a1a] peer-focus:text-gold-400 rounded"
                       >
                         Confirm Password
@@ -195,7 +209,13 @@ function ResetPasswordContent() {
 
 export default function ResetPasswordPage() {
   return (
-    <Suspense fallback={<div className="min-h-dvh flex items-center justify-center"><Loader2 className="w-8 h-8 text-gold-500 animate-spin" /></div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-dvh flex items-center justify-center">
+          <Loader2 className="w-8 h-8 text-gold-500 animate-spin" />
+        </div>
+      }
+    >
       <ResetPasswordContent />
     </Suspense>
   );

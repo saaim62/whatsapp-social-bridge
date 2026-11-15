@@ -35,7 +35,7 @@ import { AppController } from './app.controller';
           connection: {
             host: configService.get<string>('REDIS_HOST', '127.0.0.1'),
             port: configService.get<number>('REDIS_PORT', 6379),
-          }
+          },
         };
       },
       inject: [ConfigService],
@@ -55,4 +55,4 @@ import { AppController } from './app.controller';
     NotificationModule,
   ],
 })
-export class AppModule { }
+export class AppModule {}

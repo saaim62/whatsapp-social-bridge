@@ -28,8 +28,7 @@ export class AiService {
       'https://api.groq.com/openai/v1'
     ).replace(/\/$/, '');
     this.textModel =
-      this.configService.get<string>('LLM_TEXT_MODEL') ||
-      'openai/gpt-oss-120b';
+      this.configService.get<string>('LLM_TEXT_MODEL') || 'openai/gpt-oss-120b';
     this.visionModel =
       this.configService.get<string>('LLM_VISION_MODEL') ||
       'meta-llama/llama-4-scout-17b-16e-instruct';
@@ -73,7 +72,9 @@ export class AiService {
     }
     if (!res.ok) {
       const body = await res.text();
-      throw new Error(`LLM request failed (${res.status}): ${body.slice(0, 300)}`);
+      throw new Error(
+        `LLM request failed (${res.status}): ${body.slice(0, 300)}`,
+      );
     }
     const data: any = await res.json();
     const content = data?.choices?.[0]?.message?.content;
@@ -90,34 +91,44 @@ export class AiService {
     return JSON.parse(cleaned);
   }
 
-  heuristicExtractProductDetails(rawText: string): { product_name: string | null; price: string | null; features: string[] } {
+  heuristicExtractProductDetails(rawText: string): {
+    product_name: string | null;
+    price: string | null;
+    features: string[];
+  } {
     if (!rawText || !rawText.trim()) {
       return { product_name: null, price: null, features: [] };
     }
 
     const lines = rawText
       .split('\n')
-      .map(l => l.trim())
-      .filter(l => l.length > 0);
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
 
     let productName: string | null = null;
     let price: string | null = null;
     const features: string[] = [];
 
-    const ignoreRegex = /^(assalam|hello|hi|welcome|join|dear|sir|ye |hamara|http|jazak)/i;
-    const buzzwordOnly = /^(new arrival|restock|best quality|official model|original video|quantity available|stock alert|ready stock|exclusive|hot item)[\s.!:;~]*$/i;
+    const ignoreRegex =
+      /^(assalam|hello|hi|welcome|join|dear|sir|ye |hamara|http|jazak)/i;
+    const buzzwordOnly =
+      /^(new arrival|restock|best quality|official model|original video|quantity available|stock alert|ready stock|exclusive|hot item)[\s.!:;~]*$/i;
 
     for (const line of lines) {
       if (ignoreRegex.test(line)) continue;
 
       // Price extraction
       if (!price) {
-        const p1 = line.match(/\b(?:price|cost|pkr|inr)\b\s*[:=-]?\s*(?:rs\.?)?\s*([\d,]+)/i);
+        const p1 = line.match(
+          /\b(?:price|cost|pkr|inr)\b\s*[:=-]?\s*(?:rs\.?)?\s*([\d,]+)/i,
+        );
         if (p1) {
           const num = parseInt(p1[1].replace(/,/g, ''), 10);
           if (num > 0) price = `Rs. ${num.toLocaleString()}`;
         } else {
-          const p2 = line.match(/(?:^|\s)(?:rs\.?\s*)?([\d,]{3,7})\s*(?:\/=|\/-|\/)/i);
+          const p2 = line.match(
+            /(?:^|\s)(?:rs\.?\s*)?([\d,]{3,7})\s*(?:\/=|\/-|\/)/i,
+          );
           if (p2) {
             const num = parseInt(p2[1].replace(/,/g, ''), 10);
             if (num > 0) price = `Rs. ${num.toLocaleString()}`;
@@ -126,15 +137,26 @@ export class AiService {
       }
 
       // Feature extraction (colors, sizes, movement, etc.)
-      if (/^(colour|color|size|quality|movement|strap|material|dial|case|finish)s?\s*[:=-]/i.test(line)) {
+      if (
+        /^(colour|color|size|quality|movement|strap|material|dial|case|finish)s?\s*[:=-]/i.test(
+          line,
+        )
+      ) {
         features.push(line);
         continue;
       }
 
       // Product name extraction
-      if (!productName && !buzzwordOnly.test(line) && !line.startsWith('http')) {
+      if (
+        !productName &&
+        !buzzwordOnly.test(line) &&
+        !line.startsWith('http')
+      ) {
         let cleaned = line
-          .replace(/^(new arrival|restock|hot item|exclusive|best quality)[\s.!:;~-]*/i, '')
+          .replace(
+            /^(new arrival|restock|hot item|exclusive|best quality)[\s.!:;~-]*/i,
+            '',
+          )
           .replace(/[\s.!:;~]+$/, '')
           .trim();
 
@@ -181,16 +203,24 @@ ${rawText}`;
         const parsed = this.parseJson(responseText);
 
         return {
-          product_name: parsed.product_name || fallback.product_name || 'Product',
+          product_name:
+            parsed.product_name || fallback.product_name || 'Product',
           price: parsed.price || fallback.price || 'Price not specified',
-          features: Array.isArray(parsed.features) && parsed.features.length > 0 ? parsed.features : fallback.features,
+          features:
+            Array.isArray(parsed.features) && parsed.features.length > 0
+              ? parsed.features
+              : fallback.features,
         };
       } catch (e: any) {
-        this.logger.warn(`Model ${modelName} extraction error: ${e.message}. Trying next candidate...`);
+        this.logger.warn(
+          `Model ${modelName} extraction error: ${e.message}. Trying next candidate...`,
+        );
       }
     }
 
-    this.logger.warn('All generative models failed. Falling back to heuristic extraction.');
+    this.logger.warn(
+      'All generative models failed. Falling back to heuristic extraction.',
+    );
     return fallback;
   }
 

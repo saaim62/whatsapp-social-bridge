@@ -20,7 +20,7 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError('');
-    
+
     const res = await signIn('credentials', {
       redirect: false,
       email,
@@ -38,8 +38,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-dvh w-full relative flex items-center justify-center bg-transparent selection:bg-gold-500/30">
-
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
@@ -51,7 +50,7 @@ export default function LoginPage() {
 
           <div className="relative z-10">
             <div className="text-center mb-10">
-              <motion.div 
+              <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ delay: 0.2 }}
@@ -69,7 +68,7 @@ export default function LoginPage() {
 
             <form className="space-y-5" onSubmit={handleSubmit}>
               {error && (
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   className="rounded-xl bg-red-500/10 border border-red-500/20 p-4 text-sm text-red-400 text-center"
@@ -90,8 +89,8 @@ export default function LoginPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                   />
-                  <label 
-                    htmlFor="email-address" 
+                  <label
+                    htmlFor="email-address"
                     className="absolute left-5 -top-2.5 bg-[#1a1a1a] px-2 text-xs font-medium text-white/50 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:bg-transparent peer-focus:-top-2.5 peer-focus:text-xs peer-focus:bg-[#1a1a1a] peer-focus:text-gold-400 rounded"
                   >
                     Email address
@@ -102,15 +101,15 @@ export default function LoginPage() {
                   <input
                     id="password"
                     name="password"
-                    type={showPassword ? "text" : "password"}
+                    type={showPassword ? 'text' : 'password'}
                     required
                     className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white placeholder-transparent focus:bg-white/10 focus:border-gold-500/50 focus:ring-2 focus:ring-gold-500/20 outline-none transition-all peer pr-12"
                     placeholder="Password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
-                  <label 
-                    htmlFor="password" 
+                  <label
+                    htmlFor="password"
                     className="absolute left-5 -top-2.5 bg-[#1a1a1a] px-2 text-xs font-medium text-white/50 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:bg-transparent peer-focus:-top-2.5 peer-focus:text-xs peer-focus:bg-[#1a1a1a] peer-focus:text-gold-400 rounded"
                   >
                     Password
@@ -120,13 +119,20 @@ export default function LoginPage() {
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-4 top-4 text-white/30 hover:text-white/70 transition-colors"
                   >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    {showPassword ? (
+                      <EyeOff className="w-5 h-5" />
+                    ) : (
+                      <Eye className="w-5 h-5" />
+                    )}
                   </button>
                 </div>
               </div>
 
               <div className="flex items-center justify-end">
-                <Link href="/forgot-password" className="text-sm font-medium text-gold-400 hover:text-gold-300 transition-colors">
+                <Link
+                  href="/forgot-password"
+                  className="text-sm font-medium text-gold-400 hover:text-gold-300 transition-colors"
+                >
                   Forgot password?
                 </Link>
               </div>
@@ -151,10 +157,13 @@ export default function LoginPage() {
             </form>
           </div>
         </div>
-        
+
         <div className="text-center mt-8 text-white/50 text-sm">
           Don't have an account?{' '}
-          <Link href="/register" className="font-semibold text-white hover:text-gold-300 transition-colors underline decoration-white/20 underline-offset-4">
+          <Link
+            href="/register"
+            className="font-semibold text-white hover:text-gold-300 transition-colors underline decoration-white/20 underline-offset-4"
+          >
             Create an account
           </Link>
         </div>

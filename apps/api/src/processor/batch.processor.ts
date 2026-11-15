@@ -31,7 +31,11 @@ export class BatchProcessor extends WorkerHost {
       case 'process-batch':
         return this.handleProcessBatch(job.data.batchId);
       case 'publish-batch':
-        return this.handlePublishBatch(job.data.batchId, job.data.targets, job.data.force === true);
+        return this.handlePublishBatch(
+          job.data.batchId,
+          job.data.targets,
+          job.data.force === true,
+        );
       default:
         this.logger.warn(`Unknown job name: ${job.name}`);
     }
@@ -67,18 +71,31 @@ export class BatchProcessor extends WorkerHost {
       }
 
       // Fallbacks: NEVER set "Unknown Product (No text provided)" if rawText exists!
-      if (!extractedData.product_name || extractedData.product_name.includes('Unknown Product')) {
-        const heuristic = this.aiService.heuristicExtractProductDetails(batch.rawText || '');
+      if (
+        !extractedData.product_name ||
+        extractedData.product_name.includes('Unknown Product')
+      ) {
+        const heuristic = this.aiService.heuristicExtractProductDetails(
+          batch.rawText || '',
+        );
         if (heuristic.product_name) {
           extractedData.product_name = heuristic.product_name;
         } else if (batch.rawText && batch.rawText.trim().length > 0) {
-          extractedData.product_name = batch.rawText.trim().split('\n')[0].substring(0, 50);
+          extractedData.product_name = batch.rawText
+            .trim()
+            .split('\n')[0]
+            .substring(0, 50);
         } else {
           extractedData.product_name = `Product [${batchId.substring(0, 8)}]`;
         }
       }
-      if (!extractedData.price || extractedData.price === 'Price not specified') {
-        const heuristic = this.aiService.heuristicExtractProductDetails(batch.rawText || '');
+      if (
+        !extractedData.price ||
+        extractedData.price === 'Price not specified'
+      ) {
+        const heuristic = this.aiService.heuristicExtractProductDetails(
+          batch.rawText || '',
+        );
         if (heuristic.price) {
           extractedData.price = heuristic.price;
         }
@@ -159,8 +176,14 @@ export class BatchProcessor extends WorkerHost {
     };
   }
 
-  private async handlePublishBatch(batchId: string, targets?: string[], force = false) {
-    this.logger.log(`Publishing batch ${batchId} to targets: ${targets?.join(', ') || 'ALL'}${force ? ' (FORCE re-publish)' : ''}...`);
+  private async handlePublishBatch(
+    batchId: string,
+    targets?: string[],
+    force = false,
+  ) {
+    this.logger.log(
+      `Publishing batch ${batchId} to targets: ${targets?.join(', ') || 'ALL'}${force ? ' (FORCE re-publish)' : ''}...`,
+    );
 
     // PUBLISH CLAIM (P0-3): atomically transition the batch to
     // PUBLISHING, but only when it is not already being published by
@@ -280,8 +303,16 @@ export class BatchProcessor extends WorkerHost {
       const footer = settings?.captionFooter ?? null;
       batch.generatedContent = {
         ...gc,
-        instagramCaption: finalizeCaption(gc.instagramCaption, sellingStr, footer),
-        facebookCaption: finalizeCaption(gc.facebookCaption, sellingStr, footer),
+        instagramCaption: finalizeCaption(
+          gc.instagramCaption,
+          sellingStr,
+          footer,
+        ),
+        facebookCaption: finalizeCaption(
+          gc.facebookCaption,
+          sellingStr,
+          footer,
+        ),
         storyText: finalizeCaption(gc.storyText, sellingStr, null, false),
       };
     }
@@ -291,7 +322,9 @@ export class BatchProcessor extends WorkerHost {
     // saved destination, block BEFORE any social call, return the
     // batch to APPROVED (it was approved; only the publish step is
     // blocked), and tell the user what to do.
-    const destination = await this.socialService.getSavedDestination(batch.userId);
+    const destination = await this.socialService.getSavedDestination(
+      batch.userId,
+    );
     if (!destination) {
       this.logger.warn(
         `Publishing blocked for batch ${batchId}: no Meta destination selected for user ${batch.userId}. Sent back to approved.`,
@@ -316,7 +349,8 @@ export class BatchProcessor extends WorkerHost {
     let allSuccess = true;
     let anySuccess = false;
 
-    const publishTargets = (targets && targets.length > 0) ? targets : ['INSTAGRAM', 'FACEBOOK'];
+    const publishTargets =
+      targets && targets.length > 0 ? targets : ['INSTAGRAM', 'FACEBOOK'];
 
     // PER-DESTINATION IDEMPOTENCY (P0-3): a destination with a live
     // PUBLISHED record is skipped on retry — if Instagram succeeded
@@ -386,22 +420,30 @@ export class BatchProcessor extends WorkerHost {
 
     // Instagram Feed
     if (publishTargets.includes('INSTAGRAM')) {
-      await attemptDestination('INSTAGRAM', () => this.socialService.publishInstagram(batch));
+      await attemptDestination('INSTAGRAM', () =>
+        this.socialService.publishInstagram(batch),
+      );
     }
 
     // Instagram Story
     if (publishTargets.includes('INSTAGRAM_STORY')) {
-      await attemptDestination('INSTAGRAM_STORY', () => this.socialService.publishInstagramStory(batch));
+      await attemptDestination('INSTAGRAM_STORY', () =>
+        this.socialService.publishInstagramStory(batch),
+      );
     }
 
     // Facebook Feed
     if (publishTargets.includes('FACEBOOK')) {
-      await attemptDestination('FACEBOOK', () => this.socialService.publishFacebook(batch));
+      await attemptDestination('FACEBOOK', () =>
+        this.socialService.publishFacebook(batch),
+      );
     }
 
     // Facebook Story
     if (publishTargets.includes('FACEBOOK_STORY')) {
-      await attemptDestination('FACEBOOK_STORY', () => this.socialService.publishFacebookStory(batch));
+      await attemptDestination('FACEBOOK_STORY', () =>
+        this.socialService.publishFacebookStory(batch),
+      );
     }
 
     const finalStatus = allSuccess

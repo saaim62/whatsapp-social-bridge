@@ -9,9 +9,9 @@ async function bootstrap() {
   const prisma = app.get(PrismaService);
 
   console.log('Starting storage backfill...');
-  
+
   const assets = await prisma.mediaAsset.findMany({
-    where: { fileSize: 0 }
+    where: { fileSize: 0 },
   });
 
   console.log(`Found ${assets.length} assets with 0 file size.`);
@@ -19,14 +19,17 @@ async function bootstrap() {
   let updated = 0;
   for (const asset of assets) {
     if (asset.localPath) {
-      const absolutePath = path.join(process.cwd(), asset.localPath.replace(/^api\//, ''));
+      const absolutePath = path.join(
+        process.cwd(),
+        asset.localPath.replace(/^api\//, ''),
+      );
       if (fs.existsSync(absolutePath)) {
         try {
           const stats = fs.statSync(absolutePath);
           if (stats.size > 0) {
             await prisma.mediaAsset.update({
               where: { id: asset.id },
-              data: { fileSize: stats.size }
+              data: { fileSize: stats.size },
             });
             updated++;
           }

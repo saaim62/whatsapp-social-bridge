@@ -21,9 +21,9 @@ describe('JwtStrategy.validate', () => {
 
   it('rejects when the user no longer exists', async () => {
     prisma.user.findUnique.mockResolvedValue(null);
-    await expect(strategy.validate({ sub: 'gone', email: 'a@b.c', sv: 0 })).rejects.toBeInstanceOf(
-      UnauthorizedException,
-    );
+    await expect(
+      strategy.validate({ sub: 'gone', email: 'a@b.c', sv: 0 }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('rejects a BLOCKED user even with an otherwise valid token', async () => {
@@ -33,9 +33,9 @@ describe('JwtStrategy.validate', () => {
       isBlocked: true,
       sessionVersion: 0,
     });
-    await expect(strategy.validate({ sub: 'u1', email: 'a@b.c', sv: 0 })).rejects.toBeInstanceOf(
-      UnauthorizedException,
-    );
+    await expect(
+      strategy.validate({ sub: 'u1', email: 'a@b.c', sv: 0 }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('rejects tokens issued before a password reset (sessionVersion moved on)', async () => {
@@ -45,9 +45,9 @@ describe('JwtStrategy.validate', () => {
       isBlocked: false,
       sessionVersion: 2,
     });
-    await expect(strategy.validate({ sub: 'u1', email: 'a@b.c', sv: 1 })).rejects.toBeInstanceOf(
-      UnauthorizedException,
-    );
+    await expect(
+      strategy.validate({ sub: 'u1', email: 'a@b.c', sv: 1 }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('accepts a current token for an active user', async () => {
@@ -57,7 +57,9 @@ describe('JwtStrategy.validate', () => {
       isBlocked: false,
       sessionVersion: 2,
     });
-    await expect(strategy.validate({ sub: 'u1', email: 'a@b.c', sv: 2 })).resolves.toEqual({
+    await expect(
+      strategy.validate({ sub: 'u1', email: 'a@b.c', sv: 2 }),
+    ).resolves.toEqual({
       userId: 'u1',
       email: 'a@b.c',
     });

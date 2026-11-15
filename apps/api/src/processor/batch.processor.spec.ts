@@ -76,18 +76,35 @@ describe('BatchProcessor publish price gate', () => {
   }
 
   function publish() {
-    return (processor as any).handlePublishBatch('batch-1', ['INSTAGRAM', 'FACEBOOK']);
+    return (processor as any).handlePublishBatch('batch-1', [
+      'INSTAGRAM',
+      'FACEBOOK',
+    ]);
   }
 
   function statusUpdates() {
-    return prisma.productBatch.update.mock.calls.map((c: any) => c[0].data.status);
+    return prisma.productBatch.update.mock.calls.map(
+      (c: any) => c[0].data.status,
+    );
   }
 
   it('IDEMPOTENT RETRY: Instagram already PUBLISHED, Facebook failed before → retry attempts Facebook only', async () => {
     setup(batchWith({ price: 'Rs. 1,850' }));
     prisma.publication.findMany.mockResolvedValue([
-      { id: 'pub-ig', batchId: 'batch-1', platform: 'INSTAGRAM', status: 'PUBLISHED', publishedKey: 'batch-1:INSTAGRAM' },
-      { id: 'pub-fb', batchId: 'batch-1', platform: 'FACEBOOK', status: 'FAILED', publishedKey: null },
+      {
+        id: 'pub-ig',
+        batchId: 'batch-1',
+        platform: 'INSTAGRAM',
+        status: 'PUBLISHED',
+        publishedKey: 'batch-1:INSTAGRAM',
+      },
+      {
+        id: 'pub-fb',
+        batchId: 'batch-1',
+        platform: 'FACEBOOK',
+        status: 'FAILED',
+        publishedKey: null,
+      },
     ]);
     await publish();
     expect(socialService.publishInstagram).not.toHaveBeenCalled();
@@ -115,13 +132,23 @@ describe('BatchProcessor publish price gate', () => {
   it('FORCE re-publish: posts to Instagram again, supersedes the old record, writes a new live record', async () => {
     setup(batchWith({ price: 'Rs. 1,850' }));
     prisma.publication.findMany.mockResolvedValue([
-      { id: 'pub-ig', batchId: 'batch-1', platform: 'INSTAGRAM', status: 'PUBLISHED', publishedKey: 'batch-1:INSTAGRAM' },
+      {
+        id: 'pub-ig',
+        batchId: 'batch-1',
+        platform: 'INSTAGRAM',
+        status: 'PUBLISHED',
+        publishedKey: 'batch-1:INSTAGRAM',
+      },
     ]);
     await (processor as any).handlePublishBatch('batch-1', ['INSTAGRAM'], true);
     expect(socialService.publishInstagram).toHaveBeenCalledTimes(1);
     // Old live record superseded (status + key cleared) inside a transaction.
     const supersede = prisma.publication.updateMany.mock.calls[0][0];
-    expect(supersede.where).toEqual({ batchId: 'batch-1', platform: 'INSTAGRAM', status: 'PUBLISHED' });
+    expect(supersede.where).toEqual({
+      batchId: 'batch-1',
+      platform: 'INSTAGRAM',
+      status: 'PUBLISHED',
+    });
     expect(supersede.data.status).toBe('SUPERSEDED');
     expect(supersede.data.publishedKey).toBeNull();
     expect(prisma.$transaction).toHaveBeenCalled();
@@ -177,19 +204,28 @@ describe('BatchProcessor publish price gate', () => {
     await publish();
     expect(socialService.publishInstagram).toHaveBeenCalledTimes(1);
     const publishedBatch = socialService.publishInstagram.mock.calls[0][0];
-    expect(publishedBatch.generatedContent.instagramCaption).toContain('Rs. 2,400');
-    expect(publishedBatch.generatedContent.instagramCaption).not.toContain('{{PRICE}}');
+    expect(publishedBatch.generatedContent.instagramCaption).toContain(
+      'Rs. 2,400',
+    );
+    expect(publishedBatch.generatedContent.instagramCaption).not.toContain(
+      '{{PRICE}}',
+    );
     expect(statusUpdates()).toContain('PUBLISHED');
     expect(prisma.notification.create).not.toHaveBeenCalled();
   });
 
   it('an explicit manual price override unblocks an ambiguous batch and is the price used', async () => {
-    const batch = batchWith({ price: '2 pcs 1850', manual_price_override: 3000 });
+    const batch = batchWith({
+      price: '2 pcs 1850',
+      manual_price_override: 3000,
+    });
     setup(batch);
     await publish();
     expect(socialService.publishInstagram).toHaveBeenCalledTimes(1);
     const publishedBatch = socialService.publishInstagram.mock.calls[0][0];
-    expect(publishedBatch.generatedContent.instagramCaption).toContain('Rs. 3,000');
+    expect(publishedBatch.generatedContent.instagramCaption).toContain(
+      'Rs. 3,000',
+    );
     expect(statusUpdates()).toContain('PUBLISHED');
   });
 
@@ -236,7 +272,13 @@ describe('BatchProcessor publish price gate', () => {
     // Processed by the old guessing parser: "2 pcs 1850" was stored
     // with a calculated selling price. The stale value must not rescue
     // the batch — only a human override may.
-    setup(batchWith({ price: '2 pcs 1850', selling_price: 'Rs. 2,400', selling_price_value: 2400 }));
+    setup(
+      batchWith({
+        price: '2 pcs 1850',
+        selling_price: 'Rs. 2,400',
+        selling_price_value: 2400,
+      }),
+    );
     await publish();
     expect(socialService.publishInstagram).not.toHaveBeenCalled();
     expect(socialService.publishFacebook).not.toHaveBeenCalled();
@@ -245,13 +287,20 @@ describe('BatchProcessor publish price gate', () => {
   });
 
   it('a manual override wins over the derived price (derived 2400, override 2500 → publishes at 2500)', async () => {
-    const batch = batchWith({ price: 'Rs. 1,850', manual_price_override: 2500 });
+    const batch = batchWith({
+      price: 'Rs. 1,850',
+      manual_price_override: 2500,
+    });
     setup(batch);
     await publish();
     expect(socialService.publishInstagram).toHaveBeenCalledTimes(1);
     const publishedBatch = socialService.publishInstagram.mock.calls[0][0];
-    expect(publishedBatch.generatedContent.instagramCaption).toContain('Rs. 2,500');
-    expect(publishedBatch.generatedContent.instagramCaption).not.toContain('Rs. 2,400');
+    expect(publishedBatch.generatedContent.instagramCaption).toContain(
+      'Rs. 2,500',
+    );
+    expect(publishedBatch.generatedContent.instagramCaption).not.toContain(
+      'Rs. 2,400',
+    );
     expect(statusUpdates()).toContain('PUBLISHED');
   });
 

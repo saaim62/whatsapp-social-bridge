@@ -46,7 +46,9 @@ export class MediaSigningService {
   sign(subject: string, ttlSeconds: number): string {
     const exp = Math.floor(Date.now() / 1000) + ttlSeconds;
     const payload = `${Buffer.from(subject, 'utf8').toString('base64url')}.${exp}`;
-    const sig = createHmac('sha256', this.secret()).update(payload).digest('hex');
+    const sig = createHmac('sha256', this.secret())
+      .update(payload)
+      .digest('hex');
     return `${payload}.${sig}`;
   }
 

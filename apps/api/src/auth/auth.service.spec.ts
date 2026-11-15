@@ -23,9 +23,9 @@ describe('AuthService password reset token handling', () => {
     'rejects malformed token %p BEFORE any database call',
     async (token: any) => {
       const { service, prisma } = makeService();
-      await expect(service.resetPassword(token, 'new-password-123')).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
+      await expect(
+        service.resetPassword(token, 'new-password-123'),
+      ).rejects.toBeInstanceOf(BadRequestException);
       expect(prisma.user.findFirst).not.toHaveBeenCalled();
       expect(prisma.user.updateMany).not.toHaveBeenCalled();
       expect(prisma.user.update).not.toHaveBeenCalled();
@@ -35,9 +35,9 @@ describe('AuthService password reset token handling', () => {
   it('rejects a well-formed token that matches no unexpired row (expired / unknown / already used)', async () => {
     const { service, prisma } = makeService();
     prisma.user.updateMany.mockResolvedValue({ count: 0 });
-    await expect(service.resetPassword(VALID_TOKEN, 'new-password-123')).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      service.resetPassword(VALID_TOKEN, 'new-password-123'),
+    ).rejects.toBeInstanceOf(BadRequestException);
     // The consume must be conditional on the token AND its expiry.
     const where = prisma.user.updateMany.mock.calls[0][0].where;
     expect(where.resetPasswordToken).toBe(VALID_TOKEN);
@@ -77,7 +77,9 @@ describe('AuthService email verification token handling', () => {
     'rejects malformed token %p BEFORE any database call',
     async (token: any) => {
       const { service, prisma } = makeService();
-      await expect(service.verifyEmail(token)).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.verifyEmail(token)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
       expect(prisma.user.findFirst).not.toHaveBeenCalled();
       expect(prisma.user.updateMany).not.toHaveBeenCalled();
     },
@@ -86,7 +88,9 @@ describe('AuthService email verification token handling', () => {
   it('rejects an expired or already-consumed verification token', async () => {
     const { service, prisma } = makeService();
     prisma.user.updateMany.mockResolvedValue({ count: 0 });
-    await expect(service.verifyEmail(VALID_TOKEN)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.verifyEmail(VALID_TOKEN)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
     const where = prisma.user.updateMany.mock.calls[0][0].where;
     expect(where.verificationToken).toBe(VALID_TOKEN);
     expect(where.verificationTokenExpiresAt.gt).toBeInstanceOf(Date);
@@ -105,7 +109,10 @@ describe('AuthService email verification token handling', () => {
   it('registration issues a verification token with a ~24 hour expiry', async () => {
     const { service, prisma } = makeService();
     prisma.user.findUnique.mockResolvedValue(null);
-    prisma.user.create.mockImplementation(async ({ data }: any) => ({ id: 'u1', ...data }));
+    prisma.user.create.mockImplementation(async ({ data }: any) => ({
+      id: 'u1',
+      ...data,
+    }));
     const before = Date.now();
     const user: any = await service.register('new@b.c', 'password-123');
     const after = Date.now();

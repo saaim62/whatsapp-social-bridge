@@ -9,7 +9,7 @@ export class SettingsService {
     let settings = await this.prisma.settings.findUnique({
       where: { userId },
     });
-    
+
     if (!settings) {
       settings = await this.prisma.settings.create({
         data: {
@@ -19,14 +19,18 @@ export class SettingsService {
         },
       });
     }
-    
+
     return settings;
   }
 
   async updateSettings(userId: string, data: any) {
-    const isSyncActive = typeof data?.isSyncActive === 'boolean' ? data.isSyncActive : undefined;
+    const isSyncActive =
+      typeof data?.isSyncActive === 'boolean' ? data.isSyncActive : undefined;
     let historySyncDepthHours: number | undefined = undefined;
-    if (data?.historySyncDepthHours !== undefined && data?.historySyncDepthHours !== null) {
+    if (
+      data?.historySyncDepthHours !== undefined &&
+      data?.historySyncDepthHours !== null
+    ) {
       const parsed = parseInt(String(data.historySyncDepthHours), 10);
       if (!isNaN(parsed) && parsed > 0) {
         historySyncDepthHours = parsed;
@@ -45,7 +49,9 @@ export class SettingsService {
         marginValue = parsed;
       }
     }
-    const priceRounding = [0, 10, 50, 100, 500].includes(Number(data?.priceRounding))
+    const priceRounding = [0, 10, 50, 100, 500].includes(
+      Number(data?.priceRounding),
+    )
       ? Number(data.priceRounding)
       : undefined;
     const captionFooter =
@@ -68,7 +74,9 @@ export class SettingsService {
       },
       update: {
         ...(isSyncActive !== undefined ? { isSyncActive } : {}),
-        ...(historySyncDepthHours !== undefined ? { historySyncDepthHours } : {}),
+        ...(historySyncDepthHours !== undefined
+          ? { historySyncDepthHours }
+          : {}),
         ...(marginType !== undefined ? { marginType } : {}),
         ...(marginValue !== undefined ? { marginValue } : {}),
         ...(priceRounding !== undefined ? { priceRounding } : {}),

@@ -34,7 +34,10 @@ export class BatchController {
   }
 
   @Post('delete-bulk')
-  async deleteBatchesBulk(@Request() req: any, @Body() body: { ids: string[] }) {
+  async deleteBatchesBulk(
+    @Request() req: any,
+    @Body() body: { ids: string[] },
+  ) {
     if (!body.ids || !Array.isArray(body.ids) || body.ids.length === 0) {
       throw new HttpException('No IDs provided', HttpStatus.BAD_REQUEST);
     }
@@ -42,23 +45,43 @@ export class BatchController {
   }
 
   @Post('publish-bulk')
-  async publishBatchesBulk(@Request() req: any, @Body() body: { ids: string[]; force?: boolean }) {
+  async publishBatchesBulk(
+    @Request() req: any,
+    @Body() body: { ids: string[]; force?: boolean },
+  ) {
     if (!body.ids || !Array.isArray(body.ids) || body.ids.length === 0) {
       throw new HttpException('No IDs provided', HttpStatus.BAD_REQUEST);
     }
-    return this.batchService.publishBatchesBulk(body.ids, req.user.userId, body?.force === true);
+    return this.batchService.publishBatchesBulk(
+      body.ids,
+      req.user.userId,
+      body?.force === true,
+    );
   }
 
   @Post(':id/approve')
-  async approveBatch(@Request() req: any, @Param('id') id: string, @Body() body: any) {
+  async approveBatch(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() body: any,
+  ) {
     return this.batchService.approveBatch(id, body, req.user.userId);
   }
 
   @Post(':id/publish')
-  async publishBatch(@Request() req: any, @Param('id') id: string, @Body() body: any) {
+  async publishBatch(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() body: any,
+  ) {
     // `force: true` is the explicit opt-in to re-post to destinations
     // that already have a live PUBLISHED record (P0-3); default false.
-    return this.batchService.publishBatch(id, req.user.userId, body?.targets, body?.force === true);
+    return this.batchService.publishBatch(
+      id,
+      req.user.userId,
+      body?.targets,
+      body?.force === true,
+    );
   }
 
   @Post(':id/reject')
@@ -72,7 +95,10 @@ export class BatchController {
   }
 
   @Post('clear-ai-bulk')
-  async clearAIContentBulk(@Request() req: any, @Body() body: { ids: string[] }) {
+  async clearAIContentBulk(
+    @Request() req: any,
+    @Body() body: { ids: string[] },
+  ) {
     if (!body.ids || !Array.isArray(body.ids) || body.ids.length === 0) {
       throw new HttpException('No IDs provided', HttpStatus.BAD_REQUEST);
     }
@@ -88,21 +114,32 @@ export class BatchController {
   async reorderMedia(
     @Request() req: any,
     @Param('id') id: string,
-    @Body() body: { orderedMediaIds: string[] }
+    @Body() body: { orderedMediaIds: string[] },
   ) {
     if (!body.orderedMediaIds || !Array.isArray(body.orderedMediaIds)) {
       throw new HttpException('Invalid media IDs', HttpStatus.BAD_REQUEST);
     }
-    return this.batchService.reorderMedia(id, body.orderedMediaIds, req.user.userId);
+    return this.batchService.reorderMedia(
+      id,
+      body.orderedMediaIds,
+      req.user.userId,
+    );
   }
 
   @Post('media/:mediaId/mask')
   async maskMedia(
     @Request() req: any,
     @Param('mediaId') mediaId: string,
-    @Body() body: { boxes: { left: number; top: number; width: number; height: number }[] },
+    @Body()
+    body: {
+      boxes: { left: number; top: number; width: number; height: number }[];
+    },
   ) {
-    const result = await this.batchService.maskMediaLogo(mediaId, body.boxes, req.user.userId);
+    const result = await this.batchService.maskMediaLogo(
+      mediaId,
+      body.boxes,
+      req.user.userId,
+    );
     if (!result.success) {
       throw new HttpException(result.message, HttpStatus.BAD_REQUEST);
     }
@@ -111,7 +148,10 @@ export class BatchController {
 
   @Post('media/:mediaId/revert')
   async revertMedia(@Request() req: any, @Param('mediaId') mediaId: string) {
-    const result = await this.batchService.revertMediaLogo(mediaId, req.user.userId);
+    const result = await this.batchService.revertMediaLogo(
+      mediaId,
+      req.user.userId,
+    );
     if (!result.success) {
       throw new HttpException(result.message, HttpStatus.BAD_REQUEST);
     }
@@ -125,19 +165,34 @@ export class BatchController {
   }
 
   @Post('media/:mediaId/trigger-auto-blur')
-  async triggerAutoBlur(@Request() req: any, @Param('mediaId') mediaId: string) {
-    const result = await this.batchService.triggerManualAutoBlur(mediaId, req.user.userId);
+  async triggerAutoBlur(
+    @Request() req: any,
+    @Param('mediaId') mediaId: string,
+  ) {
+    const result = await this.batchService.triggerManualAutoBlur(
+      mediaId,
+      req.user.userId,
+    );
     if (!result.success) {
-      throw new HttpException(result.message || 'Failed to trigger blur', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        result.message || 'Failed to trigger blur',
+        HttpStatus.BAD_REQUEST,
+      );
     }
     return result;
   }
 
   @Post('media/:mediaId/stop-blur')
   async stopMediaBlur(@Request() req: any, @Param('mediaId') mediaId: string) {
-    const result = await this.batchService.stopMediaBlur(mediaId, req.user.userId);
+    const result = await this.batchService.stopMediaBlur(
+      mediaId,
+      req.user.userId,
+    );
     if (!result.success) {
-      throw new HttpException(result.message || 'Failed to stop blur', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        result.message || 'Failed to stop blur',
+        HttpStatus.BAD_REQUEST,
+      );
     }
     return result;
   }
@@ -146,32 +201,70 @@ export class BatchController {
   async moveMedia(
     @Request() req: any,
     @Param('mediaId') mediaId: string,
-    @Body() body: { targetBatchId: string; retainAI?: boolean }
+    @Body() body: { targetBatchId: string; retainAI?: boolean },
   ) {
     if (!body.targetBatchId) {
-      throw new HttpException('targetBatchId is required', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        'targetBatchId is required',
+        HttpStatus.BAD_REQUEST,
+      );
     }
-    return this.batchService.moveMedia(mediaId, body.targetBatchId, req.user.userId, body.retainAI);
+    return this.batchService.moveMedia(
+      mediaId,
+      body.targetBatchId,
+      req.user.userId,
+      body.retainAI,
+    );
   }
 
   @Post('send-bulk')
-  async sendBatchesBulk(@Request() req: any, @Body() body: { batchIds: string[], targetEmails: string[] }) {
-    if (!body.batchIds || !body.targetEmails || body.targetEmails.length === 0 || body.batchIds.length === 0) {
-      throw new HttpException('batchIds and targetEmails are required', HttpStatus.BAD_REQUEST);
+  async sendBatchesBulk(
+    @Request() req: any,
+    @Body() body: { batchIds: string[]; targetEmails: string[] },
+  ) {
+    if (
+      !body.batchIds ||
+      !body.targetEmails ||
+      body.targetEmails.length === 0 ||
+      body.batchIds.length === 0
+    ) {
+      throw new HttpException(
+        'batchIds and targetEmails are required',
+        HttpStatus.BAD_REQUEST,
+      );
     }
-    return this.batchService.sendBatchesBulk(body.batchIds, req.user.userId, body.targetEmails);
+    return this.batchService.sendBatchesBulk(
+      body.batchIds,
+      req.user.userId,
+      body.targetEmails,
+    );
   }
 
   @Post(':id/send')
-  async sendBatchToUser(@Request() req: any, @Param('id') id: string, @Body() body: { targetEmails: string[] }) {
+  async sendBatchToUser(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() body: { targetEmails: string[] },
+  ) {
     if (!body.targetEmails || body.targetEmails.length === 0) {
-      throw new HttpException('targetEmails is required', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        'targetEmails is required',
+        HttpStatus.BAD_REQUEST,
+      );
     }
-    return this.batchService.sendBatchToUsers(id, req.user.userId, body.targetEmails);
+    return this.batchService.sendBatchToUsers(
+      id,
+      req.user.userId,
+      body.targetEmails,
+    );
   }
 
   @Patch(':id/rename')
-  async renameBatch(@Request() req: any, @Param('id') id: string, @Body() body: { name: string }) {
+  async renameBatch(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() body: { name: string },
+  ) {
     if (!body.name) {
       throw new HttpException('name is required', HttpStatus.BAD_REQUEST);
     }
@@ -179,13 +272,24 @@ export class BatchController {
   }
 
   @Patch(':id/price')
-  async setBatchPrice(@Request() req: any, @Param('id') id: string, @Body() body: { price: number }) {
+  async setBatchPrice(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() body: { price: number },
+  ) {
     if (body.price === undefined || body.price === null) {
       throw new HttpException('price is required', HttpStatus.BAD_REQUEST);
     }
-    const result = await this.batchService.setManualPrice(id, req.user.userId, Number(body.price));
+    const result = await this.batchService.setManualPrice(
+      id,
+      req.user.userId,
+      Number(body.price),
+    );
     if (!result.success) {
-      throw new HttpException(result.message || 'Failed to set price', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        result.message || 'Failed to set price',
+        HttpStatus.BAD_REQUEST,
+      );
     }
     return result;
   }

@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
-import { Zap, X, ArrowRight, Lock } from "lucide-react";
-import { useDemoStore } from "@/lib/demo-store";
+import Link from 'next/link';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Zap, X, ArrowRight, Lock } from 'lucide-react';
+import { useDemoStore } from '@/lib/demo-store';
 
 /**
  * The demo gate. Shown when a logged-out visitor tries a real action
@@ -29,7 +29,7 @@ export function AuthPrompt() {
             initial={{ scale: 0.95, opacity: 0, y: 24 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.95, opacity: 0, y: 12 }}
-            transition={{ type: "spring", stiffness: 380, damping: 30 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 30 }}
             className="glass-panel w-full max-w-md rounded-3xl overflow-hidden shadow-[0_0_60px_rgba(217,165,33,0.15)] border-white/10 relative"
             onClick={(e) => e.stopPropagation()}
           >
@@ -53,8 +53,10 @@ export function AuthPrompt() {
                 Enjoying the tour?
               </h2>
               <p className="mt-3 text-sm text-slate-400 leading-relaxed">
-                You&apos;re exploring DropRoute with sample data. To{" "}
-                <span className="text-gold-300 font-semibold">{actionLabel}</span>{" "}
+                You&apos;re exploring DropRoute with sample data. To{' '}
+                <span className="text-gold-300 font-semibold">
+                  {actionLabel}
+                </span>{' '}
                 for real, create a free account — then it&apos;s your WhatsApp,
                 your products, your store.
               </p>

@@ -32,7 +32,10 @@ describe('WhatsappService ingestion allowlist gate', () => {
     };
   }
 
-  async function setup(opts: { syncActive: boolean; allowed: (jid: string) => boolean }) {
+  async function setup(opts: {
+    syncActive: boolean;
+    allowed: (jid: string) => boolean;
+  }) {
     handlers = {};
     const fakeClient = {
       ev: {
@@ -46,9 +49,15 @@ describe('WhatsappService ingestion allowlist gate', () => {
     };
     const fakeBaileys = {
       default: jest.fn(() => fakeClient),
-      useMultiFileAuthState: jest.fn(async () => ({ state: {}, saveCreds: jest.fn() })),
+      useMultiFileAuthState: jest.fn(async () => ({
+        state: {},
+        saveCreds: jest.fn(),
+      })),
       DisconnectReason: { loggedOut: 401 },
-      fetchLatestWaWebVersion: jest.fn(async () => ({ version: [2, 3000, 0], isLatest: true })),
+      fetchLatestWaWebVersion: jest.fn(async () => ({
+        version: [2, 3000, 0],
+        isLatest: true,
+      })),
     };
 
     batchService = {
@@ -105,14 +114,20 @@ describe('WhatsappService ingestion allowlist gate', () => {
   describe('live messages.upsert', () => {
     it('paused sync → nothing cached, nothing buffered', async () => {
       await setup({ syncActive: false, allowed: () => true });
-      await handlers['messages.upsert']({ type: 'notify', messages: [msg(GOOD_JID, 'm1')] });
+      await handlers['messages.upsert']({
+        type: 'notify',
+        messages: [msg(GOOD_JID, 'm1')],
+      });
       expect(saveCacheSpy).not.toHaveBeenCalled();
       expect((service as any).messageBuffer.size).toBe(0);
     });
 
     it('empty allowlist → nothing cached, nothing buffered', async () => {
       await setup({ syncActive: true, allowed: () => false });
-      await handlers['messages.upsert']({ type: 'notify', messages: [msg(GOOD_JID, 'm1')] });
+      await handlers['messages.upsert']({
+        type: 'notify',
+        messages: [msg(GOOD_JID, 'm1')],
+      });
       expect(saveCacheSpy).not.toHaveBeenCalled();
       expect((service as any).messageBuffer.size).toBe(0);
     });
@@ -121,12 +136,19 @@ describe('WhatsappService ingestion allowlist gate', () => {
       await setup({ syncActive: true, allowed: (jid) => jid === GOOD_JID });
       const good = msg(GOOD_JID, 'm-good');
       const bad = msg(BAD_JID, 'm-bad');
-      await handlers['messages.upsert']({ type: 'notify', messages: [good, bad] });
+      await handlers['messages.upsert']({
+        type: 'notify',
+        messages: [good, bad],
+      });
       expect(saveCacheSpy).toHaveBeenCalledTimes(1);
       const cached = saveCacheSpy.mock.calls[0][1];
       expect(cached).toEqual([good]);
-      expect((service as any).messageBuffer.has(`${USER}_${GOOD_JID}`)).toBe(true);
-      expect((service as any).messageBuffer.has(`${USER}_${BAD_JID}`)).toBe(false);
+      expect((service as any).messageBuffer.has(`${USER}_${GOOD_JID}`)).toBe(
+        true,
+      );
+      expect((service as any).messageBuffer.has(`${USER}_${BAD_JID}`)).toBe(
+        false,
+      );
     });
   });
 

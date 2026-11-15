@@ -44,24 +44,36 @@ export class EmailService {
     const url = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/verify-email?token=${token}`;
 
     // Never log the link itself — it carries a live token. Recipient + template only.
-    this.logger.log(`Verification email queued for ${email} (template: verify-email)`);
+    this.logger.log(
+      `Verification email queued for ${email} (template: verify-email)`,
+    );
 
-    const from = process.env.SMTP_FROM || process.env.SMTP_USER || '"DropRoute" <noreply@droproute.com>';
+    const from =
+      process.env.SMTP_FROM ||
+      process.env.SMTP_USER ||
+      '"DropRoute" <noreply@droproute.com>';
 
     // Fire and forget so we don't block the UI
     setTimeout(() => {
-      this.logger.log('[EmailService] Executing background sendMail for verification...');
-      this.transporter.sendMail({
-        from,
-        to: email,
-        subject: 'Verify your DropRoute account',
-        html: this.verificationEmailHtml(url),
-        text: this.verificationEmailText(url),
-      }).then(() => {
-        this.logger.log('[EmailService] Verification sendMail completed successfully.');
-      }).catch(e => {
-        this.logger.error('Failed to send verification email', e);
-      });
+      this.logger.log(
+        '[EmailService] Executing background sendMail for verification...',
+      );
+      this.transporter
+        .sendMail({
+          from,
+          to: email,
+          subject: 'Verify your DropRoute account',
+          html: this.verificationEmailHtml(url),
+          text: this.verificationEmailText(url),
+        })
+        .then(() => {
+          this.logger.log(
+            '[EmailService] Verification sendMail completed successfully.',
+          );
+        })
+        .catch((e) => {
+          this.logger.error('Failed to send verification email', e);
+        });
     }, 0);
   }
 
@@ -69,28 +81,46 @@ export class EmailService {
     const url = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
 
     // Never log the link itself — it carries a live token. Recipient + template only.
-    this.logger.log(`Password reset email queued for ${email} (template: reset-password)`);
+    this.logger.log(
+      `Password reset email queued for ${email} (template: reset-password)`,
+    );
 
-    const from = process.env.SMTP_FROM || process.env.SMTP_USER || '"DropRoute" <noreply@droproute.com>';
+    const from =
+      process.env.SMTP_FROM ||
+      process.env.SMTP_USER ||
+      '"DropRoute" <noreply@droproute.com>';
 
     // Fire and forget so we don't block the UI
     setTimeout(() => {
-      this.logger.log('[EmailService] Executing background sendMail for reset password...');
-      this.transporter.sendMail({
-        from,
-        to: email,
-        subject: 'Reset your DropRoute password',
-        html: this.passwordResetEmailHtml(url),
-        text: this.passwordResetEmailText(url),
-      }).then(() => {
-        this.logger.log('[EmailService] Reset password sendMail completed successfully.');
-      }).catch(e => {
-        this.logger.error('Failed to send reset email', e);
-      });
+      this.logger.log(
+        '[EmailService] Executing background sendMail for reset password...',
+      );
+      this.transporter
+        .sendMail({
+          from,
+          to: email,
+          subject: 'Reset your DropRoute password',
+          html: this.passwordResetEmailHtml(url),
+          text: this.passwordResetEmailText(url),
+        })
+        .then(() => {
+          this.logger.log(
+            '[EmailService] Reset password sendMail completed successfully.',
+          );
+        })
+        .catch((e) => {
+          this.logger.error('Failed to send reset email', e);
+        });
     }, 0);
   }
 
-  private emailLayout(heading: string, intro: string, buttonLabel: string, url: string, footnote: string): string {
+  private emailLayout(
+    heading: string,
+    intro: string,
+    buttonLabel: string,
+    url: string,
+    footnote: string,
+  ): string {
     return `<!DOCTYPE html>
 <html lang="en">
 <head>

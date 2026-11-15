@@ -1,4 +1,4 @@
-import { create } from "zustand";
+import { create } from 'zustand';
 
 /**
  * Demo mode state. When a visitor is logged out, the app renders the
@@ -17,9 +17,9 @@ type DemoState = {
 export const useDemoStore = create<DemoState>((set) => ({
   active: false,
   promptOpen: false,
-  actionLabel: "do this",
+  actionLabel: 'do this',
   setActive: (active) => set({ active }),
   openPrompt: (actionLabel) =>
-    set({ promptOpen: true, actionLabel: actionLabel || "do this" }),
+    set({ promptOpen: true, actionLabel: actionLabel || 'do this' }),
   closePrompt: () => set({ promptOpen: false }),
 }));

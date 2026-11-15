@@ -100,7 +100,9 @@ export class SocialService {
     }
     // Fallback for contexts where signing is not wired (unit tests):
     // the legacy public path. Production always injects the signer.
-    const baseUrl = this.configService.get('PUBLIC_API_URL') || 'https://api-droproute.duckdns.org';
+    const baseUrl =
+      this.configService.get('PUBLIC_API_URL') ||
+      'https://api-droproute.duckdns.org';
     return `${baseUrl}/api/uploads/${filename}`;
   }
 
@@ -252,7 +254,9 @@ export class SocialService {
           instagramUsername = ig.username ?? null;
         }
       } catch (igErr) {
-        this.logger.warn(`Could not fetch Instagram account for page ${page.id}`);
+        this.logger.warn(
+          `Could not fetch Instagram account for page ${page.id}`,
+        );
       }
       result.push({
         pageId: page.id,
@@ -327,10 +331,19 @@ export class SocialService {
    * clear error when the saved page is no longer accessible — it never
    * falls back to another page.
    */
-  private async getMetaPublishingContext(userId: string): Promise<{ pageId: string, pageName: string, pageAccessToken: string, igAccountId?: string }> {
+  private async getMetaPublishingContext(
+    userId: string,
+  ): Promise<{
+    pageId: string;
+    pageName: string;
+    pageAccessToken: string;
+    igAccountId?: string;
+  }> {
     const userAccessToken = await this.getMetaUserToken(userId);
     if (!userAccessToken) {
-      throw new Error('User Access Token is missing. Please connect your Meta account.');
+      throw new Error(
+        'User Access Token is missing. Please connect your Meta account.',
+      );
     }
     const saved = await this.getSavedDestination(userId);
     if (!saved) {
@@ -340,8 +353,13 @@ export class SocialService {
     try {
       pages = await this.fetchUserPages(userAccessToken);
     } catch (err: any) {
-      this.logger.error('Failed to fetch Meta publishing context', err.response?.data || err.message);
-      throw new Error('Failed to fetch Facebook Pages. Ensure your user account has the required permissions.');
+      this.logger.error(
+        'Failed to fetch Meta publishing context',
+        err.response?.data || err.message,
+      );
+      throw new Error(
+        'Failed to fetch Facebook Pages. Ensure your user account has the required permissions.',
+      );
     }
     const page = pages.find((p) => p.id === saved.pageId);
     if (!page) {
@@ -354,20 +372,32 @@ export class SocialService {
     // the saved value rather than blocking an otherwise-valid publish.
     let igAccountId: string | undefined = saved.igAccountId ?? undefined;
     try {
-      const igRes = await axios.get(`https://graph.facebook.com/v19.0/${page.id}`, {
-        params: { fields: 'instagram_business_account', access_token: page.access_token }
-      });
+      const igRes = await axios.get(
+        `https://graph.facebook.com/v19.0/${page.id}`,
+        {
+          params: {
+            fields: 'instagram_business_account',
+            access_token: page.access_token,
+          },
+        },
+      );
       const liveIgId = igRes.data?.instagram_business_account?.id;
       if (liveIgId) igAccountId = liveIgId;
       else if (igAccountId) {
-        this.logger.warn(`Saved Instagram account is no longer linked to page ${page.id}; Instagram publishing will fail until the destination is re-saved.`);
+        this.logger.warn(
+          `Saved Instagram account is no longer linked to page ${page.id}; Instagram publishing will fail until the destination is re-saved.`,
+        );
         igAccountId = undefined;
       }
     } catch (igErr) {
-      this.logger.warn(`Could not verify Instagram account for page ${page.id}; using the saved destination.`);
+      this.logger.warn(
+        `Could not verify Instagram account for page ${page.id}; using the saved destination.`,
+      );
     }
 
-    this.logger.log(`Publishing destination: Facebook Page ${page.name} (${page.id})${igAccountId ? `, Instagram ${igAccountId}` : ''}`);
+    this.logger.log(
+      `Publishing destination: Facebook Page ${page.name} (${page.id})${igAccountId ? `, Instagram ${igAccountId}` : ''}`,
+    );
     return {
       pageId: page.id,
       pageName: page.name,
@@ -382,13 +412,18 @@ export class SocialService {
     const userAccessToken = await this.getMetaUserToken(batch.userId);
 
     if (!userAccessToken) {
-      throw new Error('User Access Token is missing. Please connect your Meta account.');
+      throw new Error(
+        'User Access Token is missing. Please connect your Meta account.',
+      );
     }
 
-    const { pageAccessToken, igAccountId } = await this.getMetaPublishingContext(batch.userId);
+    const { pageAccessToken, igAccountId } =
+      await this.getMetaPublishingContext(batch.userId);
 
     if (!igAccountId) {
-      throw new Error('No Instagram Business Account linked to your Facebook Page.');
+      throw new Error(
+        'No Instagram Business Account linked to your Facebook Page.',
+      );
     }
     const accessToken = pageAccessToken;
 
@@ -408,7 +443,10 @@ export class SocialService {
       const isVideoMap: Record<string, boolean> = {};
 
       for (const asset of carouselAssets) {
-        let absolutePath = path.join(process.cwd(), asset.localPath.replace(/^api\//, ''));
+        let absolutePath = path.join(
+          process.cwd(),
+          asset.localPath.replace(/^api\//, ''),
+        );
         if (fs.existsSync(absolutePath)) {
           const isVideo = asset.mimeType?.startsWith('video/') || false;
 
@@ -490,10 +528,13 @@ export class SocialService {
     const userAccessToken = await this.getMetaUserToken(batch.userId);
 
     if (!userAccessToken) {
-      throw new Error('Access Token is missing. Please connect your Meta account.');
+      throw new Error(
+        'Access Token is missing. Please connect your Meta account.',
+      );
     }
 
-    const { pageId, pageAccessToken: accessToken } = await this.getMetaPublishingContext(batch.userId);
+    const { pageId, pageAccessToken: accessToken } =
+      await this.getMetaPublishingContext(batch.userId);
 
     const caption = batch.generatedContent?.facebookCaption || batch.rawText;
 
@@ -513,7 +554,10 @@ export class SocialService {
       if (photos.length > 1) {
         const mediaFbids: string[] = [];
         for (const asset of photos) {
-          const absolutePath = path.join(process.cwd(), asset.localPath.replace(/^api\//, ''));
+          const absolutePath = path.join(
+            process.cwd(),
+            asset.localPath.replace(/^api\//, ''),
+          );
           if (fs.existsSync(absolutePath)) {
             const formData = new FormData();
             formData.append('source', fs.createReadStream(absolutePath));
@@ -550,7 +594,10 @@ export class SocialService {
           `Successfully published photo album to Facebook: ${finalFeedResId}`,
         );
       } else if (photos.length === 1) {
-        const absolutePath = path.join(process.cwd(), photos[0].localPath.replace(/^api\//, ''));
+        const absolutePath = path.join(
+          process.cwd(),
+          photos[0].localPath.replace(/^api\//, ''),
+        );
         if (fs.existsSync(absolutePath)) {
           const formData = new FormData();
           formData.append('message', caption);
@@ -575,7 +622,10 @@ export class SocialService {
 
       // 2. Publish all videos sequentially as individual posts
       for (const asset of videos) {
-        let absolutePath = path.join(process.cwd(), asset.localPath.replace(/^api\//, ''));
+        let absolutePath = path.join(
+          process.cwd(),
+          asset.localPath.replace(/^api\//, ''),
+        );
         if (fs.existsSync(absolutePath)) {
           absolutePath = await this.compressVideo(absolutePath);
 
@@ -626,7 +676,9 @@ export class SocialService {
 
   async getMetaOAuthUrl(userId: string): Promise<string> {
     const appId = this.configService.get('META_APP_ID');
-    const redirectUri = this.configService.get('FACEBOOK_REDIRECT_URI') || 'http://localhost:3001/api/social/oauth/facebook/callback';
+    const redirectUri =
+      this.configService.get('FACEBOOK_REDIRECT_URI') ||
+      'http://localhost:3001/api/social/oauth/facebook/callback';
 
     // The state parameter is a cryptographically random nonce stored
     // server-side, bound to the initiating user, with a 10-minute TTL.
@@ -641,7 +693,13 @@ export class SocialService {
       },
     });
 
-    const scope = ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts', 'instagram_basic', 'instagram_content_publish'].join(',');
+    const scope = [
+      'pages_show_list',
+      'pages_read_engagement',
+      'pages_manage_posts',
+      'instagram_basic',
+      'instagram_content_publish',
+    ].join(',');
 
     return `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=${scope}`;
   }
@@ -649,14 +707,18 @@ export class SocialService {
   async handleMetaOAuthCallback(code: string, state: string): Promise<void> {
     const appId = this.configService.get('META_APP_ID');
     const appSecret = this.configService.get('META_APP_SECRET');
-    const redirectUri = this.configService.get('FACEBOOK_REDIRECT_URI') || 'http://localhost:3001/api/social/oauth/facebook/callback';
+    const redirectUri =
+      this.configService.get('FACEBOOK_REDIRECT_URI') ||
+      'http://localhost:3001/api/social/oauth/facebook/callback';
 
     // Consume the state nonce exactly once. Unknown, expired, malformed,
     // or replayed states are rejected before any token exchange happens.
     if (typeof state !== 'string' || !OAUTH_STATE_FORMAT.test(state)) {
       throw new Error('Invalid state parameter');
     }
-    const record = await this.prisma.oAuthState.findUnique({ where: { nonce: state } });
+    const record = await this.prisma.oAuthState.findUnique({
+      where: { nonce: state },
+    });
     if (!record) {
       throw new Error('Invalid state parameter');
     }
@@ -670,13 +732,13 @@ export class SocialService {
 
     // 1. Exchange code for short-lived access token
     const tokenUrl = `https://graph.facebook.com/v19.0/oauth/access_token?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${appSecret}&code=${code}`;
-    
+
     const tokenRes = await axios.get(tokenUrl);
     const shortLivedToken = tokenRes.data.access_token;
 
     // 2. Exchange short-lived token for long-lived token
     const longLivedUrl = `https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${shortLivedToken}`;
-    
+
     const longLivedRes = await axios.get(longLivedUrl);
     const longLivedToken = longLivedRes.data.access_token;
 
@@ -689,7 +751,7 @@ export class SocialService {
         userId_platform: {
           userId,
           platform: 'META',
-        }
+        },
       },
       update: {
         accessToken: encryptedToken,
@@ -698,7 +760,7 @@ export class SocialService {
         userId,
         platform: 'META',
         accessToken: encryptedToken,
-      }
+      },
     });
 
     this.logger.log(`Successfully connected Meta account for user ${userId}`);
@@ -707,14 +769,22 @@ export class SocialService {
   async getSocialAccounts(userId: string) {
     const accounts = await this.prisma.socialAccount.findMany({
       where: { userId },
-      select: { platform: true, facebookPageId: true, facebookPageName: true, instagramUserId: true, instagramUsername: true, createdAt: true, updatedAt: true }
+      select: {
+        platform: true,
+        facebookPageId: true,
+        facebookPageName: true,
+        instagramUserId: true,
+        instagramUsername: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
     return accounts;
   }
 
   async disconnectMeta(userId: string) {
     await this.prisma.socialAccount.deleteMany({
-      where: { userId, platform: 'META' }
+      where: { userId, platform: 'META' },
     });
     this.logger.log(`Disconnected Meta for user ${userId}`);
     return { success: true };
@@ -726,13 +796,18 @@ export class SocialService {
     const userAccessToken = await this.getMetaUserToken(batch.userId);
 
     if (!userAccessToken) {
-      throw new Error('User Access Token is missing. Please connect your Meta account.');
+      throw new Error(
+        'User Access Token is missing. Please connect your Meta account.',
+      );
     }
 
-    const { pageAccessToken, igAccountId } = await this.getMetaPublishingContext(batch.userId);
+    const { pageAccessToken, igAccountId } =
+      await this.getMetaPublishingContext(batch.userId);
 
     if (!igAccountId) {
-      throw new Error('No Instagram Business Account linked to your Facebook Page.');
+      throw new Error(
+        'No Instagram Business Account linked to your Facebook Page.',
+      );
     }
     const accessToken = pageAccessToken;
 
@@ -745,7 +820,10 @@ export class SocialService {
 
       // We publish only the first asset as a story (Instagram API limitation for simple flows)
       const asset = allAssets[0];
-      let absolutePath = path.join(process.cwd(), asset.localPath.replace(/^api\//, ''));
+      let absolutePath = path.join(
+        process.cwd(),
+        asset.localPath.replace(/^api\//, ''),
+      );
       let finalCreationId = '';
 
       if (fs.existsSync(absolutePath)) {
@@ -772,17 +850,19 @@ export class SocialService {
         );
 
         const creationId = itemRes.data.id;
-        finalCreationId = creationId; 
+        finalCreationId = creationId;
 
         await this.pollInstagramContainer(creationId, accessToken);
-        
+
         const publishRes = await axios.post(
           `https://graph.facebook.com/v19.0/${igAccountId}/media_publish`,
           null,
           { params: { creation_id: creationId, access_token: accessToken } },
         );
-        
-        this.logger.log(`Successfully published Instagram Story: ${publishRes.data.id}`);
+
+        this.logger.log(
+          `Successfully published Instagram Story: ${publishRes.data.id}`,
+        );
       }
       return { id: finalCreationId || 'success' };
     } catch (error: any) {
@@ -800,10 +880,13 @@ export class SocialService {
     const userAccessToken = await this.getMetaUserToken(batch.userId);
 
     if (!userAccessToken) {
-      throw new Error('Access Token is missing. Please connect your Meta account.');
+      throw new Error(
+        'Access Token is missing. Please connect your Meta account.',
+      );
     }
 
-    const { pageId, pageAccessToken: accessToken } = await this.getMetaPublishingContext(batch.userId);
+    const { pageId, pageAccessToken: accessToken } =
+      await this.getMetaPublishingContext(batch.userId);
 
     try {
       const allAssets = batch.mediaAssets || [];
@@ -813,7 +896,10 @@ export class SocialService {
       }
 
       const asset = allAssets[0];
-      let absolutePath = path.join(process.cwd(), asset.localPath.replace(/^api\//, ''));
+      let absolutePath = path.join(
+        process.cwd(),
+        asset.localPath.replace(/^api\//, ''),
+      );
       let finalResId = '';
 
       if (fs.existsSync(absolutePath)) {
@@ -838,7 +924,7 @@ export class SocialService {
             maxBodyLength: Infinity,
           },
         );
-        finalResId = res.data.id || res.data.post_id || res.data.video_id; 
+        finalResId = res.data.id || res.data.post_id || res.data.video_id;
         this.logger.log(
           `Successfully published to Facebook Story: ${finalResId}`,
         );

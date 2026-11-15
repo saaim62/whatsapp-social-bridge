@@ -7,7 +7,9 @@ describe('AuthController mock-pay production gate', () => {
   let controller: AuthController;
 
   beforeEach(() => {
-    authService = { mockPay: jest.fn().mockResolvedValue({ message: 'Payment successful.' }) };
+    authService = {
+      mockPay: jest.fn().mockResolvedValue({ message: 'Payment successful.' }),
+    };
     controller = new AuthController(authService, {} as any);
   });
 
@@ -18,9 +20,9 @@ describe('AuthController mock-pay production gate', () => {
 
   it('returns 410 Gone in production and never touches the account', async () => {
     process.env.NODE_ENV = 'production';
-    await expect(controller.mockPay({ user: { email: 'a@b.c' } })).rejects.toBeInstanceOf(
-      HttpException,
-    );
+    await expect(
+      controller.mockPay({ user: { email: 'a@b.c' } }),
+    ).rejects.toBeInstanceOf(HttpException);
     try {
       await controller.mockPay({ user: { email: 'a@b.c' } });
     } catch (e: any) {

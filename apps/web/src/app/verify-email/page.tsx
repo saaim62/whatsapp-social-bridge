@@ -12,7 +12,9 @@ function VerifyEmailContent() {
   const searchParams = useSearchParams();
   const token = searchParams?.get('token') || null;
 
-  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const [status, setStatus] = useState<'loading' | 'success' | 'error'>(
+    'loading',
+  );
   const [message, setMessage] = useState('');
 
   useEffect(() => {
@@ -23,7 +25,7 @@ function VerifyEmailContent() {
     }
 
     fetch(`${API_URL}/api/account/verify-email?token=${token}`)
-      .then(res => res.json().then(data => ({ status: res.status, data })))
+      .then((res) => res.json().then((data) => ({ status: res.status, data })))
       .then(({ status, data }) => {
         if (status === 200) {
           setStatus('success');
@@ -42,11 +44,14 @@ function VerifyEmailContent() {
   return (
     <div className="min-h-dvh w-full relative flex items-center justify-center bg-transparent">
       <div className="absolute inset-0 z-0">
-        <div className="absolute top-1/4 -right-1/4 w-[800px] h-[800px] bg-brand-500/20 rounded-full blur-[120px] mix-blend-screen animate-pulse" style={{ animationDuration: '4s' }} />
+        <div
+          className="absolute top-1/4 -right-1/4 w-[800px] h-[800px] bg-brand-500/20 rounded-full blur-[120px] mix-blend-screen animate-pulse"
+          style={{ animationDuration: '4s' }}
+        />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[url('/noise.png')] opacity-20 mix-blend-overlay pointer-events-none" />
       </div>
 
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="z-10 w-full max-w-md px-6"
@@ -55,8 +60,12 @@ function VerifyEmailContent() {
           {status === 'loading' && (
             <div className="py-10">
               <Loader2 className="w-12 h-12 text-gold-500 animate-spin mx-auto mb-6" />
-              <h2 className="text-2xl font-bold text-white mb-2">Verifying Email</h2>
-              <p className="text-white/60">Please wait while we verify your email address...</p>
+              <h2 className="text-2xl font-bold text-white mb-2">
+                Verifying Email
+              </h2>
+              <p className="text-white/60">
+                Please wait while we verify your email address...
+              </p>
             </div>
           )}
 
@@ -65,9 +74,11 @@ function VerifyEmailContent() {
               <div className="w-20 h-20 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-6 ring-4 ring-emerald-500/10">
                 <CheckCircle2 className="w-10 h-10" />
               </div>
-              <h2 className="text-2xl font-bold text-white mb-4">Email Verified!</h2>
+              <h2 className="text-2xl font-bold text-white mb-4">
+                Email Verified!
+              </h2>
               <p className="text-white/60 mb-8">{message}</p>
-              <Link 
+              <Link
                 href="/login"
                 className="inline-flex items-center justify-center bg-white/10 hover:bg-white/20 text-white font-semibold py-3 px-8 rounded-xl transition-colors border border-white/10 w-full"
               >
@@ -81,9 +92,11 @@ function VerifyEmailContent() {
               <div className="w-20 h-20 bg-red-500/20 text-red-400 rounded-full flex items-center justify-center mx-auto mb-6 ring-4 ring-red-500/10">
                 <XCircle className="w-10 h-10" />
               </div>
-              <h2 className="text-2xl font-bold text-white mb-4">Verification Failed</h2>
+              <h2 className="text-2xl font-bold text-white mb-4">
+                Verification Failed
+              </h2>
               <p className="text-white/60 mb-8">{message}</p>
-              <Link 
+              <Link
                 href="/login"
                 className="inline-flex items-center justify-center bg-white/10 hover:bg-white/20 text-white font-semibold py-3 px-8 rounded-xl transition-colors border border-white/10 w-full"
               >
@@ -99,7 +112,13 @@ function VerifyEmailContent() {
 
 export default function VerifyEmailPage() {
   return (
-    <Suspense fallback={<div className="min-h-dvh flex items-center justify-center"><Loader2 className="w-8 h-8 text-gold-500 animate-spin" /></div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-dvh flex items-center justify-center">
+          <Loader2 className="w-8 h-8 text-gold-500 animate-spin" />
+        </div>
+      }
+    >
       <VerifyEmailContent />
     </Suspense>
   );

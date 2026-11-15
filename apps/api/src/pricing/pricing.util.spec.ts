@@ -1,4 +1,9 @@
-import { analyzePrice, parsePrice, computeSellingPrice, PricingRule } from './pricing.util';
+import {
+  analyzePrice,
+  parsePrice,
+  computeSellingPrice,
+  PricingRule,
+} from './pricing.util';
 
 const RULE_30_PCT_ROUND_50: PricingRule = {
   marginType: 'PERCENT',
@@ -9,7 +14,9 @@ const RULE_30_PCT_ROUND_50: PricingRule = {
 describe('parsePrice / analyzePrice', () => {
   it('"Rs. 1,850" → 1850, and selling price under 30% + round-to-50 is 2400', () => {
     expect(parsePrice('Rs. 1,850')).toBe(1850);
-    expect(computeSellingPrice(parsePrice('Rs. 1,850'), RULE_30_PCT_ROUND_50)).toBe(2400);
+    expect(
+      computeSellingPrice(parsePrice('Rs. 1,850'), RULE_30_PCT_ROUND_50),
+    ).toBe(2400);
   });
 
   it('plain and currency-prefixed prices still parse', () => {
@@ -78,7 +85,11 @@ describe('parsePrice / analyzePrice', () => {
   it('computeSellingPrice(null) → null; FIXED margin adds flat', () => {
     expect(computeSellingPrice(null, RULE_30_PCT_ROUND_50)).toBeNull();
     expect(
-      computeSellingPrice(1000, { marginType: 'FIXED', marginValue: 500, priceRounding: 0 }),
+      computeSellingPrice(1000, {
+        marginType: 'FIXED',
+        marginValue: 500,
+        priceRounding: 0,
+      }),
     ).toBe(1500);
   });
 });

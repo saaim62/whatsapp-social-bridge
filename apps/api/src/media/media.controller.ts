@@ -51,7 +51,11 @@ export class MediaController {
     return path.join(process.cwd(), 'uploads');
   }
 
-  private serveLocalFile(fileName: string, mimeType: string | null, res: Response) {
+  private serveLocalFile(
+    fileName: string,
+    mimeType: string | null,
+    res: Response,
+  ) {
     const filePath = path.join(this.uploadsDir(), fileName);
     res.setHeader(
       'Content-Type',
@@ -104,7 +108,11 @@ export class MediaController {
 
   @Get(':id')
   @UseGuards(JwtAuthGuard)
-  async serveOwned(@Param('id') id: string, @Req() req: any, @Res() res: Response) {
+  async serveOwned(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Res() res: Response,
+  ) {
     const asset = await this.prisma.mediaAsset.findUnique({
       where: { id },
       include: { batch: { select: { userId: true } } },

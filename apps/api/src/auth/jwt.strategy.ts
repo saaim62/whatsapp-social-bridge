@@ -7,7 +7,9 @@ function requireJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
   if (!secret) {
     // No fallback: a known default secret lets anyone forge any user's token.
-    throw new Error('JWT_SECRET environment variable is not set — refusing to start');
+    throw new Error(
+      'JWT_SECRET environment variable is not set — refusing to start',
+    );
   }
   return secret;
 }
