@@ -9,13 +9,14 @@ export class SocialController {
 
   @UseGuards(JwtAuthGuard)
   @Get('oauth/facebook')
-  getOAuthUrl(@Request() req: any) {
-    const url = this.socialService.getMetaOAuthUrl(req.user.userId);
+  async getOAuthUrl(@Request() req: any) {
+    const url = await this.socialService.getMetaOAuthUrl(req.user.userId);
     return { url };
   }
 
-  // This endpoint receives the callback from Meta, it won't have the JWT header,
-  // so we encode the userId in the state parameter.
+  // This endpoint receives the callback from Meta, so it has no JWT header.
+  // The state parameter is a server-side nonce bound to the initiating user
+  // (see SocialService.getMetaOAuthUrl) — it carries no user data itself.
   @Get('oauth/facebook/callback')
   async handleOAuthCallback(@Query('code') code: string, @Query('state') state: string, @Res() res: Response) {
     if (!code || !state) {

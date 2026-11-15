@@ -8,8 +8,12 @@ import { exec } from 'child_process';
 import * as util from 'util';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { randomBytes } from 'crypto';
 
 const execPromise = util.promisify(exec);
+
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const OAUTH_STATE_FORMAT = /^[0-9a-f]{64}$/;
 
 @Injectable()
 export class SocialService {
@@ -422,35 +426,49 @@ export class SocialService {
     }
   }
 
-  getMetaOAuthUrl(userId: string): string {
+  async getMetaOAuthUrl(userId: string): Promise<string> {
     const appId = this.configService.get('META_APP_ID');
     const redirectUri = this.configService.get('FACEBOOK_REDIRECT_URI') || 'http://localhost:3001/api/social/oauth/facebook/callback';
-    
-    // Encode userId in state to correlate the callback
-    const state = Buffer.from(JSON.stringify({ userId })).toString('base64');
-    
+
+    // The state parameter is a cryptographically random nonce stored
+    // server-side, bound to the initiating user, with a 10-minute TTL.
+    // (It previously base64-encoded the userId, which anyone could forge
+    // to attach a Meta token to someone else's account.)
+    const state = randomBytes(32).toString('hex');
+    await this.prisma.oAuthState.create({
+      data: {
+        nonce: state,
+        userId,
+        expiresAt: new Date(Date.now() + OAUTH_STATE_TTL_MS),
+      },
+    });
+
     const scope = ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts', 'instagram_basic', 'instagram_content_publish'].join(',');
-    
+
     return `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=${scope}`;
   }
 
-  async handleMetaOAuthCallback(code: string, stateBase64: string): Promise<void> {
+  async handleMetaOAuthCallback(code: string, state: string): Promise<void> {
     const appId = this.configService.get('META_APP_ID');
     const appSecret = this.configService.get('META_APP_SECRET');
     const redirectUri = this.configService.get('FACEBOOK_REDIRECT_URI') || 'http://localhost:3001/api/social/oauth/facebook/callback';
 
-    // Decode state
-    let userId: string;
-    try {
-      const stateObj = JSON.parse(Buffer.from(stateBase64, 'base64').toString('utf-8'));
-      userId = stateObj.userId;
-    } catch (e) {
+    // Consume the state nonce exactly once. Unknown, expired, malformed,
+    // or replayed states are rejected before any token exchange happens.
+    if (typeof state !== 'string' || !OAUTH_STATE_FORMAT.test(state)) {
       throw new Error('Invalid state parameter');
     }
-
-    if (!userId) {
-      throw new Error('User ID not found in state');
+    const record = await this.prisma.oAuthState.findUnique({ where: { nonce: state } });
+    if (!record) {
+      throw new Error('Invalid state parameter');
     }
+    const consumed = await this.prisma.oAuthState.deleteMany({
+      where: { nonce: state, expiresAt: { gt: new Date() } },
+    });
+    if (consumed.count === 0) {
+      throw new Error('Invalid or expired state parameter');
+    }
+    const userId = record.userId;
 
     // 1. Exchange code for short-lived access token
     const tokenUrl = `https://graph.facebook.com/v19.0/oauth/access_token?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${appSecret}&code=${code}`;
