@@ -53,6 +53,14 @@ describe('BatchProcessor publish price gate', () => {
       publishFacebook: jest.fn().mockResolvedValue({ id: 'fb-1' }),
       publishInstagramStory: jest.fn().mockResolvedValue({ id: 'igs-1' }),
       publishFacebookStory: jest.fn().mockResolvedValue({ id: 'fbs-1' }),
+      // A destination is saved by default so the price-gate tests reach
+      // the publish step; the destination-gate test overrides this.
+      getSavedDestination: jest.fn().mockResolvedValue({
+        pageId: 'page-1',
+        pageName: 'My Shop',
+        igAccountId: 'ig-acc-1',
+        igUsername: 'myshop',
+      }),
     };
     processor = new BatchProcessor(prisma, {} as any, socialService, {
       get: (_k: string, def: any) => def,
@@ -66,6 +74,20 @@ describe('BatchProcessor publish price gate', () => {
   function statusUpdates() {
     return prisma.productBatch.update.mock.calls.map((c: any) => c[0].data.status);
   }
+
+  it('BLOCKS publishing when no Meta destination is saved — social publish methods never called, batch returns to APPROVED with a notification', async () => {
+    setup(batchWith({ price: 'Rs. 1,850' }));
+    socialService.getSavedDestination.mockResolvedValue(null);
+    await publish();
+    expect(socialService.publishInstagram).not.toHaveBeenCalled();
+    expect(socialService.publishFacebook).not.toHaveBeenCalled();
+    expect(statusUpdates()).toContain('APPROVED');
+    expect(statusUpdates()).not.toContain('PUBLISHED');
+    expect(prisma.notification.create).toHaveBeenCalledTimes(1);
+    const note = prisma.notification.create.mock.calls[0][0].data;
+    expect(note.title).toContain('no destination selected');
+    expect(note.link).toBe('/settings');
+  });
 
   it('BLOCKS publishing when the supplier price is a pack quantity ("2 pcs 1850")', async () => {
     setup(batchWith({ price: '2 pcs 1850' }));

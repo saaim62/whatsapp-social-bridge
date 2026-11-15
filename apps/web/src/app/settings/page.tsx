@@ -181,6 +181,72 @@ export default function SettingsPage() {
 
   const isMetaLinked = socialAccounts.some(a => a.platform === 'META');
 
+  // Publishing destination (P0-4): the reseller explicitly picks which
+  // Facebook Page (and its linked Instagram) products publish to.
+  // Publishing is blocked until a destination is saved — the app never
+  // auto-picks a page.
+  const metaAccount = socialAccounts.find(a => a.platform === 'META');
+  const [metaPages, setMetaPages] = useState<any[]>([]);
+  const [metaPagesError, setMetaPagesError] = useState<string | null>(null);
+  const [selectedPageId, setSelectedPageId] = useState<string>("");
+  const [destSaving, setDestSaving] = useState(false);
+  const [destSaved, setDestSaved] = useState(false);
+  const [destError, setDestError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isMetaLinked) return;
+    fetchWithAuth(`${API_URL}/api/social/meta/pages`)
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setMetaPages(data);
+          setSelectedPageId(prev => prev || metaAccount?.facebookPageId || "");
+        } else {
+          setMetaPagesError("Could not load your Facebook Pages.");
+        }
+      })
+      .catch(() => setMetaPagesError("Could not load your Facebook Pages."));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMetaLinked]);
+
+  const handleSaveDestination = async () => {
+    if (!selectedPageId) return;
+    setDestSaving(true);
+    setDestError(null);
+    try {
+      const page = metaPages.find(p => p.pageId === selectedPageId);
+      const res = await fetchWithAuth(`${API_URL}/api/social/meta/destination`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pageId: selectedPageId,
+          instagramAccountId: page?.instagramAccountId ?? null,
+        }),
+      });
+      const data = await res.json();
+      if (data?.success) {
+        setSocialAccounts(prev => prev.map(a =>
+          a.platform === 'META'
+            ? {
+                ...a,
+                facebookPageId: page.pageId,
+                facebookPageName: page.pageName,
+                instagramUserId: page.instagramAccountId,
+                instagramUsername: page.instagramUsername,
+              }
+            : a
+        ));
+        setDestSaved(true);
+        setTimeout(() => setDestSaved(false), 3000);
+      } else {
+        setDestError(data?.message || "Could not save the destination.");
+      }
+    } catch (err) {
+      setDestError("Could not save the destination.");
+    }
+    setDestSaving(false);
+  };
+
   if (loading) return <LoadingSpinner label="Loading settings..." />;
 
   return (
@@ -283,6 +349,63 @@ export default function SettingsPage() {
                 )}
               </div>
               
+              {isMetaLinked && (
+                <div className="mt-6 p-5 bg-graphite rounded-xl border border-graphite-border">
+                  <h4 className="text-sm font-bold text-slate-300 mb-2 uppercase tracking-wider">
+                    Publishing Destination
+                  </h4>
+                  <p className="text-sm text-slate-400 mb-4">
+                    Choose the Facebook Page your products publish to. DropRoute posts
+                    only to this destination — it never guesses. Publishing is blocked
+                    until a destination is saved.
+                  </p>
+                  {metaPagesError ? (
+                    <p className="text-sm text-red-400">{metaPagesError}</p>
+                  ) : (
+                    <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                      <select
+                        value={selectedPageId}
+                        onChange={(e) => setSelectedPageId(e.target.value)}
+                        className="flex-1 bg-graphite-darker border border-graphite-border rounded-lg px-3 py-2.5 text-sm text-white"
+                      >
+                        <option value="">Select a Facebook Page…</option>
+                        {metaPages.map(p => (
+                          <option key={p.pageId} value={p.pageId}>
+                            {p.pageName}
+                            {p.instagramUsername
+                              ? ` — Instagram @${p.instagramUsername}`
+                              : " — no Instagram linked"}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={handleSaveDestination}
+                        disabled={!selectedPageId || destSaving}
+                        className="px-5 py-2.5 bg-[#1877F2] hover:bg-[#166FE5] disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors"
+                      >
+                        {destSaving ? "Saving…" : destSaved ? "Saved ✓" : "Save Destination"}
+                      </button>
+                    </div>
+                  )}
+                  {destError && <p className="text-sm text-red-400 mt-3">{destError}</p>}
+                  {metaAccount?.facebookPageId ? (
+                    <p className="text-sm text-slate-400 mt-3">
+                      Current destination:{" "}
+                      <span className="text-slate-200 font-semibold">
+                        {metaAccount.facebookPageName || metaAccount.facebookPageId}
+                      </span>
+                      {metaAccount.instagramUsername && (
+                        <> — Instagram <span className="text-slate-200">@{metaAccount.instagramUsername}</span></>
+                      )}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-amber-400 mt-3">
+                      No destination saved yet — publishing is blocked.
+                    </p>
+                  )}
+                </div>
+              )}
+
               {!isMetaLinked && (
                 <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="mt-6 flex flex-col p-5 bg-graphite rounded-xl border border-graphite-border">
                   <h4 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2 uppercase tracking-wider">

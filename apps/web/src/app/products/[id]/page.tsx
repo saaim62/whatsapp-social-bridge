@@ -90,9 +90,26 @@ export default function ProductDetailPage() {
   
   const [isWorkerOnline, setIsWorkerOnline] = useState(false);
 
+  // Saved Meta publishing destination (P0-4), shown in the publish
+  // modal so the reseller sees exactly which Page/IG this will post
+  // to. Null when Meta isn't connected or the fetch failed (e.g. demo
+  // mode) — the modal then simply doesn't render a destination line.
+  const [metaAccount, setMetaAccount] = useState<any>(null);
+
   useEffect(() => {
     const history = localStorage.getItem("sentEmailsHistory");
     if (history) setEmailHistory(JSON.parse(history));
+  }, []);
+
+  useEffect(() => {
+    fetchWithAuth(`${API_URL}/api/social/accounts`)
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setMetaAccount(data.find((a: any) => a.platform === 'META') ?? null);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const fetchWorkerStatus = useCallback(async () => {
@@ -1100,6 +1117,25 @@ export default function ProductDetailPage() {
                     </div>
                   </label>
                 </div>
+
+                {metaAccount && (
+                  metaAccount.facebookPageId ? (
+                    <p className="text-sm text-slate-400 mt-5">
+                      Publishing to:{" "}
+                      <span className="text-slate-100 font-semibold">
+                        {metaAccount.facebookPageName || metaAccount.facebookPageId}
+                      </span>
+                      {metaAccount.instagramUsername && (
+                        <> — Instagram <span className="text-slate-100">@{metaAccount.instagramUsername}</span></>
+                      )}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-amber-400 mt-5">
+                      No publishing destination selected — publishing will be blocked.{" "}
+                      <a href="/settings" className="underline font-semibold">Choose your Page in Settings</a>
+                    </p>
+                  )
+                )}
 
                 <div className="flex items-center gap-3 mt-8">
                   <button

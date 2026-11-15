@@ -265,7 +265,7 @@ export const DEMO_SOCIAL_ACCOUNTS: any[] = [
     id: "demo-meta",
     platform: "META",
     facebookPageId: "109283746510",
-    pageName: "Demo Store PK",
+    facebookPageName: "Demo Store PK",
     instagramUsername: "demostore.pk",
   },
 ];

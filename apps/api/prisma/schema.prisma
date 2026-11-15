@@ -65,8 +65,15 @@ model SocialAccount {
   user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   platform             String
   accessToken          String?
+  // The reseller's explicitly chosen publishing destination. Publishing
+  // uses ONLY these IDs — never an auto-picked first page (a user with
+  // several Pages could otherwise post to the wrong shop). Null until
+  // the user picks a destination in Settings; publishing is blocked
+  // while null.
   facebookPageId       String?
+  facebookPageName     String?
   instagramUserId      String?
+  instagramUsername    String?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 

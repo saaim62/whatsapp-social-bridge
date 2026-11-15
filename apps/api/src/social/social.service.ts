@@ -20,6 +20,21 @@ const execPromise = util.promisify(exec);
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const OAUTH_STATE_FORMAT = /^[0-9a-f]{64}$/;
 
+/**
+ * Thrown when a publish is attempted before the user has chosen a
+ * publishing destination in Settings. The batch processor treats this
+ * as a user-actionable block (notification + back to review), not a
+ * publish failure.
+ */
+export class MetaDestinationNotConfiguredError extends Error {
+  constructor() {
+    super(
+      'No publishing destination selected. Choose your Facebook Page in Settings before publishing.',
+    );
+    this.name = 'MetaDestinationNotConfiguredError';
+  }
+}
+
 @Injectable()
 export class SocialService {
   private readonly logger = new Logger(SocialService.name);
@@ -141,54 +156,217 @@ export class SocialService {
     }
   }
 
-  private async getMetaPublishingContext(userAccessToken: string): Promise<{ pageId: string, pageName: string, pageAccessToken: string, igAccountId?: string }> {
-    try {
-      // 1. Get the user's Facebook Pages
-      const accountsRes = await axios.get(`https://graph.facebook.com/v19.0/me/accounts`, {
-        params: { access_token: userAccessToken }
-      });
-      
-      const pages = accountsRes.data.data;
-      if (!pages || pages.length === 0) {
-        throw new Error('No Facebook Pages found for this user.');
-      }
-      
-      let selectedPage = pages[0];
-      let igAccountId: string | undefined = undefined;
+  // ------------------------------------------------------------------
+  // Explicit Meta destination (P0-4)
+  //
+  // Publishing used to auto-pick the first Facebook Page with a linked
+  // Instagram account. For a reseller who manages several Pages that
+  // can post a product to the WRONG shop. Now the reseller picks the
+  // destination in Settings; it is stored on the SocialAccount row and
+  // every publish path uses exactly those IDs. No saved destination →
+  // publishing is blocked (MetaDestinationNotConfiguredError) until one
+  // is chosen.
+  // ------------------------------------------------------------------
 
-      // 2. Find a page that has an Instagram Business Account linked
-      for (const page of pages) {
-        try {
-          const igRes = await axios.get(`https://graph.facebook.com/v19.0/${page.id}`, {
-            params: { fields: 'instagram_business_account', access_token: page.access_token }
-          });
-          if (igRes.data.instagram_business_account?.id) {
-            selectedPage = page;
-            igAccountId = igRes.data.instagram_business_account.id;
-            break; // Found a good page!
-          }
-        } catch (igErr) {
-          this.logger.warn(`Could not fetch Instagram account for page ${page.id}`);
+  /** The user's saved publishing destination, or null when unset. */
+  async getSavedDestination(userId: string): Promise<{
+    pageId: string;
+    pageName: string | null;
+    igAccountId: string | null;
+    igUsername: string | null;
+  } | null> {
+    const account = await this.prisma.socialAccount.findUnique({
+      where: { userId_platform: { userId, platform: 'META' } },
+      select: {
+        facebookPageId: true,
+        facebookPageName: true,
+        instagramUserId: true,
+        instagramUsername: true,
+      },
+    });
+    if (!account?.facebookPageId) return null;
+    return {
+      pageId: account.facebookPageId,
+      pageName: account.facebookPageName,
+      igAccountId: account.instagramUserId,
+      igUsername: account.instagramUsername,
+    };
+  }
+
+  private async fetchUserPages(userAccessToken: string): Promise<any[]> {
+    const accountsRes = await axios.get(
+      `https://graph.facebook.com/v19.0/me/accounts`,
+      { params: { access_token: userAccessToken } },
+    );
+    return accountsRes.data?.data ?? [];
+  }
+
+  /**
+   * List the connected account's Facebook Pages with their linked
+   * Instagram accounts — the choices for the Settings destination
+   * picker. A page whose IG lookup fails is still listed (without an
+   * IG account) rather than failing the whole list.
+   */
+  async listMetaPages(userId: string): Promise<
+    Array<{
+      pageId: string;
+      pageName: string;
+      instagramAccountId: string | null;
+      instagramUsername: string | null;
+    }>
+  > {
+    const userAccessToken = await this.getMetaUserToken(userId);
+    if (!userAccessToken) {
+      throw new Error('Meta account is not connected.');
+    }
+    const pages = await this.fetchUserPages(userAccessToken);
+    const result: Array<{
+      pageId: string;
+      pageName: string;
+      instagramAccountId: string | null;
+      instagramUsername: string | null;
+    }> = [];
+    for (const page of pages) {
+      let instagramAccountId: string | null = null;
+      let instagramUsername: string | null = null;
+      try {
+        const igRes = await axios.get(
+          `https://graph.facebook.com/v19.0/${page.id}`,
+          {
+            params: {
+              fields: 'instagram_business_account{id,username}',
+              access_token: page.access_token,
+            },
+          },
+        );
+        const ig = igRes.data?.instagram_business_account;
+        if (ig?.id) {
+          instagramAccountId = ig.id;
+          instagramUsername = ig.username ?? null;
         }
+      } catch (igErr) {
+        this.logger.warn(`Could not fetch Instagram account for page ${page.id}`);
       }
-      
-      this.logger.log(`Selected Facebook Page: ${selectedPage.name} (${selectedPage.id})`);
-      if (igAccountId) {
-        this.logger.log(`Found linked Instagram Business Account: ${igAccountId}`);
-      } else {
-        this.logger.warn(`No Instagram Business Account linked to ${selectedPage.name}`);
-      }
+      result.push({
+        pageId: page.id,
+        pageName: page.name,
+        instagramAccountId,
+        instagramUsername,
+      });
+    }
+    return result;
+  }
 
-      return { 
-        pageId: selectedPage.id, 
-        pageName: selectedPage.name,
-        pageAccessToken: selectedPage.access_token, 
-        igAccountId 
+  /**
+   * Save the user's chosen destination. The page must belong to the
+   * connected account, and the Instagram account (when given) must be
+   * the one actually linked to that page — both are validated against
+   * Meta's live data, never trusted from the client.
+   */
+  async saveMetaDestination(
+    userId: string,
+    pageId: string,
+    instagramAccountId?: string | null,
+  ): Promise<{ success: boolean; message?: string }> {
+    const account = await this.prisma.socialAccount.findUnique({
+      where: { userId_platform: { userId, platform: 'META' } },
+    });
+    if (!account) {
+      return { success: false, message: 'Meta account is not connected' };
+    }
+    const pages = await this.listMetaPages(userId);
+    const page = pages.find((p) => p.pageId === pageId);
+    if (!page) {
+      return {
+        success: false,
+        message: 'That Facebook Page does not belong to the connected account',
       };
+    }
+    let igId: string | null = null;
+    let igUsername: string | null = null;
+    if (instagramAccountId) {
+      if (page.instagramAccountId !== instagramAccountId) {
+        return {
+          success: false,
+          message: 'That Instagram account is not linked to the selected Page',
+        };
+      }
+      igId = page.instagramAccountId;
+      igUsername = page.instagramUsername;
+    } else if (page.instagramAccountId) {
+      // The picker submits the page's linked IG implicitly; store it so
+      // Instagram publishing targets the account the user saw chosen.
+      igId = page.instagramAccountId;
+      igUsername = page.instagramUsername;
+    }
+    await this.prisma.socialAccount.update({
+      where: { id: account.id },
+      data: {
+        facebookPageId: page.pageId,
+        facebookPageName: page.pageName,
+        instagramUserId: igId,
+        instagramUsername: igUsername,
+      },
+    });
+    this.logger.log(
+      `Saved Meta destination for user ${userId}: page ${page.pageName} (${page.pageId}), IG ${igId ?? 'none'}`,
+    );
+    return { success: true };
+  }
+
+  /**
+   * Resolve the publishing context from the SAVED destination only.
+   * Throws MetaDestinationNotConfiguredError when none is saved, and a
+   * clear error when the saved page is no longer accessible — it never
+   * falls back to another page.
+   */
+  private async getMetaPublishingContext(userId: string): Promise<{ pageId: string, pageName: string, pageAccessToken: string, igAccountId?: string }> {
+    const userAccessToken = await this.getMetaUserToken(userId);
+    if (!userAccessToken) {
+      throw new Error('User Access Token is missing. Please connect your Meta account.');
+    }
+    const saved = await this.getSavedDestination(userId);
+    if (!saved) {
+      throw new MetaDestinationNotConfiguredError();
+    }
+    let pages: any[];
+    try {
+      pages = await this.fetchUserPages(userAccessToken);
     } catch (err: any) {
       this.logger.error('Failed to fetch Meta publishing context', err.response?.data || err.message);
       throw new Error('Failed to fetch Facebook Pages. Ensure your user account has the required permissions.');
     }
+    const page = pages.find((p) => p.id === saved.pageId);
+    if (!page) {
+      throw new Error(
+        'Your saved Facebook Page is no longer accessible. Please choose your publishing destination again in Settings.',
+      );
+    }
+    // Confirm the saved IG account is still the one linked to the page.
+    // Live truth wins on a successful fetch; on a fetch failure keep
+    // the saved value rather than blocking an otherwise-valid publish.
+    let igAccountId: string | undefined = saved.igAccountId ?? undefined;
+    try {
+      const igRes = await axios.get(`https://graph.facebook.com/v19.0/${page.id}`, {
+        params: { fields: 'instagram_business_account', access_token: page.access_token }
+      });
+      const liveIgId = igRes.data?.instagram_business_account?.id;
+      if (liveIgId) igAccountId = liveIgId;
+      else if (igAccountId) {
+        this.logger.warn(`Saved Instagram account is no longer linked to page ${page.id}; Instagram publishing will fail until the destination is re-saved.`);
+        igAccountId = undefined;
+      }
+    } catch (igErr) {
+      this.logger.warn(`Could not verify Instagram account for page ${page.id}; using the saved destination.`);
+    }
+
+    this.logger.log(`Publishing destination: Facebook Page ${page.name} (${page.id})${igAccountId ? `, Instagram ${igAccountId}` : ''}`);
+    return {
+      pageId: page.id,
+      pageName: page.name,
+      pageAccessToken: page.access_token,
+      igAccountId,
+    };
   }
 
   async publishInstagram(batch: any): Promise<{ id: string }> {
@@ -200,7 +378,7 @@ export class SocialService {
       throw new Error('User Access Token is missing. Please connect your Meta account.');
     }
 
-    const { pageAccessToken, igAccountId } = await this.getMetaPublishingContext(userAccessToken);
+    const { pageAccessToken, igAccountId } = await this.getMetaPublishingContext(batch.userId);
 
     if (!igAccountId) {
       throw new Error('No Instagram Business Account linked to your Facebook Page.');
@@ -308,7 +486,7 @@ export class SocialService {
       throw new Error('Access Token is missing. Please connect your Meta account.');
     }
 
-    const { pageId, pageAccessToken: accessToken } = await this.getMetaPublishingContext(userAccessToken);
+    const { pageId, pageAccessToken: accessToken } = await this.getMetaPublishingContext(batch.userId);
 
     const caption = batch.generatedContent?.facebookCaption || batch.rawText;
 
@@ -522,7 +700,7 @@ export class SocialService {
   async getSocialAccounts(userId: string) {
     const accounts = await this.prisma.socialAccount.findMany({
       where: { userId },
-      select: { platform: true, facebookPageId: true, instagramUserId: true, createdAt: true, updatedAt: true }
+      select: { platform: true, facebookPageId: true, facebookPageName: true, instagramUserId: true, instagramUsername: true, createdAt: true, updatedAt: true }
     });
     return accounts;
   }
@@ -544,7 +722,7 @@ export class SocialService {
       throw new Error('User Access Token is missing. Please connect your Meta account.');
     }
 
-    const { pageAccessToken, igAccountId } = await this.getMetaPublishingContext(userAccessToken);
+    const { pageAccessToken, igAccountId } = await this.getMetaPublishingContext(batch.userId);
 
     if (!igAccountId) {
       throw new Error('No Instagram Business Account linked to your Facebook Page.');
@@ -618,7 +796,7 @@ export class SocialService {
       throw new Error('Access Token is missing. Please connect your Meta account.');
     }
 
-    const { pageId, pageAccessToken: accessToken } = await this.getMetaPublishingContext(userAccessToken);
+    const { pageId, pageAccessToken: accessToken } = await this.getMetaPublishingContext(batch.userId);
 
     try {
       const allAssets = batch.mediaAssets || [];

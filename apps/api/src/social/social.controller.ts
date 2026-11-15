@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Req, Res, UseGuards, Request, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Req, Res, UseGuards, Request, Delete } from '@nestjs/common';
 import { Response } from 'express';
 import { SocialService } from './social.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -44,5 +44,31 @@ export class SocialController {
   @Delete('disconnect')
   async disconnectMeta(@Request() req: any) {
     return this.socialService.disconnectMeta(req.user.userId);
+  }
+
+  // The connected account's Facebook Pages (+ linked Instagram
+  // accounts) — the choices for the publishing-destination picker.
+  @UseGuards(JwtAuthGuard)
+  @Get('meta/pages')
+  async listMetaPages(@Request() req: any) {
+    return this.socialService.listMetaPages(req.user.userId);
+  }
+
+  // Save the user's chosen publishing destination. Publishing uses
+  // ONLY this destination (see SocialService.getMetaPublishingContext).
+  @UseGuards(JwtAuthGuard)
+  @Post('meta/destination')
+  async saveMetaDestination(
+    @Request() req: any,
+    @Body() body: { pageId: string; instagramAccountId?: string | null },
+  ) {
+    if (!body?.pageId) {
+      return { success: false, message: 'pageId is required' };
+    }
+    return this.socialService.saveMetaDestination(
+      req.user.userId,
+      body.pageId,
+      body.instagramAccountId ?? null,
+    );
   }
 }

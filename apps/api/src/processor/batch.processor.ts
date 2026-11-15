@@ -262,6 +262,33 @@ export class BatchProcessor extends WorkerHost {
       };
     }
 
+    // DESTINATION GATE (P0-4): publishing uses ONLY the destination
+    // the user saved in Settings — never an auto-picked page. With no
+    // saved destination, block BEFORE any social call, return the
+    // batch to APPROVED (it was approved; only the publish step is
+    // blocked), and tell the user what to do.
+    const destination = await this.socialService.getSavedDestination(batch.userId);
+    if (!destination) {
+      this.logger.warn(
+        `Publishing blocked for batch ${batchId}: no Meta destination selected for user ${batch.userId}. Sent back to approved.`,
+      );
+      await this.prisma.productBatch.update({
+        where: { id: batchId },
+        data: { status: 'APPROVED' },
+      });
+      await this.prisma.notification.create({
+        data: {
+          userId: batch.userId,
+          title: 'Publishing blocked — no destination selected',
+          message:
+            'Choose your publishing destination (your Facebook Page) in Settings, then publish again. DropRoute never guesses which Page to post to.',
+          type: 'warning',
+          link: '/settings',
+        },
+      });
+      return;
+    }
+
     let allSuccess = true;
     let anySuccess = false;
 
