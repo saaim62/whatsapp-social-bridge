@@ -10,10 +10,11 @@ import {
   ArrowRight,
   Database,
   Globe,
-  Camera,
-  MessageCircle,
   Activity,
-  AlertCircle
+  AlertCircle,
+  WifiOff,
+  CheckCircle2,
+  Clock
 } from "lucide-react";
 import { API_URL, fetchWithAuth } from "@/lib/api";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
@@ -35,16 +36,29 @@ function CountUp({ value }: { value: number }) {
 
 export default function DashboardPage() {
   const [batches, setBatches] = useState<any[]>([]);
+  const [waStatus, setWaStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchWithAuth(`${API_URL}/api/batches`)
-      .then((res) => res.json())
-      .then((data) => {
-        setBatches(data);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    let alive = true;
+    const load = () => {
+      fetchWithAuth(`${API_URL}/api/batches`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (alive) {
+            setBatches(Array.isArray(data) ? data : []);
+            setLoading(false);
+          }
+        })
+        .catch(() => { if (alive) setLoading(false); });
+      fetchWithAuth(`${API_URL}/api/whatsapp/status`)
+        .then((res) => res.json())
+        .then((data) => { if (alive && data && !data.error) setWaStatus(data); })
+        .catch(() => {});
+    };
+    load();
+    const t = setInterval(load, 30000);
+    return () => { alive = false; clearInterval(t); };
   }, []);
 
   if (loading) return <LoadingSpinner label="Initializing systems..." />;
@@ -97,28 +111,29 @@ export default function DashboardPage() {
     },
   ];
 
-  const pipeline = [
-    {
-      id: "whatsapp", label: "WhatsApp", desc: `${batches.length} Received`,
-      icon: MessageCircle, color: "text-[#4be07f]", bg: "bg-[#25D366]/[0.07]", border: "border-white/[0.09]",
-      active: batches.length > 0,
-    },
-    {
-      id: "db", label: "Commerce Hub", desc: `${batches.filter(b => b.extractedData).length} Processed`,
-      icon: Database, color: "text-gold-400", bg: "bg-gold-500/[0.07]", border: "border-white/[0.09]",
-      active: batches.some(b => b.status === 'RECEIVED'),
-    },
-    {
-      id: "web", label: "Pending Review", desc: `${batches.filter(b => b.status === 'READY').length} Awaiting`,
-      icon: Globe, color: "text-slate-200", bg: "bg-white/[0.04]", border: "border-white/[0.09]",
-      active: batches.some(b => b.status === 'READY'),
-    },
-    {
-      id: "social", label: "Meta Network", desc: `${batches.filter(b => ['PUBLISHED', 'PARTIALLY_PUBLISHED'].includes(b.status)).length} Published`,
-      icon: Camera, color: "text-[#7db4f0]", bg: "bg-[#0082FB]/[0.07]", border: "border-white/[0.09]",
-      active: batches.some(b => b.status === 'PUBLISHING'),
-    },
-  ];
+  /* ——— Action Center data (all real, from /api/batches) ——— */
+  const readyQueue = batches
+    .filter((b) => b.status === "READY")
+    .slice()
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  const processingCount = batches.filter((b) => ["RECEIVED", "PROCESSING"].includes(b.status)).length;
+  const approvedCount = batches.filter((b) => b.status === "APPROVED").length;
+  const failedCount = batches.filter((b) => b.status === "FAILED").length;
+  const publishedCount = batches.filter((b) => ["PUBLISHED", "PARTIALLY_PUBLISHED"].includes(b.status)).length;
+  const waitingValue = readyQueue.reduce((sum, b) => {
+    const n = Number(String(b.extractedData?.price ?? "").replace(/[^\d]/g, ""));
+    return sum + (isNaN(n) ? 0 : n);
+  }, 0);
+  const waReady = !!waStatus?.isReady;
+
+  const thumbFor = (batch: any) => {
+    const isVid = (m: any) => m?.mimeType?.startsWith("video/") || m?.originalUrl?.endsWith(".mp4") || m?.localPath?.endsWith(".mp4");
+    const m = batch.mediaAssets?.find((x: any) => !isVid(x)) || batch.mediaAssets?.[0];
+    return {
+      src: m?.originalUrl || (m?.localPath ? `${API_URL}/${m.localPath}` : null),
+      isVideo: isVid(m),
+    };
+  };
 
   return (
     <motion.div
@@ -147,61 +162,133 @@ export default function DashboardPage() {
           ))}
         </motion.div>
 
-        {/* ——— Pipeline ——— */}
+                {/* ——— Action Center: Review Queue ——— */}
         <motion.div
           variants={itemVariants}
           className="glass-panel relative overflow-hidden rounded-3xl p-8"
         >
-          <div className="relative z-10 mb-4 flex items-center justify-between">
+          <div className="relative z-10 mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h2 className="text-2xl font-heading font-bold text-white">Live Data Stream</h2>
-              <p className="text-slate-400 text-sm mt-1">Monitoring active commerce pipelines across all nodes</p>
+              <h2 className="text-2xl font-heading font-bold text-white">Needs Your Review</h2>
+              <p className="text-slate-400 text-sm mt-1">
+                Products extracted from your WhatsApp sources, waiting for your decision.
+                {waitingValue > 0 && (
+                  <span className="text-gold-300 font-semibold"> ≈ Rs. {waitingValue.toLocaleString()} of stock in this queue.</span>
+                )}
+              </p>
             </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.09] text-slate-200 text-xs font-semibold tracking-widest uppercase">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              Active
-            </div>
+            {readyQueue.length > 0 ? (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gold-500/10 border border-gold-500/30 text-gold-300 text-xs font-semibold tracking-widest uppercase">
+                <span className="w-2 h-2 rounded-full bg-gold-400 animate-pulse" />
+                {readyQueue.length} waiting
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-xs font-semibold tracking-widest uppercase">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Queue clear
+              </div>
+            )}
           </div>
 
-          <div className="relative z-10 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 px-2 pb-4 pt-8">
-            {pipeline.map((node, i, arr) => (
-              <div key={node.id} className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
-                <div
-                  className={`relative flex h-36 w-full md:w-40 flex-col items-center justify-center rounded-2xl border p-4 sm:p-6 backdrop-blur-xl shadow-[0_24px_50px_-20px_rgba(0,0,0,0.9)] ${node.border} ${node.bg}`}
-                >
-                  <div className="absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent" />
-                  {node.active && (
-                    <span className="absolute top-3 right-3 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  )}
-                  <node.icon className={`w-9 h-9 mb-2 ${node.color}`} />
-                  <span className="text-xs font-bold text-white text-center uppercase tracking-wider">{node.label}</span>
-                  <span className={`text-[10px] font-bold mt-1.5 text-center ${node.color} bg-black/30 px-2 py-0.5 rounded-full`}>{node.desc}</span>
-                </div>
+          {/* Health alerts — only shown when something is actually wrong */}
+          {!waReady && (
+            <div className="relative z-10 mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/[0.08] px-4 py-3">
+              <WifiOff className="w-5 h-5 text-amber-300 shrink-0" />
+              <p className="text-sm text-amber-200 flex-1 min-w-[220px]">
+                <span className="font-bold">WhatsApp is disconnected.</span> New products can&apos;t arrive until you reconnect.
+              </p>
+              <Link href="/settings" className="text-xs font-bold uppercase tracking-wider text-amber-300 border border-amber-500/40 rounded-full px-3 py-1.5 hover:bg-amber-500/10 transition-colors">
+                Reconnect
+              </Link>
+            </div>
+          )}
+          {failedCount > 0 && (
+            <div className="relative z-10 mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-rose-500/30 bg-rose-500/[0.08] px-4 py-3">
+              <AlertCircle className="w-5 h-5 text-rose-300 shrink-0" />
+              <p className="text-sm text-rose-200 flex-1 min-w-[220px]">
+                <span className="font-bold">{failedCount} ingestion{failedCount > 1 ? "s" : ""} failed</span> and need attention.
+              </p>
+              <Link href="/products" className="text-xs font-bold uppercase tracking-wider text-rose-300 border border-rose-500/40 rounded-full px-3 py-1.5 hover:bg-rose-500/10 transition-colors">
+                View
+              </Link>
+            </div>
+          )}
 
-                {i < arr.length - 1 && (
-                  <div className="hidden md:block flex-1 min-w-[40px] lg:min-w-[64px] h-px bg-white/[0.12] relative overflow-hidden">
-                    <motion.div
-                      className="absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-gold-400/80 to-transparent"
-                      animate={{ x: ["-100%", "300%"] }}
-                      transition={{ repeat: Infinity, duration: 2.6, ease: "linear", delay: i * 0.35 }}
-                    />
-                  </div>
-                )}
-                {i < arr.length - 1 && (
-                  <div className="md:hidden flex h-10 w-px bg-white/[0.12] relative overflow-hidden">
-                    <motion.div
-                      className="absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-transparent via-gold-400/80 to-transparent"
-                      animate={{ y: ["-100%", "300%"] }}
-                      transition={{ repeat: Infinity, duration: 2.6, ease: "linear", delay: i * 0.35 }}
-                    />
-                  </div>
-                )}
-              </div>
-            ))}
+          {/* The queue itself — oldest first, they've waited longest */}
+          {readyQueue.length === 0 ? (
+            <div className="relative z-10 rounded-2xl border border-white/[0.07] bg-white/[0.02] px-6 py-10 text-center">
+              <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-3" />
+              <p className="text-white font-heading font-bold">All clear — nothing waiting for review.</p>
+              <p className="text-slate-400 text-sm mt-1">
+                {waReady
+                  ? "New supplier posts will land here automatically as they arrive."
+                  : "Reconnect WhatsApp and new supplier posts will land here automatically."}
+              </p>
+            </div>
+          ) : (
+            <ul className="relative z-10 divide-y divide-white/[0.06] rounded-2xl border border-white/[0.07] bg-white/[0.02] overflow-hidden">
+              {readyQueue.slice(0, 5).map((batch: any) => {
+                const t = thumbFor(batch);
+                return (
+                  <li key={batch.id}>
+                    <Link
+                      href={`/products/${batch.id}`}
+                      className="group flex items-center gap-4 px-4 py-3.5 hover:bg-white/[0.03] transition-colors"
+                    >
+                      <div className="w-12 h-12 rounded-lg bg-graphite border border-white/10 overflow-hidden shrink-0 relative">
+                        {t.src ? (
+                          t.isVideo ? (
+                            <video src={t.src} className="w-full h-full object-cover" muted playsInline preload="metadata" />
+                          ) : (
+                            <Image src={t.src} alt="" fill unoptimized className="object-cover" />
+                          )
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Zap className="w-4 h-4 text-slate-500" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-heading font-bold text-slate-100 truncate group-hover:text-gold-300 transition-colors">
+                          {batch.extractedData?.product_name || `Product [${batch.id.split("-")[0]}]`}
+                        </p>
+                        <div className="flex items-center gap-2.5 mt-0.5 text-xs text-slate-400 font-mono">
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" /> waiting {formatDistanceToNow(new Date(batch.createdAt))}
+                          </span>
+                          <span className="w-1 h-1 rounded-full bg-slate-700" />
+                          <span>{batch.mediaAssets?.length || 0} assets</span>
+                        </div>
+                      </div>
+                      {batch.extractedData?.price && (
+                        <span className="shrink-0 text-sm font-bold text-gold-300 bg-gold-500/10 border border-gold-500/25 rounded-full px-3 py-1">
+                          {batch.extractedData.price}
+                        </span>
+                      )}
+                      <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-white group-hover:translate-x-0.5 transition-all shrink-0" />
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          {/* Slim real pipeline summary */}
+          <div className="relative z-10 mt-6 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[11px] font-mono uppercase tracking-wider text-slate-500">
+            <span>Received <span className="text-slate-300 font-bold">{batches.length}</span></span>
+            <span className="w-1 h-1 rounded-full bg-slate-700" />
+            <span>Processing now <span className="text-slate-300 font-bold">{processingCount}</span></span>
+            <span className="w-1 h-1 rounded-full bg-slate-700" />
+            <span>Approved, to publish <span className="text-slate-300 font-bold">{approvedCount}</span></span>
+            <span className="w-1 h-1 rounded-full bg-slate-700" />
+            <span>Published <span className="text-emerald-300 font-bold">{publishedCount}</span></span>
+            <span className="w-1 h-1 rounded-full bg-slate-700" />
+            <span>WhatsApp <span className={waReady ? "text-emerald-300 font-bold" : "text-amber-300 font-bold"}>{waReady ? "Connected" : "Disconnected"}</span></span>
+            <span className="ml-auto normal-case tracking-normal">Refreshes every 30s</span>
           </div>
         </motion.div>
 
-        {/* ——— Recent Activity ——— */}
+{/* ——— Recent Activity ——— */}
         <motion.div variants={itemVariants} className="glass-card overflow-hidden">
           <div className="px-6 py-6 border-b border-graphite-border flex justify-between items-center bg-white/[0.02]">
             <h2 className="text-xl font-heading font-bold text-white">Recent Ingestions</h2>
