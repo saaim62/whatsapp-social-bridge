@@ -5,6 +5,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AiService } from '../ai/ai.service';
 import { SocialService } from '../social/social.service';
 import { ConfigService } from '@nestjs/config';
+import {
+  parsePrice,
+  computeSellingPrice,
+  formatRs,
+  finalizeCaption,
+  PricingRule,
+} from '../pricing/pricing.util';
 
 @Processor('batch-processing')
 export class BatchProcessor extends WorkerHost {
@@ -77,6 +84,16 @@ export class BatchProcessor extends WorkerHost {
         }
       }
 
+      // 1b. Selling price — apply the reseller's margin rule to the
+      // supplier price so every surface (queue, review, publish)
+      // works with the price the customer will actually see.
+      const rule = await this.pricingRuleFor(batch.userId);
+      const selling = computeSellingPrice(parsePrice(extractedData.price), rule);
+      if (selling !== null) {
+        extractedData.selling_price = formatRs(selling);
+        extractedData.selling_price_value = selling;
+      }
+
       // 2. Generate Content
       const generatedCaptions =
         await this.aiService.generateCaptions(extractedData);
@@ -124,6 +141,16 @@ export class BatchProcessor extends WorkerHost {
     }
   }
 
+  /** The user's margin rule, with product defaults when unset. */
+  private async pricingRuleFor(userId: string): Promise<PricingRule> {
+    const s = await this.prisma.settings.findUnique({ where: { userId } });
+    return {
+      marginType: s?.marginType ?? 'PERCENT',
+      marginValue: s?.marginValue ?? 30,
+      priceRounding: s?.priceRounding ?? 50,
+    };
+  }
+
   private async handlePublishBatch(batchId: string, targets?: string[]) {
     this.logger.log(`Publishing batch ${batchId} to targets: ${targets?.join(', ') || 'ALL'}...`);
 
@@ -139,6 +166,40 @@ export class BatchProcessor extends WorkerHost {
 
     if (!batch || !batch.generatedContent) {
       throw new Error(`Batch ${batchId} invalid for publishing`);
+    }
+
+    // Finalize captions at publish time — the authoritative layer.
+    // Every publish route (single, bulk, queued, auto) passes through
+    // here, so the {{PRICE}} placeholder can never reach Meta and the
+    // price shown is always the reseller's selling price, recomputed
+    // from the CURRENT margin rule. If the review page already
+    // committed a substituted caption (manual override), there is no
+    // placeholder left and this is a no-op — the override wins.
+    {
+      const settings = await this.prisma.settings.findUnique({
+        where: { userId: batch.userId },
+      });
+      const rule: PricingRule = {
+        marginType: settings?.marginType ?? 'PERCENT',
+        marginValue: settings?.marginValue ?? 30,
+        priceRounding: settings?.priceRounding ?? 50,
+      };
+      const extracted: any = batch.extractedData || {};
+      const selling =
+        computeSellingPrice(parsePrice(extracted.price), rule) ??
+        (typeof extracted.selling_price_value === 'number'
+          ? extracted.selling_price_value
+          : null);
+      const sellingStr =
+        selling !== null ? formatRs(selling) : (extracted.price ?? '');
+      const footer = settings?.captionFooter ?? null;
+      const gc: any = batch.generatedContent;
+      batch.generatedContent = {
+        ...gc,
+        instagramCaption: finalizeCaption(gc.instagramCaption, sellingStr, footer),
+        facebookCaption: finalizeCaption(gc.facebookCaption, sellingStr, footer),
+        storyText: finalizeCaption(gc.storyText, sellingStr, null, false),
+      };
     }
 
     let allSuccess = true;

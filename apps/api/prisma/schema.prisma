@@ -124,6 +124,10 @@ model Settings {
   user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   isSyncActive          Boolean  @default(true)
   historySyncDepthHours Int      @default(24) // 6, 24, 72, 168, 336, 720
+  marginType            String   @default("PERCENT") // PERCENT, FIXED
+  marginValue           Float    @default(30)
+  priceRounding         Int      @default(50) // 0 = no rounding
+  captionFooter         String?
   updatedAt             DateTime @updatedAt
 }
 

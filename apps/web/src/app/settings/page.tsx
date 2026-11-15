@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Save, Radio, History, CheckCircle2, QrCode, Link as LinkIcon, Share2, RefreshCw, AlertCircle } from "lucide-react";
+import { Save, Radio, History, CheckCircle2, QrCode, Link as LinkIcon, Share2, RefreshCw, AlertCircle, Percent } from "lucide-react";
 import { API_URL, fetchWithAuth } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
@@ -18,9 +18,21 @@ const DEPTH_OPTIONS = [
 ];
 
 export default function SettingsPage() {
-  const [settings, setSettings] = useState({
+  const [settings, setSettings] = useState<{
+    isSyncActive: boolean;
+    historySyncDepthHours: number;
+    marginType: string;
+    marginValue: number;
+    priceRounding: number;
+    captionFooter: string;
+    [key: string]: any;
+  }>({
     isSyncActive: true,
     historySyncDepthHours: 24,
+    marginType: "PERCENT",
+    marginValue: 30,
+    priceRounding: 50,
+    captionFooter: "",
   });
   const [waStatus, setWaStatus] = useState<any>(null);
   const [socialAccounts, setSocialAccounts] = useState<any[]>([]);
@@ -53,7 +65,12 @@ export default function SettingsPage() {
       fetchWithAuth(`${API_URL}/api/whatsapp/status`).then(r => r.json()),
       fetchWithAuth(`${API_URL}/api/social/accounts`).then(r => r.json())
     ]).then(([settingsData, waData, socialData]) => {
-      if (settingsData && !settingsData.error) setSettings(settingsData);
+      if (settingsData && !settingsData.error)
+        setSettings((prev: any) => ({
+          ...prev,
+          ...settingsData,
+          captionFooter: settingsData.captionFooter ?? "",
+        }));
       if (waData && !waData.error) setWaStatus(waData);
       if (socialData && !socialData.error) setSocialAccounts(socialData);
       setLoading(false);
@@ -432,6 +449,93 @@ export default function SettingsPage() {
               <p className="text-xs text-slate-500 mt-3">
                 💡 When you click <strong className="text-slate-400">Sync Buffer Now</strong>, DropRoute parses the past <span className="text-electric-cyan font-bold">{DEPTH_OPTIONS.find(o => o.value === settings.historySyncDepthHours)?.label || `${settings.historySyncDepthHours} hours`}</span> of message drops, automatically skipping any products already in your catalog.
               </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Pricing & Captions */}
+        <h2 className="text-lg font-heading font-bold text-electric-cyan uppercase tracking-wider pl-2 pt-6">Selling Price & Captions</h2>
+        <div className="glass-card p-4 sm:p-6">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-xl bg-gold-500/10 border border-gold-500/30 flex items-center justify-center flex-shrink-0 relative overflow-hidden">
+              <div className="absolute inset-0 bg-gold-500/5 blur-md" />
+              <Percent className="w-6 h-6 text-gold-400 relative z-10" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-white">Margin Engine</h3>
+              <p className="text-sm text-slate-400 mt-1 max-w-lg">
+                Supplier posts carry the wholesale price. DropRoute converts it to <span className="text-slate-200 font-semibold">your selling price</span> automatically — in the review queue, on the product page, and in every published caption. You can still override the price on any single product.
+              </p>
+
+              <div className="flex flex-wrap items-end gap-4 mt-5">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Markup type</label>
+                  <div className="flex rounded-xl overflow-hidden border border-graphite-border">
+                    {(["PERCENT", "FIXED"] as const).map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setSettings((s: any) => ({ ...s, marginType: t }))}
+                        className={`px-4 py-2.5 text-sm font-semibold transition-colors ${settings.marginType === t ? "bg-gold-500/20 text-gold-300" : "bg-graphite-darker text-slate-400 hover:text-slate-200"}`}
+                      >
+                        {t === "PERCENT" ? "Percentage %" : "Fixed Rs."}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                    {settings.marginType === "PERCENT" ? "Markup %" : "Add (Rs.)"}
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={settings.marginValue}
+                    onChange={(e) => setSettings((s: any) => ({ ...s, marginValue: parseFloat(e.target.value) || 0 }))}
+                    className="w-32 bg-graphite-darker border border-graphite-border rounded-xl px-4 py-2.5 text-white focus:border-gold-400 focus:ring-1 focus:ring-gold-400 transition-all text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Round price to nearest</label>
+                  <select
+                    value={settings.priceRounding}
+                    onChange={(e) => setSettings((s: any) => ({ ...s, priceRounding: parseInt(e.target.value, 10) }))}
+                    className="w-40 bg-graphite-darker border border-graphite-border rounded-xl px-4 py-2.5 text-white focus:border-gold-400 focus:ring-1 focus:ring-gold-400 transition-all appearance-none cursor-pointer text-sm"
+                  >
+                    <option value={0}>No rounding</option>
+                    <option value={10}>Rs. 10</option>
+                    <option value={50}>Rs. 50</option>
+                    <option value={100}>Rs. 100</option>
+                    <option value={500}>Rs. 500</option>
+                  </select>
+                </div>
+              </div>
+
+              {(() => {
+                const supplier = 1850;
+                let v = settings.marginType === "FIXED"
+                  ? supplier + (Number(settings.marginValue) || 0)
+                  : supplier * (1 + (Number(settings.marginValue) || 0) / 100);
+                const r = Number(settings.priceRounding) || 0;
+                if (r > 1) v = Math.round(v / r) * r;
+                return (
+                  <p className="text-xs text-slate-500 mt-4">
+                    Example: supplier price <span className="text-slate-300 font-semibold">Rs. 1,850</span> → your selling price{" "}
+                    <span className="text-gold-300 font-bold">Rs. {Math.round(v).toLocaleString()}</span>
+                  </p>
+                );
+              })()}
+
+              <div className="mt-6">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Caption footer — added to every published post</label>
+                <textarea
+                  rows={3}
+                  value={settings.captionFooter}
+                  onChange={(e) => setSettings((s: any) => ({ ...s, captionFooter: e.target.value }))}
+                  placeholder={"e.g. 🛵 Cash on Delivery available nationwide\n📲 Order on WhatsApp: 03xx-xxxxxxx\n✅ 7-day easy exchange"}
+                  className="w-full max-w-lg bg-graphite-darker border border-graphite-border rounded-xl px-4 py-3 text-white placeholder:text-slate-600 focus:border-gold-400 focus:ring-1 focus:ring-gold-400 transition-all text-sm"
+                />
+              </div>
             </div>
           </div>
         </div>

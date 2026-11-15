@@ -202,8 +202,10 @@ export default function ProductDetailPage() {
             setEditedStory(data.generatedContent.storyText || "");
             hasInitializedEdits.current = true;
           }
-          if (data.extractedData?.price) {
-            setOverridePrice(data.extractedData.price);
+          if (data.extractedData?.selling_price || data.extractedData?.price) {
+            // Default to the margin-engine selling price, not the
+            // supplier's wholesale price. Still fully editable.
+            setOverridePrice(data.extractedData.selling_price || data.extractedData.price);
           }
         }
         setLoading(false);
