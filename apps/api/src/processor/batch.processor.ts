@@ -7,6 +7,7 @@ import { SocialService } from '../social/social.service';
 import { ConfigService } from '@nestjs/config';
 import {
   parsePrice,
+  analyzePrice,
   computeSellingPrice,
   formatRs,
   finalizeCaption,
@@ -87,9 +88,17 @@ export class BatchProcessor extends WorkerHost {
       // 1b. Selling price — apply the reseller's margin rule to the
       // supplier price so every surface (queue, review, publish)
       // works with the price the customer will actually see.
+      // Ambiguous price text (a range, or a pack quantity like
+      // "2 pcs 1850") is NEVER guessed: it is flagged for review and
+      // no selling price is derived from it.
       const rule = await this.pricingRuleFor(batch.userId);
-      const selling = computeSellingPrice(parsePrice(extractedData.price), rule);
-      if (selling !== null) {
+      const priceAnalysis = analyzePrice(extractedData.price);
+      if (priceAnalysis.ambiguous) {
+        extractedData.price_needs_review = true;
+        extractedData.price_ambiguity = priceAnalysis.reason;
+      }
+      const selling = computeSellingPrice(priceAnalysis.price, rule);
+      if (selling !== null && selling > 0) {
         extractedData.selling_price = formatRs(selling);
         extractedData.selling_price_value = selling;
       }
@@ -185,15 +194,56 @@ export class BatchProcessor extends WorkerHost {
         priceRounding: settings?.priceRounding ?? 50,
       };
       const extracted: any = batch.extractedData || {};
+      const gc: any = batch.generatedContent;
+      const captions = [gc.instagramCaption, gc.facebookCaption, gc.storyText];
+      const hasPlaceholder = captions.some((c) => (c ?? '').includes('{{PRICE}}'));
+      // An explicit manual price override set on the batch wins over
+      // every derived value. (The review page's other override path —
+      // committing captions with the price already substituted, leaving
+      // no {{PRICE}} placeholder — is honored below: with no placeholder
+      // there is nothing to substitute, so the block does not apply.)
+      const manualOverride =
+        typeof extracted.manual_price_override === 'number' &&
+        extracted.manual_price_override > 0
+          ? extracted.manual_price_override
+          : null;
       const selling =
+        manualOverride ??
         computeSellingPrice(parsePrice(extracted.price), rule) ??
         (typeof extracted.selling_price_value === 'number'
           ? extracted.selling_price_value
           : null);
+
+      // PRICE SAFETY GATE: never publish a zero or unknown price.
+      // If the captions still carry {{PRICE}} and no valid selling
+      // price exists (unparseable/ambiguous supplier text, or a margin
+      // rule that computes to 0), publishing would substitute garbage
+      // or "Rs. 0" into a live listing. Send the batch back to the
+      // review queue and tell the user instead.
+      if (hasPlaceholder && (selling === null || selling <= 0)) {
+        this.logger.warn(
+          `Publishing blocked for batch ${batchId}: no valid selling price (supplier price text: ${JSON.stringify(extracted.price ?? null)}). Sent back to review.`,
+        );
+        await this.prisma.productBatch.update({
+          where: { id: batchId },
+          data: { status: 'READY' },
+        });
+        await this.prisma.notification.create({
+          data: {
+            userId: batch.userId,
+            title: 'Publishing blocked — price needs review',
+            message:
+              'A product could not be published because its price could not be determined safely. Open it, set the price, and publish again.',
+            type: 'warning',
+            link: `/products/${batchId}`,
+          },
+        });
+        return;
+      }
+
       const sellingStr =
-        selling !== null ? formatRs(selling) : (extracted.price ?? '');
+        selling !== null && selling > 0 ? formatRs(selling) : (extracted.price ?? '');
       const footer = settings?.captionFooter ?? null;
-      const gc: any = batch.generatedContent;
       batch.generatedContent = {
         ...gc,
         instagramCaption: finalizeCaption(gc.instagramCaption, sellingStr, footer),

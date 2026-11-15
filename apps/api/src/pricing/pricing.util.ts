@@ -20,18 +20,60 @@ export interface PricingRule {
   priceRounding: number; // 0 = no rounding
 }
 
-/** "Rs. 1,850" / "PKR 2,499" / "1850" -> 1850. Returns null when unparseable. */
-export function parsePrice(raw: unknown): number | null {
-  if (raw === null || raw === undefined) return null;
-  const cleaned = String(raw).replace(/,/g, '');
+export type PriceAmbiguity = 'range' | 'quantity';
+
+export interface PriceAnalysis {
+  /** The single, unambiguous supplier price — or null. */
+  price: number | null;
+  /**
+   * True when the text carries price-like numbers that must NOT be
+   * guessed: a range ("PKR 1,850–2,450") or a pack quantity
+   * ("2 pcs 1850", "2-piece suit"). Guessing here once turned the
+   * quantity into the price and published listings at Rs. 0 — a
+   * missing price is recoverable in review, a wrong published price
+   * costs the reseller money.
+   */
+  ambiguous: boolean;
+  reason?: PriceAmbiguity;
+}
+
+// "pack of 2", "set of 3" leading the string.
+const PACK_OF_RE = /^\s*(?:pack|set)\s+of\s+\d+\b/i;
+// A leading quantity with a unit word: "2 pcs", "2-piece", "3 pairs".
+const QUANTITY_LEAD_RE =
+  /^\s*(?:rs\.?|pkr)?\s*\d+\s*[- ]?\s*(pcs?|pieces?|packs?|sets?|pairs?|dozen)\b/i;
+// "2 x 1850" — per-piece or total? Unknowable, so ambiguous.
+const MULTIPLY_RE = /^\s*\d+\s*[x×]\s*\d+/;
+// Two numbers joined by a dash or "to": "1,850–2,450", "1850 to 2450".
+const RANGE_RE = /\d[\d,]*\s*(?:[-–—]| to )\s*(?:rs\.?|pkr)?\s*\d[\d,]*/i;
+
+/** Analyze a raw extracted price string without ever guessing. */
+export function analyzePrice(raw: unknown): PriceAnalysis {
+  if (raw === null || raw === undefined) return { price: null, ambiguous: false };
+  const text = String(raw);
+  if (!text.trim()) return { price: null, ambiguous: false };
+
+  if (PACK_OF_RE.test(text) || QUANTITY_LEAD_RE.test(text) || MULTIPLY_RE.test(text)) {
+    return { price: null, ambiguous: true, reason: 'quantity' };
+  }
+  if (RANGE_RE.test(text)) {
+    return { price: null, ambiguous: true, reason: 'range' };
+  }
+
+  const cleaned = text.replace(/,/g, '');
   // Prefer the number following a currency marker ("Rs." itself
   // contains a dot — a naive digit/dot strip turns 1,850 into 0.185).
   const afterCurrency = cleaned.match(/(?:rs\.?|pkr)\s*(\d+(?:\.\d+)?)/i);
   const anyNumber = cleaned.match(/\d+(?:\.\d+)?/);
   const pick = afterCurrency?.[1] ?? anyNumber?.[0];
-  if (!pick) return null;
+  if (!pick) return { price: null, ambiguous: false };
   const rounded = Math.round(parseFloat(pick));
-  return rounded > 0 ? rounded : null;
+  return { price: rounded > 0 ? rounded : null, ambiguous: false };
+}
+
+/** "Rs. 1,850" / "PKR 2,499" / "1850" -> 1850. Returns null when unparseable or ambiguous. */
+export function parsePrice(raw: unknown): number | null {
+  return analyzePrice(raw).price;
 }
 
 export function computeSellingPrice(
