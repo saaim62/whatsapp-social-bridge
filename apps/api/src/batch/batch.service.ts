@@ -459,21 +459,28 @@ export class BatchService implements OnModuleDestroy {
 
     if (!batches.length) return { success: false, message: 'No valid batches found' };
 
+    // Tenant safety: the working set is derived EXCLUSIVELY from the batches
+    // loaded above (which are filtered by userId). The raw request `ids` must
+    // never reach a write — a mixed-ownership request would otherwise clear
+    // another reseller's extracted data and OCR metadata. Every write below
+    // also carries the ownership predicate itself.
+    const ownedIds = batches.map(b => b.id);
+
     await this.prisma.$transaction(async (tx) => {
       const generatedIds = batches.map(b => b.generatedContent?.id).filter(id => id) as string[];
       if (generatedIds.length > 0) {
         await tx.generatedContent.deleteMany({
-          where: { id: { in: generatedIds } }
+          where: { id: { in: generatedIds }, batch: { userId } }
         });
       }
 
       await tx.productBatch.updateMany({
-        where: { id: { in: ids } },
+        where: { id: { in: ownedIds }, userId },
         data: { extractedData: Prisma.DbNull }
       });
 
       await tx.mediaAsset.updateMany({
-        where: { batchId: { in: ids } },
+        where: { batchId: { in: ownedIds }, batch: { userId } },
         data: { ocrConfidence: null }
       });
     });
