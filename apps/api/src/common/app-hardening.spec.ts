@@ -8,6 +8,7 @@ import {
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import * as request from 'supertest';
+import type { Server } from 'http';
 import { AuthController } from '../auth/auth.controller';
 import { AuthService } from '../auth/auth.service';
 import { EmailService } from '../auth/email.service';
@@ -64,35 +65,35 @@ describe('global ValidationPipe (main.ts configuration)', () => {
   });
 
   it('accepts a well-formed login body', async () => {
-    await request(app.getHttpServer())
+    await request(app.getHttpServer() as Server)
       .post('/api/account/login')
       .send({ email: 'a@b.com', password: 'secret' })
       .expect(201);
   });
 
   it('rejects a login body with an unknown property', async () => {
-    await request(app.getHttpServer())
+    await request(app.getHttpServer() as Server)
       .post('/api/account/login')
       .send({ email: 'a@b.com', password: 'secret', isAdmin: true })
       .expect(400);
   });
 
   it('rejects a malformed email', async () => {
-    await request(app.getHttpServer())
+    await request(app.getHttpServer() as Server)
       .post('/api/account/login')
       .send({ email: 'not-an-email', password: 'secret' })
       .expect(400);
   });
 
   it('rejects a register body with an unknown property', async () => {
-    await request(app.getHttpServer())
+    await request(app.getHttpServer() as Server)
       .post('/api/account/register')
       .send({ email: 'a@b.com', password: 'secret', role: 'OWNER' })
       .expect(400);
   });
 
   it('rejects a reset-password body missing the token', async () => {
-    await request(app.getHttpServer())
+    await request(app.getHttpServer() as Server)
       .post('/api/account/reset-password')
       .send({ password: 'new-secret' })
       .expect(400);
@@ -128,7 +129,7 @@ describe('global ThrottlerGuard (app.module.ts configuration)', () => {
   });
 
   it('allows up to the limit, then returns 429', async () => {
-    const server = app.getHttpServer();
+    const server = app.getHttpServer() as Server;
     for (let i = 0; i < 3; i++) {
       await request(server).get('/ping').expect(200);
     }

@@ -1,4 +1,30 @@
 import { SourcesService } from './sources.service';
+import type { PrismaService } from '../prisma/prisma.service';
+import type { WhatsappService } from '../whatsapp/whatsapp.service';
+
+interface SourceRow {
+  id: string;
+  userId: string;
+  jid: string;
+  name: string;
+  type: string;
+  isEnabled: boolean;
+  createdAt?: Date;
+}
+
+interface ContactRow {
+  userId: string;
+  jid: string;
+  name: string;
+}
+
+interface SourceCreateData {
+  userId: string;
+  jid: string;
+  name: string;
+  type: string;
+  isEnabled: boolean;
+}
 
 jest.mock('ioredis', () => ({
   __esModule: true,
@@ -27,17 +53,21 @@ describe('SourcesService.isSourceAllowed — exact-identity authorization', () =
   const ALI_STRANGER_JID = '923002222222@s.whatsapp.net';
   const STRANGER_LID = '999888777@lid';
 
-  let db: { sources: any[]; contacts: any[] };
+  let db: { sources: SourceRow[]; contacts: ContactRow[] };
   let service: SourcesService;
 
-  function matchesWhere(row: any, where: any): boolean {
+  function matchesWhere(
+    row: Record<string, unknown>,
+    where: Record<string, unknown>,
+  ): boolean {
     for (const [key, cond] of Object.entries(where ?? {})) {
       if (key === 'NOT') {
-        if (matchesWhere(row, cond)) return false;
+        if (matchesWhere(row, cond as Record<string, unknown>)) return false;
         continue;
       }
-      if (cond && typeof cond === 'object' && 'endsWith' in (cond as any)) {
-        if (!String(row[key]).endsWith((cond as any).endsWith)) return false;
+      if (cond && typeof cond === 'object' && 'endsWith' in cond) {
+        if (!String(row[key]).endsWith((cond as { endsWith: string }).endsWith))
+          return false;
         continue;
       }
       if (row[key] !== cond) return false;
@@ -48,48 +78,73 @@ describe('SourcesService.isSourceAllowed — exact-identity authorization', () =
   function makePrisma() {
     return {
       whatsappSource: {
-        findUnique: jest.fn(async ({ where }: any) => {
-          const { userId, jid } = where.userId_jid;
-          return (
-            db.sources.find((s) => s.userId === userId && s.jid === jid) ?? null
-          );
-        }),
-        findFirst: jest.fn(async ({ where }: any) => {
-          return db.sources.find((s) => matchesWhere(s, where)) ?? null;
-        }),
-        create: jest.fn(async ({ data }: any) => {
+        findUnique: jest.fn(
+          ({
+            where,
+          }: {
+            where: { userId_jid: { userId: string; jid: string } };
+          }) => {
+            const { userId, jid } = where.userId_jid;
+            return Promise.resolve(
+              db.sources.find((s) => s.userId === userId && s.jid === jid) ??
+                null,
+            );
+          },
+        ),
+        findFirst: jest.fn(({ where }: { where: Record<string, unknown> }) =>
+          Promise.resolve(
+            db.sources.find((s) =>
+              matchesWhere(s as unknown as Record<string, unknown>, where),
+            ) ?? null,
+          ),
+        ),
+        create: jest.fn(({ data }: { data: SourceCreateData }) => {
           if (
             db.sources.some(
               (s) => s.userId === data.userId && s.jid === data.jid,
             )
           ) {
-            const err: any = new Error('Unique constraint failed');
-            err.code = 'P2002';
-            throw err;
+            throw Object.assign(new Error('Unique constraint failed'), {
+              code: 'P2002',
+            });
           }
-          const row = {
+          const row: SourceRow = {
             id: `src-${db.sources.length + 1}`,
             createdAt: new Date(),
             ...data,
           };
           db.sources.push(row);
-          return row;
+          return Promise.resolve(row);
         }),
-        update: jest.fn(async ({ where, data }: any) => {
-          const row = db.sources.find((s) => s.id === where.id);
-          if (!row) throw new Error('Record not found');
-          Object.assign(row, data);
-          return row;
-        }),
+        update: jest.fn(
+          ({
+            where,
+            data,
+          }: {
+            where: { id: string };
+            data: Partial<SourceRow>;
+          }) => {
+            const row = db.sources.find((s) => s.id === where.id);
+            if (!row) throw new Error('Record not found');
+            Object.assign(row, data);
+            return Promise.resolve(row);
+          },
+        ),
       },
       whatsappContact: {
-        findUnique: jest.fn(async ({ where }: any) => {
-          const { userId, jid } = where.userId_jid;
-          return (
-            db.contacts.find((c) => c.userId === userId && c.jid === jid) ??
-            null
-          );
-        }),
+        findUnique: jest.fn(
+          ({
+            where,
+          }: {
+            where: { userId_jid: { userId: string; jid: string } };
+          }) => {
+            const { userId, jid } = where.userId_jid;
+            return Promise.resolve(
+              db.contacts.find((c) => c.userId === userId && c.jid === jid) ??
+                null,
+            );
+          },
+        ),
       },
     };
   }
@@ -114,7 +169,10 @@ describe('SourcesService.isSourceAllowed — exact-identity authorization', () =
         { userId: USER, jid: STRANGER_LID, name: 'Ali' },
       ],
     };
-    service = new SourcesService(makePrisma() as any, {} as any);
+    service = new SourcesService(
+      makePrisma() as unknown as PrismaService,
+      {} as unknown as WhatsappService,
+    );
   }
 
   beforeEach(seed);
@@ -132,13 +190,13 @@ describe('SourcesService.isSourceAllowed — exact-identity authorization', () =
 
     const created = db.sources.find((s) => s.jid === ALI_STRANGER_JID);
     expect(created).toBeDefined();
-    expect(created.isEnabled).toBe(false);
+    expect(created?.isEnabled).toBe(false);
 
     // Second sighting (existing-source path) must also stay rejected.
     await expect(
       service.isSourceAllowed(ALI_STRANGER_JID, 'Ali', USER),
     ).resolves.toBe(false);
-    expect(db.sources.find((s) => s.jid === ALI_STRANGER_JID).isEnabled).toBe(
+    expect(db.sources.find((s) => s.jid === ALI_STRANGER_JID)?.isEnabled).toBe(
       false,
     );
   });
@@ -150,13 +208,13 @@ describe('SourcesService.isSourceAllowed — exact-identity authorization', () =
 
     const created = db.sources.find((s) => s.jid === STRANGER_LID);
     expect(created).toBeDefined();
-    expect(created.isEnabled).toBe(false);
+    expect(created?.isEnabled).toBe(false);
 
     // And again once the @lid source exists as a disabled row.
     await expect(
       service.isSourceAllowed(STRANGER_LID, 'Ali', USER),
     ).resolves.toBe(false);
-    expect(db.sources.find((s) => s.jid === STRANGER_LID).isEnabled).toBe(
+    expect(db.sources.find((s) => s.jid === STRANGER_LID)?.isEnabled).toBe(
       false,
     );
   });

@@ -1,4 +1,45 @@
 import { WhatsappService } from './whatsapp.service';
+import type { BatchService } from '../batch/batch.service';
+import type { IncomingMessagePayload } from '../batch/batch.service';
+import type { SettingsService } from '../settings/settings.service';
+import type {
+  SourcesService,
+  SyncContactInput,
+} from '../sources/sources.service';
+import type { PrismaService } from '../prisma/prisma.service';
+import type { StorageService } from '../storage/storage.service';
+import type { DebounceStore } from './debounce.store';
+
+interface TestMessage {
+  key: { remoteJid: string; fromMe: boolean; id: string };
+  pushName: string;
+  message: { conversation: string };
+  messageTimestamp: number;
+}
+
+interface HandlerPayload {
+  type?: string;
+  messages?: TestMessage[];
+  contacts?: unknown[];
+  chats?: unknown[];
+}
+
+type EventHandler = (arg: HandlerPayload) => void;
+
+/** Private seams the suite drives directly. */
+interface ServiceInternals {
+  loadBaileys: () => Promise<unknown>;
+  saveMessagesToCache: (
+    userId: string,
+    messages: TestMessage[],
+  ) => Promise<void>;
+  handleIncomingMessage: (userId: string, msg: TestMessage) => Promise<void>;
+}
+
+interface SettingsShape {
+  isSyncActive: boolean;
+  historySyncDepthHours: number;
+}
 
 // Baileys listeners are fire-and-forget (the emitter never awaits them),
 // so after invoking a captured handler the test must let the handler's
@@ -19,22 +60,47 @@ describe('WhatsappService ingestion allowlist gate', () => {
   const GOOD_JID = '111@g.us';
   const BAD_JID = '222@g.us';
 
-  let handlers: Record<string, Function>;
+  let handlers: Record<string, EventHandler>;
   let service: WhatsappService;
-  let batchService: any;
-  let settingsService: any;
-  let sourcesService: any;
-  let prisma: any;
-  let debounceStore: {
-    push: jest.Mock;
-    collectDue: jest.Mock;
-    pendingMessages: jest.Mock;
+  let batchService: {
+    handleMessage: jest.Mock<Promise<void>, [IncomingMessagePayload]>;
+    forceCloseActiveBatch: jest.Mock<Promise<void>, [string, string]>;
   };
-  let buffered: Map<string, any[]>;
-  let saveCacheSpy: jest.Mock;
-  let handleIncomingSpy: jest.Mock;
+  let settingsService: {
+    getSettings: jest.Mock<Promise<SettingsShape>, [string]>;
+  };
+  let sourcesService: {
+    isSourceAllowed: jest.Mock<
+      Promise<boolean>,
+      [string, string | undefined, string]
+    >;
+    syncContacts: jest.Mock<Promise<void>, [string, SyncContactInput[]]>;
+  };
+  let prisma: {
+    user: { findMany: jest.Mock<Promise<unknown[]>, [unknown]> };
+    whatsappSource: {
+      count: jest.Mock<Promise<number>, [unknown]>;
+      findUnique: jest.Mock<Promise<null>, [unknown]>;
+      updateMany: jest.Mock<Promise<{ count: number }>, [unknown]>;
+    };
+    productBatch: { findMany: jest.Mock<Promise<unknown[]>, [unknown]> };
+    mediaAsset: { findMany: jest.Mock<Promise<unknown[]>, [unknown]> };
+    notification: { create: jest.Mock<Promise<unknown>, [unknown]> };
+  };
+  let debounceStore: {
+    push: jest.Mock<Promise<void>, [string, string, TestMessage]>;
+    collectDue: jest.Mock<Promise<never[]>, []>;
+    pendingMessages: jest.Mock<Promise<TestMessage[]>, [string, string]>;
+  };
+  let buffered: Map<string, TestMessage[]>;
+  let saveCacheSpy: jest.Mock<Promise<void>, [string, TestMessage[]]>;
+  let handleIncomingSpy: jest.Mock<Promise<void>, [string, TestMessage]>;
 
-  function msg(jid: string, id: string, text = 'New product drop, price 1850') {
+  function msg(
+    jid: string,
+    id: string,
+    text = 'New product drop, price 1850',
+  ): TestMessage {
     return {
       key: { remoteJid: jid, fromMe: false, id },
       pushName: 'Supplier',
@@ -50,7 +116,7 @@ describe('WhatsappService ingestion allowlist gate', () => {
     handlers = {};
     const fakeClient = {
       ev: {
-        on: jest.fn((name: string, fn: Function) => {
+        on: jest.fn((name: string, fn: EventHandler) => {
           handlers[name] = fn;
         }),
         removeAllListeners: jest.fn(),
@@ -60,70 +126,108 @@ describe('WhatsappService ingestion allowlist gate', () => {
     };
     const fakeBaileys = {
       default: jest.fn(() => fakeClient),
-      useMultiFileAuthState: jest.fn(async () => ({
-        state: {},
-        saveCreds: jest.fn(),
-      })),
+      useMultiFileAuthState: jest.fn(() =>
+        Promise.resolve({
+          state: {},
+          saveCreds: jest.fn(),
+        }),
+      ),
       DisconnectReason: { loggedOut: 401 },
-      fetchLatestWaWebVersion: jest.fn(async () => ({
-        version: [2, 3000, 0],
-        isLatest: true,
-      })),
+      fetchLatestWaWebVersion: jest.fn(() =>
+        Promise.resolve({
+          version: [2, 3000, 0] as [number, number, number],
+          isLatest: true,
+        }),
+      ),
     };
 
     batchService = {
-      handleMessage: jest.fn().mockResolvedValue(undefined),
-      forceCloseActiveBatch: jest.fn().mockResolvedValue(undefined),
+      handleMessage: jest
+        .fn<Promise<void>, [IncomingMessagePayload]>()
+        .mockResolvedValue(undefined),
+      forceCloseActiveBatch: jest
+        .fn<Promise<void>, [string, string]>()
+        .mockResolvedValue(undefined),
     };
     settingsService = {
-      getSettings: jest.fn().mockResolvedValue({
-        isSyncActive: opts.syncActive,
-        historySyncDepthHours: 24,
-      }),
+      getSettings: jest
+        .fn<Promise<SettingsShape>, [string]>()
+        .mockResolvedValue({
+          isSyncActive: opts.syncActive,
+          historySyncDepthHours: 24,
+        }),
     };
     sourcesService = {
-      isSourceAllowed: jest.fn(async (jid: string) => opts.allowed(jid)),
-      syncContacts: jest.fn().mockResolvedValue(undefined),
+      isSourceAllowed: jest.fn<
+        Promise<boolean>,
+        [string, string | undefined, string]
+      >((jid: string) => Promise.resolve(opts.allowed(jid))),
+      syncContacts: jest
+        .fn<Promise<void>, [string, SyncContactInput[]]>()
+        .mockResolvedValue(undefined),
     };
     prisma = {
-      user: { findMany: jest.fn().mockResolvedValue([]) },
-      whatsappSource: {
-        count: jest.fn().mockResolvedValue(0),
-        findUnique: jest.fn(),
-        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      user: {
+        findMany: jest
+          .fn<Promise<unknown[]>, [unknown]>()
+          .mockResolvedValue([]),
       },
-      productBatch: { findMany: jest.fn().mockResolvedValue([]) },
-      mediaAsset: { findMany: jest.fn().mockResolvedValue([]) },
-      notification: { create: jest.fn().mockResolvedValue({}) },
+      whatsappSource: {
+        count: jest.fn<Promise<number>, [unknown]>().mockResolvedValue(0),
+        findUnique: jest.fn<Promise<null>, [unknown]>(),
+        updateMany: jest
+          .fn<Promise<{ count: number }>, [unknown]>()
+          .mockResolvedValue({ count: 0 }),
+      },
+      productBatch: {
+        findMany: jest
+          .fn<Promise<unknown[]>, [unknown]>()
+          .mockResolvedValue([]),
+      },
+      mediaAsset: {
+        findMany: jest
+          .fn<Promise<unknown[]>, [unknown]>()
+          .mockResolvedValue([]),
+      },
+      notification: {
+        create: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue({}),
+      },
     };
 
-    buffered = new Map<string, any[]>();
+    buffered = new Map<string, TestMessage[]>();
     debounceStore = {
-      push: jest.fn(async (userId: string, senderId: string, message: any) => {
-        const key = `${userId}_${senderId}`;
-        if (!buffered.has(key)) buffered.set(key, []);
-        buffered.get(key)!.push(message);
-      }),
-      collectDue: jest.fn(async () => []),
-      pendingMessages: jest.fn(
-        async (userId: string, senderId: string) =>
-          buffered.get(`${userId}_${senderId}`) ?? [],
+      push: jest.fn(
+        (userId: string, senderId: string, message: TestMessage) => {
+          const key = `${userId}_${senderId}`;
+          if (!buffered.has(key)) buffered.set(key, []);
+          buffered.get(key)!.push(message);
+          return Promise.resolve();
+        },
+      ),
+      collectDue: jest.fn(() => Promise.resolve([] as never[])),
+      pendingMessages: jest.fn((userId: string, senderId: string) =>
+        Promise.resolve(buffered.get(`${userId}_${senderId}`) ?? []),
       ),
     };
 
     service = new WhatsappService(
-      batchService,
-      settingsService,
-      sourcesService,
-      prisma,
-      {} as any,
-      debounceStore as any,
+      batchService as unknown as BatchService,
+      settingsService as unknown as SettingsService,
+      sourcesService as unknown as SourcesService,
+      prisma as unknown as PrismaService,
+      {} as unknown as StorageService,
+      debounceStore as unknown as DebounceStore,
     );
-    (service as any).loadBaileys = jest.fn().mockResolvedValue(fakeBaileys);
-    saveCacheSpy = jest.fn();
-    (service as any).saveMessagesToCache = saveCacheSpy;
-    handleIncomingSpy = jest.fn().mockResolvedValue(undefined);
-    (service as any).handleIncomingMessage = handleIncomingSpy;
+    const internals = service as unknown as ServiceInternals;
+    internals.loadBaileys = jest
+      .fn<Promise<unknown>, []>()
+      .mockResolvedValue(fakeBaileys);
+    saveCacheSpy = jest.fn<Promise<void>, [string, TestMessage[]]>();
+    internals.saveMessagesToCache = saveCacheSpy;
+    handleIncomingSpy = jest
+      .fn<Promise<void>, [string, TestMessage]>()
+      .mockResolvedValue(undefined);
+    internals.handleIncomingMessage = handleIncomingSpy;
 
     await service.initializeWhatsApp(USER);
     expect(handlers['messages.upsert']).toBeDefined();
@@ -139,7 +243,7 @@ describe('WhatsappService ingestion allowlist gate', () => {
   describe('live messages.upsert', () => {
     it('paused sync → nothing cached, nothing buffered', async () => {
       await setup({ syncActive: false, allowed: () => true });
-      await handlers['messages.upsert']({
+      handlers['messages.upsert']({
         type: 'notify',
         messages: [msg(GOOD_JID, 'm1')],
       });
@@ -150,7 +254,7 @@ describe('WhatsappService ingestion allowlist gate', () => {
 
     it('empty allowlist → nothing cached, nothing buffered', async () => {
       await setup({ syncActive: true, allowed: () => false });
-      await handlers['messages.upsert']({
+      handlers['messages.upsert']({
         type: 'notify',
         messages: [msg(GOOD_JID, 'm1')],
       });
@@ -163,7 +267,7 @@ describe('WhatsappService ingestion allowlist gate', () => {
       await setup({ syncActive: true, allowed: (jid) => jid === GOOD_JID });
       const good = msg(GOOD_JID, 'm-good');
       const bad = msg(BAD_JID, 'm-bad');
-      await handlers['messages.upsert']({
+      handlers['messages.upsert']({
         type: 'notify',
         messages: [good, bad],
       });
@@ -179,7 +283,7 @@ describe('WhatsappService ingestion allowlist gate', () => {
   describe('messaging-history.set', () => {
     it('paused sync → nothing cached, nothing ingested', async () => {
       await setup({ syncActive: false, allowed: () => true });
-      await handlers['messaging-history.set']({
+      handlers['messaging-history.set']({
         contacts: [],
         chats: [],
         messages: [msg(GOOD_JID, 'h1')],
@@ -191,7 +295,7 @@ describe('WhatsappService ingestion allowlist gate', () => {
 
     it('empty allowlist → zero ingestion and NO auto-enable of sources', async () => {
       await setup({ syncActive: true, allowed: () => false });
-      await handlers['messaging-history.set']({
+      handlers['messaging-history.set']({
         contacts: [],
         chats: [],
         messages: [msg(GOOD_JID, 'h1'), msg(BAD_JID, 'h2')],
@@ -208,7 +312,7 @@ describe('WhatsappService ingestion allowlist gate', () => {
       await setup({ syncActive: true, allowed: (jid) => jid === GOOD_JID });
       const good = msg(GOOD_JID, 'h-good');
       const bad = msg(BAD_JID, 'h-bad');
-      await handlers['messaging-history.set']({
+      handlers['messaging-history.set']({
         contacts: [],
         chats: [],
         messages: [good, bad],

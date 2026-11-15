@@ -1,9 +1,23 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { JwtStrategy } from './jwt.strategy';
+import type { PrismaService } from '../prisma/prisma.service';
+
+interface StrategyUserRow {
+  id: string;
+  email: string;
+  isBlocked: boolean;
+  sessionVersion: number;
+}
+
+interface StrategyPrismaMock {
+  user: {
+    findUnique: jest.Mock<Promise<StrategyUserRow | null>, [unknown]>;
+  };
+}
 
 describe('JwtStrategy.validate', () => {
   const OLD_ENV = process.env.JWT_SECRET;
-  let prisma: any;
+  let prisma: StrategyPrismaMock;
   let strategy: JwtStrategy;
 
   beforeAll(() => {
@@ -15,8 +29,12 @@ describe('JwtStrategy.validate', () => {
   });
 
   beforeEach(() => {
-    prisma = { user: { findUnique: jest.fn() } };
-    strategy = new JwtStrategy(prisma);
+    prisma = {
+      user: {
+        findUnique: jest.fn<Promise<StrategyUserRow | null>, [unknown]>(),
+      },
+    };
+    strategy = new JwtStrategy(prisma as unknown as PrismaService);
   });
 
   it('rejects when the user no longer exists', async () => {

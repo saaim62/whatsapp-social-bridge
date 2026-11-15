@@ -1,4 +1,81 @@
-import { BatchService } from './batch.service';
+import {
+  BatchService,
+  BlurImageJob,
+  IncomingMessagePayload,
+  ProcessBatchJob,
+} from './batch.service';
+import type { PrismaService } from '../prisma/prisma.service';
+import type { ConfigService } from '@nestjs/config';
+import type { AiService } from '../ai/ai.service';
+import type { OcrService } from '../ai/ocr.service';
+import type { StorageService } from '../storage/storage.service';
+import type { Queue } from 'bullmq';
+
+interface BatchRow {
+  id: string;
+  userId: string;
+  extractedData: Record<string, unknown>;
+}
+
+interface ContentRow {
+  id: string;
+  batchId: string;
+  instagramCaption: string;
+}
+
+interface AssetRow {
+  id: string;
+  batchId: string;
+  ocrConfidence: number | null;
+}
+
+interface BatchWhere {
+  id?: { in: string[] };
+  userId?: string;
+}
+
+interface ContentWhere {
+  id?: { in: string[] };
+  batch?: { userId: string };
+}
+
+interface AssetWhere {
+  batchId?: { in: string[] };
+  batch?: { userId: string };
+}
+
+type BatchFindResult = BatchRow & {
+  generatedContent: ContentRow | null | undefined;
+};
+
+interface FakeTx {
+  productBatch: {
+    findMany: jest.Mock<
+      Promise<BatchFindResult[]>,
+      [{ where: BatchWhere; include?: { generatedContent?: boolean } }]
+    >;
+    updateMany: jest.Mock<
+      Promise<{ count: number }>,
+      [{ where: BatchWhere; data: Record<string, unknown> }]
+    >;
+  };
+  generatedContent: {
+    deleteMany: jest.Mock<
+      Promise<{ count: number }>,
+      [{ where: ContentWhere }]
+    >;
+  };
+  mediaAsset: {
+    updateMany: jest.Mock<
+      Promise<{ count: number }>,
+      [{ where: AssetWhere; data: Record<string, unknown> }]
+    >;
+  };
+}
+
+interface FakePrisma extends FakeTx {
+  $transaction: jest.Mock<Promise<unknown>, [(tx: FakeTx) => Promise<unknown>]>;
+}
 
 jest.mock('ioredis', () => ({
   __esModule: true,
@@ -23,9 +100,9 @@ describe('BatchService.clearAIContentBulk tenant isolation', () => {
   const USER_B = 'user-b';
 
   let db: {
-    batches: any[];
-    contents: any[];
-    assets: any[];
+    batches: BatchRow[];
+    contents: ContentRow[];
+    assets: AssetRow[];
   };
 
   function seed() {
@@ -61,24 +138,26 @@ describe('BatchService.clearAIContentBulk tenant isolation', () => {
     return db.batches.find((b) => b.id === id);
   }
 
-  function makePrisma() {
-    const impl = {
+  function makePrisma(): FakePrisma {
+    const impl: FakeTx = {
       productBatch: {
-        findMany: jest.fn(async ({ where, include }: any) => {
-          return db.batches
-            .filter(
-              (b) =>
-                (!where.id?.in || where.id.in.includes(b.id)) &&
-                (!where.userId || b.userId === where.userId),
-            )
-            .map((b) => ({
-              ...b,
-              generatedContent: include?.generatedContent
-                ? db.contents.find((c) => c.batchId === b.id) || null
-                : undefined,
-            }));
-        }),
-        updateMany: jest.fn(async ({ where, data }: any) => {
+        findMany: jest.fn(({ where, include }) =>
+          Promise.resolve(
+            db.batches
+              .filter(
+                (b) =>
+                  (!where.id?.in || where.id.in.includes(b.id)) &&
+                  (!where.userId || b.userId === where.userId),
+              )
+              .map((b) => ({
+                ...b,
+                generatedContent: include?.generatedContent
+                  ? db.contents.find((c) => c.batchId === b.id) || null
+                  : undefined,
+              })),
+          ),
+        ),
+        updateMany: jest.fn(({ where, data }) => {
           let count = 0;
           for (const b of db.batches) {
             if (where.id?.in && !where.id.in.includes(b.id)) continue;
@@ -86,11 +165,11 @@ describe('BatchService.clearAIContentBulk tenant isolation', () => {
             Object.assign(b, data);
             count++;
           }
-          return { count };
+          return Promise.resolve({ count });
         }),
       },
       generatedContent: {
-        deleteMany: jest.fn(async ({ where }: any) => {
+        deleteMany: jest.fn(({ where }) => {
           const before = db.contents.length;
           db.contents = db.contents.filter((c) => {
             if (where.id?.in && !where.id.in.includes(c.id)) return true;
@@ -100,11 +179,11 @@ describe('BatchService.clearAIContentBulk tenant isolation', () => {
             }
             return false;
           });
-          return { count: before - db.contents.length };
+          return Promise.resolve({ count: before - db.contents.length });
         }),
       },
       mediaAsset: {
-        updateMany: jest.fn(async ({ where, data }: any) => {
+        updateMany: jest.fn(({ where, data }) => {
           let count = 0;
           for (const a of db.assets) {
             if (where.batchId?.in && !where.batchId.in.includes(a.batchId))
@@ -117,26 +196,28 @@ describe('BatchService.clearAIContentBulk tenant isolation', () => {
             Object.assign(a, data);
             count++;
           }
-          return { count };
+          return Promise.resolve({ count });
         }),
       },
     };
     return {
       ...impl,
-      $transaction: jest.fn(async (fn: any) => fn(impl)),
+      $transaction: jest.fn((fn) => fn(impl)),
     };
   }
 
-  function makeService(prisma: any) {
+  function makeService(prisma: FakePrisma) {
     return new BatchService(
-      prisma,
-      { get: (_k: string, def: any) => def } as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      { add: jest.fn() } as any,
-      { add: jest.fn() } as any,
-      { add: jest.fn() } as any,
+      prisma as unknown as PrismaService,
+      {
+        get: (_k: string, def: unknown) => def,
+      } as unknown as ConfigService,
+      {} as unknown as AiService,
+      {} as unknown as OcrService,
+      {} as unknown as StorageService,
+      { add: jest.fn() } as unknown as Queue<ProcessBatchJob>,
+      { add: jest.fn() } as unknown as Queue<IncomingMessagePayload>,
+      { add: jest.fn() } as unknown as Queue<BlurImageJob>,
     );
   }
 
@@ -152,10 +233,10 @@ describe('BatchService.clearAIContentBulk tenant isolation', () => {
     });
 
     // User A submits a list containing BOTH their own and user B's batch ID.
-    const res: any = await service.clearAIContentBulk(
+    const res = (await service.clearAIContentBulk(
       ['batch-a1', 'batch-b1'],
       USER_A,
-    );
+    )) as { success: boolean; count?: number };
     expect(res.success).toBe(true);
     expect(res.count).toBe(1); // only A's batch was in the working set
 
@@ -184,7 +265,10 @@ describe('BatchService.clearAIContentBulk tenant isolation', () => {
     const prisma = makePrisma();
     const service = makeService(prisma);
     const before = JSON.stringify(db);
-    const res: any = await service.clearAIContentBulk(['batch-b1'], USER_A);
+    const res = (await service.clearAIContentBulk(['batch-b1'], USER_A)) as {
+      success: boolean;
+      count?: number;
+    };
     expect(res.success).toBe(false);
     expect(JSON.stringify(db)).toBe(before);
   });

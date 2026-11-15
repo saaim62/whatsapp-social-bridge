@@ -1,7 +1,25 @@
-import { BadRequestException, HttpException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ExecutionContext,
+  HttpException,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { AuthThrottleGuard } from './auth-throttle.guard';
+import { EmailService } from './email.service';
+import type { PrismaService } from '../prisma/prisma.service';
+import type { JwtService } from '@nestjs/jwt';
+
+interface SeedUser {
+  id: string;
+  email: string;
+  passwordHash: string;
+  isEmailVerified: boolean;
+  isBlocked: boolean;
+  sessionVersion: number;
+  verificationToken: string | null;
+  verificationTokenExpiresAt: Date | null;
+}
 
 const OLD_TOKEN = 'a'.repeat(64);
 
@@ -18,49 +36,79 @@ const OLD_TOKEN = 'a'.repeat(64);
  * for real: the old NULL-expiry token must fail, the resent token must
  * work, and the old token must stay dead after the resend.
  */
-function makeStatefulPrisma(seedUsers: any[]) {
-  const store = seedUsers.map((u) => ({ ...u }));
+function makeStatefulPrisma(seedUsers: SeedUser[]) {
+  const store: SeedUser[] = seedUsers.map((u) => ({ ...u }));
   const prisma = {
     user: {
-      findUnique: jest.fn(async ({ where }: any) => {
-        return (
-          store.find(
-            (u) =>
-              (where.email !== undefined && u.email === where.email) ||
-              (where.id !== undefined && u.id === where.id),
-          ) ?? null
-        );
-      }),
-      update: jest.fn(async ({ where, data }: any) => {
-        const u = store.find((x) => x.id === where.id);
-        if (!u) throw new Error('Record not found');
-        Object.assign(u, data);
-        return u;
-      }),
-      updateMany: jest.fn(async ({ where, data }: any) => {
-        let count = 0;
-        for (const u of store) {
-          if (
-            where.verificationToken !== undefined &&
-            u.verificationToken !== where.verificationToken
-          )
-            continue;
-          if (where.verificationTokenExpiresAt?.gt) {
-            const exp = u.verificationTokenExpiresAt;
-            if (!exp || !(new Date(exp) > where.verificationTokenExpiresAt.gt))
-              continue;
-          }
+      findUnique: jest.fn(
+        ({ where }: { where: { email?: string; id?: string } }) =>
+          Promise.resolve(
+            store.find(
+              (u) =>
+                (where.email !== undefined && u.email === where.email) ||
+                (where.id !== undefined && u.id === where.id),
+            ) ?? null,
+          ),
+      ),
+      update: jest.fn(
+        ({
+          where,
+          data,
+        }: {
+          where: { id: string };
+          data: Partial<SeedUser>;
+        }) => {
+          const u = store.find((x) => x.id === where.id);
+          if (!u) return Promise.reject(new Error('Record not found'));
           Object.assign(u, data);
-          count++;
-        }
-        return { count };
-      }),
+          return Promise.resolve(u);
+        },
+      ),
+      updateMany: jest.fn(
+        ({
+          where,
+          data,
+        }: {
+          where: {
+            verificationToken?: string;
+            verificationTokenExpiresAt?: { gt: Date };
+          };
+          data: Partial<SeedUser>;
+        }) => {
+          let count = 0;
+          for (const u of store) {
+            if (
+              where.verificationToken !== undefined &&
+              u.verificationToken !== where.verificationToken
+            )
+              continue;
+            if (where.verificationTokenExpiresAt?.gt) {
+              const exp = u.verificationTokenExpiresAt;
+              if (
+                !exp ||
+                !(new Date(exp) > where.verificationTokenExpiresAt.gt)
+              )
+                continue;
+            }
+            Object.assign(u, data);
+            count++;
+          }
+          return Promise.resolve({ count });
+        },
+      ),
     },
   };
   return { prisma, store };
 }
 
-function preMigrationUser() {
+function makeService(prisma: unknown) {
+  return new AuthService(
+    prisma as PrismaService,
+    { sign: jest.fn() } as unknown as JwtService,
+  );
+}
+
+function preMigrationUser(): SeedUser {
   return {
     id: 'user-legacy',
     email: 'legacy@example.com',
@@ -76,7 +124,7 @@ function preMigrationUser() {
 describe('AuthService resend verification (stateful round trip)', () => {
   it('a pre-migration account (token present, expiry NULL) is stranded until resend, then verifies with the new token only', async () => {
     const { prisma, store } = makeStatefulPrisma([preMigrationUser()]);
-    const service = new AuthService(prisma as any, { sign: jest.fn() } as any);
+    const service = makeService(prisma);
 
     // Stranded: the original token can never verify — its expiry is NULL.
     await expect(service.verifyEmail(OLD_TOKEN)).rejects.toBeInstanceOf(
@@ -90,7 +138,8 @@ describe('AuthService resend verification (stateful round trip)', () => {
       await service.generateVerificationToken('legacy@example.com');
     expect(newToken).toMatch(/^[0-9a-f]{64}$/);
     expect(newToken).not.toBe(OLD_TOKEN);
-    const exp = new Date(store[0].verificationTokenExpiresAt).getTime();
+    expect(store[0].verificationTokenExpiresAt).toBeInstanceOf(Date);
+    const exp = (store[0].verificationTokenExpiresAt as Date).getTime();
     expect(exp).toBeGreaterThan(before + 23 * 60 * 60 * 1000);
     expect(exp).toBeLessThanOrEqual(before + 24 * 60 * 60 * 1000 + 5000);
     expect(store[0].verificationToken).toBe(newToken);
@@ -118,7 +167,7 @@ describe('AuthService resend verification (stateful round trip)', () => {
       verificationTokenExpiresAt: new Date(Date.now() - 60 * 1000),
     };
     const { prisma, store } = makeStatefulPrisma([user]);
-    const service = new AuthService(prisma as any, { sign: jest.fn() } as any);
+    const service = makeService(prisma);
 
     await expect(service.verifyEmail(OLD_TOKEN)).rejects.toBeInstanceOf(
       BadRequestException,
@@ -141,7 +190,7 @@ describe('AuthService resend verification (stateful round trip)', () => {
       isEmailVerified: true,
     };
     const { prisma, store } = makeStatefulPrisma([user]);
-    const service = new AuthService(prisma as any, { sign: jest.fn() } as any);
+    const service = makeService(prisma);
 
     await expect(
       service.generateVerificationToken('done@example.com'),
@@ -152,7 +201,7 @@ describe('AuthService resend verification (stateful round trip)', () => {
 
   it('unknown emails get no token', async () => {
     const { prisma } = makeStatefulPrisma([preMigrationUser()]);
-    const service = new AuthService(prisma as any, { sign: jest.fn() } as any);
+    const service = makeService(prisma);
     await expect(
       service.generateVerificationToken('nobody@example.com'),
     ).resolves.toBeNull();
@@ -163,14 +212,16 @@ describe('AuthService resend verification (stateful round trip)', () => {
 describe('AuthController resend-verification (uniform, non-enumerating response)', () => {
   function makeController(token: string | null) {
     const authService = {
-      generateVerificationToken: jest.fn().mockResolvedValue(token),
+      generateVerificationToken: jest
+        .fn<Promise<string | null>, [string]>()
+        .mockResolvedValue(token),
     };
     const emailService = {
-      sendVerificationEmail: jest.fn().mockResolvedValue(undefined),
+      sendVerificationEmail: jest.fn<void, [string, string]>(),
     };
     const controller = new AuthController(
-      authService as any,
-      emailService as any,
+      authService as unknown as AuthService,
+      emailService as unknown as EmailService,
     );
     return { controller, authService, emailService };
   }
@@ -200,7 +251,7 @@ describe('AuthThrottleGuard rate limiting (resend-verification)', () => {
       switchToHttp: () => ({
         getRequest: () => ({ path, url: path, headers: {}, ip }),
       }),
-    } as any;
+    } as unknown as ExecutionContext;
   }
 
   it('allows 5 resend attempts per window, then throws 429', () => {

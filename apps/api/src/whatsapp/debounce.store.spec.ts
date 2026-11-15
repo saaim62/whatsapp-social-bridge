@@ -1,66 +1,64 @@
 import { DebounceStore, DEBOUNCE_WINDOW_MS } from './debounce.store';
+import type { WAMessage } from '@whiskeysockets/baileys';
+import type Redis from 'ioredis';
 
 /** Minimal in-memory stand-in for the ioredis commands DebounceStore uses. */
 class FakeRedis {
   lists = new Map<string, string[]>();
   zsets = new Map<string, Map<string, number>>();
 
-  async rpush(key: string, value: string): Promise<number> {
+  rpush(key: string, value: string): Promise<number> {
     const list = this.lists.get(key) ?? [];
     list.push(value);
     this.lists.set(key, list);
-    return list.length;
+    return Promise.resolve(list.length);
   }
 
-  async lrange(key: string, start: number, stop: number): Promise<string[]> {
+  lrange(key: string, start: number, stop: number): Promise<string[]> {
     const list = this.lists.get(key) ?? [];
     const end = stop === -1 ? list.length : stop + 1;
-    return list.slice(start, end);
+    return Promise.resolve(list.slice(start, end));
   }
 
-  async del(key: string): Promise<number> {
+  del(key: string): Promise<number> {
     const had = this.lists.delete(key) || this.zsets.delete(key);
-    return had ? 1 : 0;
+    return Promise.resolve(had ? 1 : 0);
   }
 
-  async zadd(key: string, score: number, member: string): Promise<number> {
+  zadd(key: string, score: number, member: string): Promise<number> {
     const zset = this.zsets.get(key) ?? new Map<string, number>();
     const isNew = !zset.has(member);
     zset.set(member, score);
     this.zsets.set(key, zset);
-    return isNew ? 1 : 0;
+    return Promise.resolve(isNew ? 1 : 0);
   }
 
-  async zrem(key: string, member: string): Promise<number> {
+  zrem(key: string, member: string): Promise<number> {
     const zset = this.zsets.get(key);
-    if (!zset || !zset.delete(member)) return 0;
-    return 1;
+    if (!zset || !zset.delete(member)) return Promise.resolve(0);
+    return Promise.resolve(1);
   }
 
-  async zrangebyscore(
-    key: string,
-    min: string,
-    max: number,
-  ): Promise<string[]> {
+  zrangebyscore(key: string, min: string, max: number): Promise<string[]> {
     const zset = this.zsets.get(key);
-    if (!zset) return [];
+    if (!zset) return Promise.resolve([]);
     const out: string[] = [];
     for (const [member, score] of zset) {
       if ((min === '-inf' || score >= Number(min)) && score <= max) {
         out.push(member);
       }
     }
-    return out;
+    return Promise.resolve(out);
   }
 }
 
-function msg(id: string) {
+function msg(id: string): WAMessage {
   return {
     key: { remoteJid: '111@g.us', fromMe: false, id },
     pushName: 'Supplier',
     message: { conversation: `drop ${id}` },
     messageTimestamp: 1700000000,
-  } as any;
+  };
 }
 
 describe('DebounceStore (Redis-backed debounce)', () => {
@@ -71,7 +69,7 @@ describe('DebounceStore (Redis-backed debounce)', () => {
 
   beforeEach(() => {
     redis = new FakeRedis();
-    store = new DebounceStore(redis as any);
+    store = new DebounceStore(redis as unknown as Redis);
   });
 
   it('does not release a buffer before the silence window elapses', async () => {
@@ -90,7 +88,7 @@ describe('DebounceStore (Redis-backed debounce)', () => {
     expect(due).toHaveLength(1);
     expect(due[0].userId).toBe(USER);
     expect(due[0].senderId).toBe(JID);
-    expect(due[0].messages.map((m: any) => m.key.id)).toEqual(['m1', 'm2']);
+    expect(due[0].messages.map((m) => m.key.id)).toEqual(['m1', 'm2']);
     // Buffer is drained: a second sweep finds nothing.
     expect(await store.pendingMessages(USER, JID)).toEqual([]);
     expect(await store.collectDue(t0 + DEBOUNCE_WINDOW_MS + 1000)).toEqual([]);
@@ -121,7 +119,7 @@ describe('DebounceStore (Redis-backed debounce)', () => {
     const due = await store.collectDue(t0 + DEBOUNCE_WINDOW_MS + 500);
     expect(due).toHaveLength(2);
     const bySender = Object.fromEntries(
-      due.map((d) => [d.senderId, d.messages.map((m: any) => m.key.id)]),
+      due.map((d) => [d.senderId, d.messages.map((m) => m.key.id)]),
     );
     expect(bySender[JID]).toEqual(['a']);
     expect(bySender['222@g.us']).toEqual(['b']);
@@ -130,7 +128,11 @@ describe('DebounceStore (Redis-backed debounce)', () => {
   it('revives protobuf-Long timestamps that JSON round-tripped into objects', async () => {
     const t0 = Date.now();
     const m = msg('m-long');
-    (m as any).messageTimestamp = { low: 1700000000, high: 0, unsigned: true };
+    (m as { messageTimestamp: unknown }).messageTimestamp = {
+      low: 1700000000,
+      high: 0,
+      unsigned: true,
+    };
     await store.push(USER, JID, m);
     const due = await store.collectDue(t0 + DEBOUNCE_WINDOW_MS + 500);
     expect(due[0].messages[0].messageTimestamp).toBe(1700000000);

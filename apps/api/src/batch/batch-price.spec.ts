@@ -1,4 +1,28 @@
 import { BatchService } from './batch.service';
+import type {
+  BlurImageJob,
+  IncomingMessagePayload,
+  ProcessBatchJob,
+} from './batch.service';
+import type { PrismaService } from '../prisma/prisma.service';
+import type { ConfigService } from '@nestjs/config';
+import type { AiService } from '../ai/ai.service';
+import type { OcrService } from '../ai/ocr.service';
+import type { StorageService } from '../storage/storage.service';
+import type { Queue } from 'bullmq';
+
+interface BatchRow {
+  id: string;
+  userId: string;
+  extractedData: Record<string, unknown>;
+}
+
+interface PricePrismaMock {
+  productBatch: {
+    findUnique: jest.Mock<Promise<BatchRow | null>, [unknown]>;
+    update: jest.Mock<Promise<BatchRow>, [{ data: Partial<BatchRow> }]>;
+  };
+}
 
 jest.mock('ioredis', () => ({
   __esModule: true,
@@ -19,34 +43,43 @@ jest.mock('sharp', () => jest.fn());
  * and the publish gate all read one and the same revision.
  */
 describe('BatchService.setManualPrice — recorded price revision', () => {
-  let store: any;
-  let prisma: any;
+  let store: BatchRow;
+  let prisma: PricePrismaMock;
   let service: BatchService;
 
-  function setup(extractedData: any) {
+  function setup(extractedData: Record<string, unknown>) {
     store = {
       id: 'batch-1',
       userId: 'user-1',
-      extractedData: JSON.parse(JSON.stringify(extractedData)),
+      extractedData: JSON.parse(JSON.stringify(extractedData)) as Record<
+        string,
+        unknown
+      >,
     };
     prisma = {
       productBatch: {
-        findUnique: jest.fn(async () => store),
-        update: jest.fn(async ({ data }: any) => {
-          Object.assign(store, data);
-          return store;
-        }),
+        findUnique: jest.fn<Promise<BatchRow | null>, [unknown]>(() =>
+          Promise.resolve(store),
+        ),
+        update: jest.fn<Promise<BatchRow>, [{ data: Partial<BatchRow> }]>(
+          ({ data }) => {
+            Object.assign(store, data);
+            return Promise.resolve(store);
+          },
+        ),
       },
     };
     service = new BatchService(
-      prisma,
-      { get: (_k: string, def: any) => def } as any, // ConfigService
-      {} as any, // AiService
-      {} as any, // OcrService
-      {} as any, // StorageService
-      { add: jest.fn() } as any, // batch queue
-      { add: jest.fn() } as any, // history queue
-      { add: jest.fn() } as any, // blur queue
+      prisma as unknown as PrismaService,
+      {
+        get: (_k: string, def: unknown) => def,
+      } as unknown as ConfigService,
+      {} as unknown as AiService,
+      {} as unknown as OcrService,
+      {} as unknown as StorageService,
+      { add: jest.fn() } as unknown as Queue<ProcessBatchJob>, // batch queue
+      { add: jest.fn() } as unknown as Queue<IncomingMessagePayload>, // history queue
+      { add: jest.fn() } as unknown as Queue<BlurImageJob>, // blur queue
     );
   }
 

@@ -1,30 +1,86 @@
 import { BadRequestException } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { JwtPayload } from './jwt.strategy';
+import type { PrismaService } from '../prisma/prisma.service';
+import type { JwtService } from '@nestjs/jwt';
+
+interface UserRow {
+  id: string;
+  email?: string;
+  passwordHash?: string;
+  isEmailVerified?: boolean;
+  isBlocked?: boolean;
+  isPaid?: boolean;
+  trialEndsAt?: Date | null;
+  role?: string;
+  sessionVersion?: number;
+  verificationTokenExpiresAt?: Date;
+}
+
+interface UpdateManyArg {
+  where: {
+    resetPasswordToken?: string;
+    resetPasswordTokenExpiresAt?: { gt: Date };
+    verificationToken?: string;
+    verificationTokenExpiresAt?: { gt: Date };
+  };
+  data: {
+    resetPasswordToken?: string | null;
+    resetPasswordTokenExpiresAt?: Date | null;
+    sessionVersion?: { increment: number };
+    passwordHash?: string;
+    verificationToken?: string | null;
+    verificationTokenExpiresAt?: Date | null;
+    isEmailVerified?: boolean;
+  };
+}
+
+interface UpdateArg {
+  data: {
+    resetPasswordTokenExpiresAt?: Date;
+    verificationTokenExpiresAt?: Date;
+  };
+}
+
+interface PrismaMock {
+  user: {
+    findUnique: jest.Mock<Promise<UserRow | null>, [unknown]>;
+    findFirst: jest.Mock<Promise<unknown>, [unknown]>;
+    create: jest.Mock<Promise<UserRow>, [{ data: Partial<UserRow> }]>;
+    update: jest.Mock<Promise<unknown>, [UpdateArg]>;
+    updateMany: jest.Mock<Promise<{ count: number }>, [UpdateManyArg]>;
+  };
+}
 
 const VALID_TOKEN = 'a'.repeat(64); // matches the issued format: 64 lowercase hex chars
 
 function makeService() {
-  const prisma = {
+  const prisma: PrismaMock = {
     user: {
-      findUnique: jest.fn(),
-      findFirst: jest.fn(),
-      create: jest.fn(),
-      update: jest.fn(),
-      updateMany: jest.fn(),
+      findUnique: jest.fn<Promise<UserRow | null>, [unknown]>(),
+      findFirst: jest.fn<Promise<unknown>, [unknown]>(),
+      create: jest.fn<Promise<UserRow>, [{ data: Partial<UserRow> }]>(),
+      update: jest.fn<Promise<unknown>, [UpdateArg]>(),
+      updateMany: jest.fn<Promise<{ count: number }>, [UpdateManyArg]>(),
     },
   };
-  const jwt = { sign: jest.fn().mockReturnValue('signed-jwt') };
-  const service = new AuthService(prisma as any, jwt as any);
+  const jwt = {
+    sign: jest.fn<string, [JwtPayload]>().mockReturnValue('signed-jwt'),
+  };
+  const service = new AuthService(
+    prisma as unknown as PrismaService,
+    jwt as unknown as JwtService,
+  );
   return { service, prisma, jwt };
 }
 
 describe('AuthService password reset token handling', () => {
   it.each([undefined, null, '', 'not-a-token', 'zzzz', 42])(
     'rejects malformed token %p BEFORE any database call',
-    async (token: any) => {
+    async (token: unknown) => {
       const { service, prisma } = makeService();
       await expect(
-        service.resetPassword(token, 'new-password-123'),
+        service.resetPassword(token as string, 'new-password-123'),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(prisma.user.findFirst).not.toHaveBeenCalled();
       expect(prisma.user.updateMany).not.toHaveBeenCalled();
@@ -41,7 +97,7 @@ describe('AuthService password reset token handling', () => {
     // The consume must be conditional on the token AND its expiry.
     const where = prisma.user.updateMany.mock.calls[0][0].where;
     expect(where.resetPasswordToken).toBe(VALID_TOKEN);
-    expect(where.resetPasswordTokenExpiresAt.gt).toBeInstanceOf(Date);
+    expect(where.resetPasswordTokenExpiresAt?.gt).toBeInstanceOf(Date);
   });
 
   it('consumes a valid token exactly once: clears it and bumps sessionVersion', async () => {
@@ -66,7 +122,7 @@ describe('AuthService password reset token handling', () => {
     const after = Date.now();
     expect(token).toMatch(/^[0-9a-f]{64}$/);
     const data = prisma.user.update.mock.calls[0][0].data;
-    const expiry = data.resetPasswordTokenExpiresAt.getTime();
+    const expiry = data.resetPasswordTokenExpiresAt?.getTime();
     expect(expiry).toBeGreaterThanOrEqual(before + 59 * 60 * 1000);
     expect(expiry).toBeLessThanOrEqual(after + 61 * 60 * 1000);
   });
@@ -75,9 +131,9 @@ describe('AuthService password reset token handling', () => {
 describe('AuthService email verification token handling', () => {
   it.each([undefined, null, '', 'nope'])(
     'rejects malformed token %p BEFORE any database call',
-    async (token: any) => {
+    async (token: unknown) => {
       const { service, prisma } = makeService();
-      await expect(service.verifyEmail(token)).rejects.toBeInstanceOf(
+      await expect(service.verifyEmail(token as string)).rejects.toBeInstanceOf(
         BadRequestException,
       );
       expect(prisma.user.findFirst).not.toHaveBeenCalled();
@@ -93,7 +149,7 @@ describe('AuthService email verification token handling', () => {
     );
     const where = prisma.user.updateMany.mock.calls[0][0].where;
     expect(where.verificationToken).toBe(VALID_TOKEN);
-    expect(where.verificationTokenExpiresAt.gt).toBeInstanceOf(Date);
+    expect(where.verificationTokenExpiresAt?.gt).toBeInstanceOf(Date);
   });
 
   it('verifies and clears the token on success', async () => {
@@ -109,14 +165,13 @@ describe('AuthService email verification token handling', () => {
   it('registration issues a verification token with a ~24 hour expiry', async () => {
     const { service, prisma } = makeService();
     prisma.user.findUnique.mockResolvedValue(null);
-    prisma.user.create.mockImplementation(async ({ data }: any) => ({
-      id: 'u1',
-      ...data,
-    }));
+    prisma.user.create.mockImplementation(({ data }) =>
+      Promise.resolve({ ...data, id: 'u1' }),
+    );
     const before = Date.now();
-    const user: any = await service.register('new@b.c', 'password-123');
+    const user = await service.register('new@b.c', 'password-123');
     const after = Date.now();
-    const expiry = user.verificationTokenExpiresAt.getTime();
+    const expiry = user.verificationTokenExpiresAt?.getTime();
     expect(expiry).toBeGreaterThanOrEqual(before + 23 * 60 * 60 * 1000);
     expect(expiry).toBeLessThanOrEqual(after + 25 * 60 * 60 * 1000);
   });
