@@ -20,7 +20,9 @@ export interface MediaSrcInput {
   localPath?: string | null;
 }
 
-export function mediaSrcFor(m: MediaSrcInput | null | undefined): string | null {
+export function mediaSrcFor(
+  m: MediaSrcInput | null | undefined,
+): string | null {
   if (!m) return null;
   if (m.mediaUrl) return m.mediaUrl;
   if (m.originalUrl) return m.originalUrl;

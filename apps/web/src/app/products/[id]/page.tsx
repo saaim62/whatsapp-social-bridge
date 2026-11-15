@@ -150,7 +150,6 @@ export default function ProductDetailPage() {
   // mode) — the modal then simply doesn't render a destination line.
   const [metaAccount, setMetaAccount] = useState<MetaAccount | null>(null);
 
-
   useEffect(() => {
     fetchWithAuth(`${API_URL}/api/social/accounts`)
       .then((r) => r.json())
@@ -245,9 +244,7 @@ export default function ProductDetailPage() {
           if (prev?.mediaAssets) {
             const newTimestamps: Record<string, number> = {};
             for (const asset of data.mediaAssets || []) {
-              const prevAsset = prev.mediaAssets.find(
-                (a) => a.id === asset.id,
-              );
+              const prevAsset = prev.mediaAssets.find((a) => a.id === asset.id);
               if (prevAsset?.isProcessing && !asset.isProcessing) {
                 newTimestamps[asset.id] = Date.now();
               }
@@ -471,7 +468,9 @@ export default function ProductDetailPage() {
       });
       setBatch((prev) => ({
         ...(prev as DetailBatch),
-        mediaAssets: (prev as DetailBatch).mediaAssets.filter((a) => a.id !== mediaId),
+        mediaAssets: (prev as DetailBatch).mediaAssets.filter(
+          (a) => a.id !== mediaId,
+        ),
       }));
       setMediaOrder((prev) => prev.filter((a) => a.id !== mediaId));
       setSelectedMediaIds((prev) => {
@@ -580,9 +579,7 @@ export default function ProductDetailPage() {
           (a) => !selectedMediaIds.has(a.id),
         ),
       }));
-      setMediaOrder((prev) =>
-        prev.filter((a) => !selectedMediaIds.has(a.id)),
-      );
+      setMediaOrder((prev) => prev.filter((a) => !selectedMediaIds.has(a.id)));
       setSelectedMediaIds(new Set());
       await fetchBatchData();
     } catch (err) {
@@ -599,9 +596,7 @@ export default function ProductDetailPage() {
       const res = await fetchWithAuth(`${API_URL}/api/batches`);
       if (res.ok) {
         const data = await res.json();
-        setBatchesList(
-          (data as ProductBatch[]).filter((b) => b.id !== id),
-        );
+        setBatchesList((data as ProductBatch[]).filter((b) => b.id !== id));
       }
     } catch (err) {
       console.error(err);
@@ -629,9 +624,7 @@ export default function ProductDetailPage() {
           (a) => !selectedMediaIds.has(a.id),
         ),
       }));
-      setMediaOrder((prev) =>
-        prev.filter((a) => !selectedMediaIds.has(a.id)),
-      );
+      setMediaOrder((prev) => prev.filter((a) => !selectedMediaIds.has(a.id)));
       setSelectedMediaIds(new Set());
       setIsMoveModalOpen(false);
       await fetchBatchData();
@@ -808,9 +801,7 @@ export default function ProductDetailPage() {
               </h1>
               <div className="hidden sm:flex items-center gap-2">
                 <StatusBadge status={batch.status} />
-                {batch.publications?.some(
-                  (p) => p.status === 'FAILED',
-                ) && (
+                {batch.publications?.some((p) => p.status === 'FAILED') && (
                   <div
                     className="text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-1 rounded text-xs font-bold"
                     title={
@@ -1159,14 +1150,13 @@ export default function ProductDetailPage() {
                     </label>
                     <div className="flex flex-wrap gap-2">
                       {features.map((feat: string, i: number) => (
-                          <span
-                            key={i}
-                            className="text-xs font-mono text-slate-300 bg-graphite border border-graphite-border px-2 py-1 rounded-md"
-                          >
-                            {feat}
-                          </span>
-                        ),
-                      )}
+                        <span
+                          key={i}
+                          className="text-xs font-mono text-slate-300 bg-graphite border border-graphite-border px-2 py-1 rounded-md"
+                        >
+                          {feat}
+                        </span>
+                      ))}
                     </div>
                   </div>
                 )}

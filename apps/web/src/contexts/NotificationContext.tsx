@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import React, {
   createContext,
@@ -6,9 +6,9 @@ import React, {
   useEffect,
   useState,
   useRef,
-} from "react";
-import { useSession } from "next-auth/react";
-import { AnimatePresence, motion } from "framer-motion";
+} from 'react';
+import { useSession } from 'next-auth/react';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   Bell,
   CheckCircle2,
@@ -16,13 +16,13 @@ import {
   AlertTriangle,
   X,
   Zap,
-} from "lucide-react";
-import { API_URL, fetchWithAuth } from "@/lib/api";
-import { useDemoStore } from "@/lib/demo-store";
-import type { DbNotification, ProductBatch } from "@/lib/types";
+} from 'lucide-react';
+import { API_URL, fetchWithAuth } from '@/lib/api';
+import { useDemoStore } from '@/lib/demo-store';
+import type { DbNotification, ProductBatch } from '@/lib/types';
 
-type ToastType = "success" | "error" | "info" | "warning";
-type BannerType = "success" | "warning" | "info";
+type ToastType = 'success' | 'error' | 'info' | 'warning';
+type BannerType = 'success' | 'warning' | 'info';
 
 interface Toast {
   id: string;
@@ -45,8 +45,8 @@ interface NotificationContextType {
   loadingBatches: boolean;
   dbNotifications: DbNotification[];
   unreadCount: number;
-  addToast: (toast: Omit<Toast, "id">) => void;
-  addBanner: (banner: Omit<Banner, "id">) => void;
+  addToast: (toast: Omit<Toast, 'id'>) => void;
+  addBanner: (banner: Omit<Banner, 'id'>) => void;
   removeBanner: (id: string) => void;
   refreshBatches: () => Promise<void>;
   markAsRead: (id: string) => Promise<void>;
@@ -74,7 +74,7 @@ export function NotificationProvider({
   // mode) never loads batches, so the loading flag reads false without
   // a synchronous setState inside the polling effect.
   const loadingBatches =
-    status === "unauthenticated" && !demoActive ? false : batchesLoading;
+    status === 'unauthenticated' && !demoActive ? false : batchesLoading;
 
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [banners, setBanners] = useState<Banner[]>([]);
@@ -89,8 +89,8 @@ export function NotificationProvider({
   ) => {
     try {
       await fetchWithAuth(`${API_URL}/api/notifications`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title, message, type, link }),
       });
       fetchDbNotifications(); // refresh immediately
@@ -98,7 +98,7 @@ export function NotificationProvider({
   };
 
   const fetchDbNotifications = async () => {
-    if (status !== "authenticated") return;
+    if (status !== 'authenticated') return;
     try {
       const res = await fetchWithAuth(`${API_URL}/api/notifications`);
       if (res.ok) setDbNotifications(await res.json());
@@ -108,7 +108,7 @@ export function NotificationProvider({
   const markAsRead = async (id: string) => {
     try {
       await fetchWithAuth(`${API_URL}/api/notifications/${id}/read`, {
-        method: "POST",
+        method: 'POST',
       });
       setDbNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)),
@@ -119,13 +119,13 @@ export function NotificationProvider({
   const markAllAsRead = async () => {
     try {
       await fetchWithAuth(`${API_URL}/api/notifications/mark-all-read`, {
-        method: "POST",
+        method: 'POST',
       });
       setDbNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
     } catch {}
   };
 
-  const addToast = (toast: Omit<Toast, "id">) => {
+  const addToast = (toast: Omit<Toast, 'id'>) => {
     const id = Math.random().toString(36).substr(2, 9);
     setToasts((prev) => [...prev, { ...toast, id }]);
     setTimeout(() => {
@@ -133,7 +133,7 @@ export function NotificationProvider({
     }, 5000); // auto remove after 5s
   };
 
-  const addBanner = (banner: Omit<Banner, "id">) => {
+  const addBanner = (banner: Omit<Banner, 'id'>) => {
     const id = Math.random().toString(36).substr(2, 9);
     setBanners((prev) => {
       // Prevent duplicate exact banners
@@ -151,7 +151,7 @@ export function NotificationProvider({
   };
 
   const refreshBatches = async () => {
-    if (status !== "authenticated" && !demoActive) return;
+    if (status !== 'authenticated' && !demoActive) return;
     try {
       const res = await fetchWithAuth(`${API_URL}/api/batches`);
       if (res.ok) {
@@ -168,68 +168,68 @@ export function NotificationProvider({
             if (!prevBatch) {
               // New batch arrived!
               addToast({
-                type: "info",
-                title: "New Product Received",
-                message: `From ${currentBatch.senderName || currentBatch.senderId || "WhatsApp"}`,
+                type: 'info',
+                title: 'New Product Received',
+                message: `From ${currentBatch.senderName || currentBatch.senderId || 'WhatsApp'}`,
               });
               pushNotificationToDb(
-                "New Product Received",
-                `From ${currentBatch.senderName || currentBatch.senderId || "WhatsApp"}`,
-                "info",
+                'New Product Received',
+                `From ${currentBatch.senderName || currentBatch.senderId || 'WhatsApp'}`,
+                'info',
                 `/products/${currentBatch.id}`,
               );
             } else if (prevBatch.status !== currentBatch.status) {
               // Status changed!
               const productName =
-                currentBatch.extractedData?.product_name || "Product";
-              if (currentBatch.status === "READY") {
+                currentBatch.extractedData?.product_name || 'Product';
+              if (currentBatch.status === 'READY') {
                 addToast({
-                  type: "success",
-                  title: "Product Ready for Review",
+                  type: 'success',
+                  title: 'Product Ready for Review',
                   message: `${productName} has been processed successfully.`,
                 });
                 addBanner({
-                  type: "info",
-                  title: "Products are ready to be published",
+                  type: 'info',
+                  title: 'Products are ready to be published',
                   message:
-                    "You have products awaiting manual review and publishing.",
+                    'You have products awaiting manual review and publishing.',
                 });
                 pushNotificationToDb(
-                  "Product Ready",
+                  'Product Ready',
                   `${productName} has been processed.`,
-                  "success",
+                  'success',
                   `/products/${currentBatch.id}`,
                 );
               } else if (
-                currentBatch.status === "PUBLISHED" ||
-                currentBatch.status === "PARTIALLY_PUBLISHED"
+                currentBatch.status === 'PUBLISHED' ||
+                currentBatch.status === 'PARTIALLY_PUBLISHED'
               ) {
                 addToast({
-                  type: "success",
-                  title: "Product Published",
+                  type: 'success',
+                  title: 'Product Published',
                   message: `${productName} has been published successfully.`,
                 });
                 addBanner({
-                  type: "success",
-                  title: "Publishing Successful",
+                  type: 'success',
+                  title: 'Publishing Successful',
                   message: `${productName} was just published to your social channels.`,
                 });
                 pushNotificationToDb(
-                  "Product Published",
+                  'Product Published',
                   `${productName} has been published.`,
-                  "success",
+                  'success',
                   `/products/${currentBatch.id}`,
                 );
-              } else if (currentBatch.status === "FAILED") {
+              } else if (currentBatch.status === 'FAILED') {
                 addToast({
-                  type: "error",
-                  title: "Processing Failed",
+                  type: 'error',
+                  title: 'Processing Failed',
                   message: `${productName} failed to process or publish.`,
                 });
                 pushNotificationToDb(
-                  "Processing Failed",
+                  'Processing Failed',
                   `${productName} failed to process.`,
-                  "error",
+                  'error',
                   `/products/${currentBatch.id}`,
                 );
               }
@@ -248,7 +248,7 @@ export function NotificationProvider({
   };
 
   useEffect(() => {
-    if (status !== "authenticated" && !demoActive) return;
+    if (status !== 'authenticated' && !demoActive) return;
     // Poll an external system (the API): state updates land inside the
     // async fetch callbacks, never synchronously from the effect body.
     const tick = () => {
@@ -292,17 +292,17 @@ export function NotificationProvider({
             >
               <div
                 className={`p-4 rounded-2xl shadow-[0_8px_40px_rgb(0,0,0,0.12)] backdrop-blur-xl border flex items-center gap-4 ${
-                  banner.type === "success"
-                    ? "bg-emerald-500/90 border-emerald-400 text-white"
-                    : banner.type === "warning"
-                      ? "bg-amber-500/90 border-amber-400 text-white"
-                      : "bg-brand-600/90 border-brand-400 text-white"
+                  banner.type === 'success'
+                    ? 'bg-emerald-500/90 border-emerald-400 text-white'
+                    : banner.type === 'warning'
+                      ? 'bg-amber-500/90 border-amber-400 text-white'
+                      : 'bg-brand-600/90 border-brand-400 text-white'
                 }`}
               >
                 <div className="flex-shrink-0 flex items-center justify-center">
-                  {banner.type === "success" ? (
+                  {banner.type === 'success' ? (
                     <CheckCircle2 className="w-6 h-6" />
-                  ) : banner.type === "warning" ? (
+                  ) : banner.type === 'warning' ? (
                     <AlertTriangle className="w-6 h-6" />
                   ) : (
                     <Zap className="w-6 h-6" />
@@ -345,32 +345,32 @@ export function NotificationProvider({
                 {/* Accent Line */}
                 <div
                   className={`absolute left-0 top-0 bottom-0 w-1.5 ${
-                    toast.type === "success"
-                      ? "bg-emerald-500"
-                      : toast.type === "error"
-                        ? "bg-red-500"
-                        : toast.type === "warning"
-                          ? "bg-amber-500"
-                          : "bg-brand-500"
+                    toast.type === 'success'
+                      ? 'bg-emerald-500'
+                      : toast.type === 'error'
+                        ? 'bg-red-500'
+                        : toast.type === 'warning'
+                          ? 'bg-amber-500'
+                          : 'bg-brand-500'
                   }`}
                 />
 
                 <div
                   className={`pt-0.5 flex-shrink-0 ${
-                    toast.type === "success"
-                      ? "text-emerald-400"
-                      : toast.type === "error"
-                        ? "text-red-400"
-                        : toast.type === "warning"
-                          ? "text-amber-400"
-                          : "text-brand-400"
+                    toast.type === 'success'
+                      ? 'text-emerald-400'
+                      : toast.type === 'error'
+                        ? 'text-red-400'
+                        : toast.type === 'warning'
+                          ? 'text-amber-400'
+                          : 'text-brand-400'
                   }`}
                 >
-                  {toast.type === "success" ? (
+                  {toast.type === 'success' ? (
                     <CheckCircle2 className="w-5 h-5" />
-                  ) : toast.type === "error" ? (
+                  ) : toast.type === 'error' ? (
                     <XCircle className="w-5 h-5" />
-                  ) : toast.type === "warning" ? (
+                  ) : toast.type === 'warning' ? (
                     <AlertTriangle className="w-5 h-5" />
                   ) : (
                     <Bell className="w-5 h-5" />
@@ -407,7 +407,7 @@ export function useNotifications() {
   const context = useContext(NotificationContext);
   if (context === undefined) {
     throw new Error(
-      "useNotifications must be used within a NotificationProvider",
+      'useNotifications must be used within a NotificationProvider',
     );
   }
   return context;

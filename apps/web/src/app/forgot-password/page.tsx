@@ -73,8 +73,8 @@ export default function ForgotPasswordPage() {
                     Check Your Email
                   </h2>
                   <p className="text-white/60 mb-8 leading-relaxed max-w-sm mx-auto">
-                    We&apos;ve sent a password reset link to <strong>{email}</strong>{' '}
-                    if it exists in our system.
+                    We&apos;ve sent a password reset link to{' '}
+                    <strong>{email}</strong> if it exists in our system.
                   </p>
                   <Link
                     href="/login"

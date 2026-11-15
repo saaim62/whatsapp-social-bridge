@@ -340,23 +340,22 @@ export default function SourcesPage() {
           {(
             ['ALL', 'CONTACTS_NAMED', 'GROUPS', 'CHANNELS', 'NUMBERS'] as const
           ).map((type) => (
-              <button
-                key={type}
-                onClick={() => setFilterType(type)}
-                className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all ${
-                  filterType === type
-                    ? 'bg-electric-cyan/20 text-electric-cyan border-electric-cyan/50 shadow-[0_0_10px_rgba(0,255,255,0.1)]'
-                    : 'bg-graphite border-graphite-border text-slate-400 hover:text-white hover:border-slate-600'
-                }`}
-              >
-                {type === 'ALL' && 'All'}
-                {type === 'CONTACTS_NAMED' && 'Contacts (Named)'}
-                {type === 'GROUPS' && 'Groups'}
-                {type === 'CHANNELS' && 'Channels'}
-                {type === 'NUMBERS' && 'Numbers Only'}
-              </button>
-            ),
-          )}
+            <button
+              key={type}
+              onClick={() => setFilterType(type)}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all ${
+                filterType === type
+                  ? 'bg-electric-cyan/20 text-electric-cyan border-electric-cyan/50 shadow-[0_0_10px_rgba(0,255,255,0.1)]'
+                  : 'bg-graphite border-graphite-border text-slate-400 hover:text-white hover:border-slate-600'
+              }`}
+            >
+              {type === 'ALL' && 'All'}
+              {type === 'CONTACTS_NAMED' && 'Contacts (Named)'}
+              {type === 'GROUPS' && 'Groups'}
+              {type === 'CHANNELS' && 'Channels'}
+              {type === 'NUMBERS' && 'Numbers Only'}
+            </button>
+          ))}
         </div>
 
         {/* Toolbar */}
