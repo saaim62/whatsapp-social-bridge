@@ -25,12 +25,17 @@ describe('AiService', () => {
     expect(service).toBeDefined();
   });
 
-  it('should extract mock product details when no real key is provided', async () => {
+  it('should fall back to heuristic extraction (snake_case contract) when no real key is provided', async () => {
+    // The ConfigService mock returns 'test_gemini_key' for every key,
+    // which AiService treats as "no key configured" — so extraction
+    // takes the heuristic path. The service contract is snake_case
+    // (product_name / price / features), the same shape the LLM path
+    // returns and the batch processor consumes.
     const result = await service.extractProductDetails(
       'Nike Air Max 270\nPrice: Rs 24,999',
     );
-    expect(result.productName).toBe('Mock Product');
-    expect(result.price).toBe('Rs. 1000');
+    expect(result.product_name).toBe('Nike Air Max 270');
+    expect(result.price).toBe('Rs. 24,999');
   });
 
   it('should generate mock captions when no real key is provided', async () => {

@@ -6,7 +6,42 @@ on:
       - main
 
 jobs:
+  # Gate: deployment is impossible unless the API builds, the FULL
+  # API test suite passes, and the web app builds. (P1-7 — previously
+  # this workflow deployed with no test gate at all and applied schema
+  # changes with `prisma db push --accept-data-loss`.)
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate --schema=apps/api/prisma/schema.prisma
+        env:
+          DATABASE_URL: postgresql://postgres:password@localhost:5432/whatsapp_bridge?schema=public
+
+      - name: Build API
+        run: npm run build -w api
+
+      - name: Test API (full suite must be green)
+        run: npm run test -w api
+
+      - name: Build Web
+        run: npm run build -w web
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3001/api
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+
   build_and_deploy:
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -61,7 +96,11 @@ jobs:
             export NODE_OPTIONS="--max-old-space-size=1536"
             npm install --omit=dev --no-audit --prefer-offline
             export $(cat .env | grep -v ^# | xargs)
-            npx prisma db push --schema=apps/api/prisma/schema.prisma --accept-data-loss
+            # Apply committed migrations only. NEVER `prisma db push
+            # --accept-data-loss` here: it can silently drop columns/
+            # tables that are missing from the schema. Schema changes
+            # ship as reviewed migrations under apps/api/prisma/migrations.
+            npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma
             npx prisma generate --schema=apps/api/prisma/schema.prisma
             pm2 restart all --update-env || (pm2 start apps/api/dist/src/main.js --name "whatsapp-api" && pm2 start "npm run start" --name "whatsapp-web" --cwd apps/web)
             pm2 save
