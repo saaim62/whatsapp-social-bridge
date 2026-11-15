@@ -7,18 +7,22 @@ import { useSceneStore } from "@/lib/scene-store";
 /**
  * The app backdrop: the black marble showroom plate Saim approved
  * (Concept 2, Nov 15) at full quality — the 2048×1152 master upscaled
- * to 3840×2160 (showroom-plate-4k.jpg), so retina screens DOWNscale
- * it and it renders like pure glass. No video: the AI-animated clip
- * was generated at 1248×704 and stayed soft no matter the upscale,
- * and decoding it full-screen cost performance.
+ * to 7680×4320 WebP (showroom-plate-8k.webp, ~1 MB), so retina
+ * screens DOWNscale it and it stays sharp even at full zoom.
+ * No video: the AI-animated clip was generated at 1248×704 and
+ * stayed soft no matter the upscale, and decoding it full-screen
+ * cost performance.
  *
  * Motion has three inputs, composed every frame (all lerp-smoothed,
  * so everything glides rather than snaps):
- *  1. Idle zoom loop — a perpetual slow push-in / pull-back cycle
- *     (~64s), so the hall is never a stuck wall when untouched.
+ *  1. Idle zoom loop — a perpetual push-in / pull-back at a CONSTANT
+ *     rate (~72s cycle, triangle wave — no eased dead zones at the
+ *     turnarounds, where a cosine loop was imperceptible), so the
+ *     hall is never a stuck wall when untouched.
  *  2. Scroll zoom — the main pane's scroll progress (scene-store,
  *     fed by AppShell's <main> onScroll) zooms the hall in as you
- *     scroll down and back out as you scroll up.
+ *     scroll down and back out as you scroll up; heavily smoothed
+ *     (lerp 0.022) so it glides instead of chasing the scrollbar.
  *  3. Mouse parallax — the hall shifts a few pixels against the
  *     mouse, plus a faint autonomous drift.
  * It is one transform on one promoted layer. prefers-reduced-motion
@@ -46,11 +50,12 @@ export default function ShowroomBackdrop() {
     window.addEventListener("pointermove", onMove, { passive: true });
 
     const tick = (now: number) => {
-      // 1) idle zoom loop — perpetual slow push-in / pull-back (~64s)
-      const amb = 0.5 - 0.5 * Math.cos((now * Math.PI * 2) / 64000);
+      // 1) idle zoom loop — constant-rate push-in / pull-back (~72s)
+      const phase = (now % 72000) / 72000;
+      const amb = phase < 0.5 ? phase * 2 : 2 - phase * 2;
       // 2) scroll zoom — main pane scroll progress drives the zoom
       const scrollTarget = useSceneStore.getState().scroll * 0.12;
-      sZoom += (scrollTarget - sZoom) * 0.06;
+      sZoom += (scrollTarget - sZoom) * 0.022;
       // 3) mouse parallax + faint autonomous drift
       const driftX = Math.sin(now / 26000) * 5;
       const driftY = Math.cos(now / 34000) * 3;
@@ -58,7 +63,7 @@ export default function ShowroomBackdrop() {
       const gy = -ty * 8 + driftY;
       cx += (gx - cx) * 0.045;
       cy += (gy - cy) * 0.045;
-      const scale = 1.09 + amb * 0.09 + sZoom;
+      const scale = 1.09 + amb * 0.13 + sZoom;
       el.style.transform = `translate3d(${cx.toFixed(2)}px, ${cy.toFixed(2)}px, 0) scale(${scale.toFixed(4)})`;
       raf = requestAnimationFrame(tick);
     };
@@ -75,7 +80,7 @@ export default function ShowroomBackdrop() {
       <div ref={layerRef} className="absolute -inset-4 will-change-transform">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/showroom-plate-4k.jpg"
+          src="/showroom-plate-8k.webp"
           alt=""
           draggable={false}
           className="h-full w-full object-cover"
