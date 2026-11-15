@@ -20,6 +20,12 @@ describe('WhatsappService ingestion allowlist gate', () => {
   let settingsService: any;
   let sourcesService: any;
   let prisma: any;
+  let debounceStore: {
+    push: jest.Mock;
+    collectDue: jest.Mock;
+    pendingMessages: jest.Mock;
+  };
+  let buffered: Map<string, any[]>;
   let saveCacheSpy: jest.Mock;
   let handleIncomingSpy: jest.Mock;
 
@@ -86,12 +92,29 @@ describe('WhatsappService ingestion allowlist gate', () => {
       notification: { create: jest.fn().mockResolvedValue({}) },
     };
 
+    buffered = new Map<string, any[]>();
+    debounceStore = {
+      push: jest.fn(
+        async (userId: string, senderId: string, message: any) => {
+          const key = `${userId}_${senderId}`;
+          if (!buffered.has(key)) buffered.set(key, []);
+          buffered.get(key)!.push(message);
+        },
+      ),
+      collectDue: jest.fn(async () => []),
+      pendingMessages: jest.fn(
+        async (userId: string, senderId: string) =>
+          buffered.get(`${userId}_${senderId}`) ?? [],
+      ),
+    };
+
     service = new WhatsappService(
       batchService,
       settingsService,
       sourcesService,
       prisma,
       {} as any,
+      debounceStore as any,
     );
     (service as any).loadBaileys = jest.fn().mockResolvedValue(fakeBaileys);
     saveCacheSpy = jest.fn();
@@ -105,10 +128,9 @@ describe('WhatsappService ingestion allowlist gate', () => {
   }
 
   afterEach(() => {
-    if (service) {
-      (service as any).bufferTimers.forEach((t: any) => clearTimeout(t));
-      (service as any).bufferTimers.clear();
-    }
+    // Debounce state lives in the (fake) Redis store now — nothing
+    // in-process to clean up between tests.
+    buffered?.clear();
   });
 
   describe('live messages.upsert', () => {
@@ -119,7 +141,7 @@ describe('WhatsappService ingestion allowlist gate', () => {
         messages: [msg(GOOD_JID, 'm1')],
       });
       expect(saveCacheSpy).not.toHaveBeenCalled();
-      expect((service as any).messageBuffer.size).toBe(0);
+      expect(debounceStore.push).not.toHaveBeenCalled();
     });
 
     it('empty allowlist → nothing cached, nothing buffered', async () => {
@@ -129,7 +151,7 @@ describe('WhatsappService ingestion allowlist gate', () => {
         messages: [msg(GOOD_JID, 'm1')],
       });
       expect(saveCacheSpy).not.toHaveBeenCalled();
-      expect((service as any).messageBuffer.size).toBe(0);
+      expect(debounceStore.push).not.toHaveBeenCalled();
     });
 
     it('disallowed source → not cached; allowed source → cached and buffered', async () => {
@@ -143,12 +165,8 @@ describe('WhatsappService ingestion allowlist gate', () => {
       expect(saveCacheSpy).toHaveBeenCalledTimes(1);
       const cached = saveCacheSpy.mock.calls[0][1];
       expect(cached).toEqual([good]);
-      expect((service as any).messageBuffer.has(`${USER}_${GOOD_JID}`)).toBe(
-        true,
-      );
-      expect((service as any).messageBuffer.has(`${USER}_${BAD_JID}`)).toBe(
-        false,
-      );
+      expect(buffered.get(`${USER}_${GOOD_JID}`)).toEqual([good]);
+      expect(buffered.has(`${USER}_${BAD_JID}`)).toBe(false);
     });
   });
 

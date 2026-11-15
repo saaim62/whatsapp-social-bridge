@@ -1,6 +1,7 @@
 import {
   Injectable,
   OnModuleInit,
+  OnModuleDestroy,
   Logger,
   forwardRef,
   Inject,
@@ -13,16 +14,20 @@ import * as path from 'path';
 import { SourcesService } from '../sources/sources.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { DebounceStore } from './debounce.store';
 
 @Injectable()
-export class WhatsappService implements OnModuleInit {
+export class WhatsappService implements OnModuleInit, OnModuleDestroy {
+  // NOTE: the Baileys socket Maps below inherently stay in-process — a
+  // live WhatsApp socket connection cannot be externalized to Redis.
+  // Only the debounce buffering moved to Redis (see DebounceStore);
+  // that is the part that previously lost messages on restart.
   private clients: Map<string, any> = new Map();
   private qrUrls: Map<string, string | null> = new Map();
   private clientsReady: Map<string, boolean> = new Map();
 
   private readonly logger = new Logger(WhatsappService.name);
-  private messageBuffer: Map<string, any[]> = new Map();
-  private bufferTimers: Map<string, NodeJS.Timeout> = new Map();
+  private sweepTimer: NodeJS.Timeout | null = null;
   private groupNameCache: Map<string, string> = new Map();
   private baileysModule: any;
   private initializing: Set<string> = new Set();
@@ -34,11 +39,20 @@ export class WhatsappService implements OnModuleInit {
     private readonly sourcesService: SourcesService,
     private readonly prisma: PrismaService,
     private readonly storageService: StorageService,
+    private readonly debounceStore: DebounceStore,
   ) {}
 
   private cachedWaVersion: any = null;
 
   async onModuleInit() {
+    // Drain Redis debounce buffers whose silence window has elapsed.
+    // Runs in every replica; DebounceStore.collectDue claims each
+    // buffer atomically, so a buffer is flushed exactly once.
+    this.sweepTimer = setInterval(() => {
+      void this.sweepDebounceBuffers();
+    }, 400);
+    this.sweepTimer.unref?.();
+
     // Run initialization in background so NestJS can bind to port 3001 immediately
     setImmediate(async () => {
       try {
@@ -286,21 +300,11 @@ export class WhatsappService implements OnModuleInit {
             // Only allowlisted, non-own messages may enter the history cache.
             cacheable.push(msg);
 
-            const bufferKey = `${userId}_${senderId}`;
-            if (!this.messageBuffer.has(bufferKey)) {
-              this.messageBuffer.set(bufferKey, []);
-            }
-            this.messageBuffer.get(bufferKey)!.push(msg);
-
-            if (this.bufferTimers.has(bufferKey)) {
-              clearTimeout(this.bufferTimers.get(bufferKey));
-            }
-
-            // Wait 3.5 seconds of silence before processing to allow heavy videos to catch up
-            this.bufferTimers.set(
-              bufferKey,
-              setTimeout(() => this.flushMessageBuffer(userId, senderId), 3500),
-            );
+            // Buffer in Redis (DebounceStore): the buffer survives an
+            // API restart, and each push re-arms a 3.5s silence window
+            // before the sweeper flushes — heavy videos get time to
+            // catch up with the rest of their burst.
+            await this.debounceStore.push(userId, senderId, msg);
           }
 
           if (cacheable.length > 0) {
@@ -540,15 +544,46 @@ export class WhatsappService implements OnModuleInit {
     }
   }
 
-  private async flushMessageBuffer(userId: string, senderId: string) {
-    const bufferKey = `${userId}_${senderId}`;
-    const messages = this.messageBuffer.get(bufferKey) || [];
-    this.messageBuffer.set(bufferKey, []);
-    this.bufferTimers.delete(bufferKey);
+  onModuleDestroy() {
+    if (this.sweepTimer) {
+      clearInterval(this.sweepTimer);
+      this.sweepTimer = null;
+    }
+  }
 
+  /** Flush every Redis debounce buffer whose silence window elapsed. */
+  private async sweepDebounceBuffers() {
+    let due;
+    try {
+      due = await this.debounceStore.collectDue();
+    } catch (err) {
+      this.logger.error('Debounce sweep failed', err);
+      return;
+    }
+    for (const buffer of due) {
+      try {
+        await this.flushMessageBuffer(
+          buffer.userId,
+          buffer.senderId,
+          buffer.messages,
+        );
+      } catch (err) {
+        this.logger.error(
+          `Failed to flush debounce buffer for ${buffer.senderId}`,
+          err,
+        );
+      }
+    }
+  }
+
+  private async flushMessageBuffer(
+    userId: string,
+    senderId: string,
+    messages: any[],
+  ) {
     require('fs').appendFileSync(
       require('path').join(process.cwd(), 'debug-messages.log'),
-      `[DEBUG FLUSH] bufferKey: ${bufferKey}, messages: ${messages.length}\n`,
+      `[DEBUG FLUSH] bufferKey: ${userId}_${senderId}, messages: ${messages.length}\n`,
     );
 
     if (messages.length === 0) return;
