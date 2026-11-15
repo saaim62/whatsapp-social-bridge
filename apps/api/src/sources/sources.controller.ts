@@ -13,6 +13,12 @@ import {
 } from '@nestjs/common';
 import { SourcesService } from './sources.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AuthenticatedRequest } from '../auth/authenticated-request';
+import {
+  BulkDeleteSourcesDto,
+  ToggleSourceDto,
+  UpdateSourceNameDto,
+} from './dto/sources.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('api/sources')
@@ -20,15 +26,15 @@ export class SourcesController {
   constructor(private readonly sourcesService: SourcesService) {}
 
   @Get()
-  async getSources(@Request() req: any) {
+  async getSources(@Request() req: AuthenticatedRequest) {
     return this.sourcesService.getSources(req.user.userId);
   }
 
   @Post(':id/toggle')
   async toggleSource(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id') id: string,
-    @Body() body: { isEnabled: boolean },
+    @Body() body: ToggleSourceDto,
   ) {
     if (typeof body.isEnabled !== 'boolean') {
       throw new HttpException(
@@ -45,9 +51,9 @@ export class SourcesController {
 
   @Patch(':id/name')
   async updateSourceName(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id') id: string,
-    @Body() body: { name: string },
+    @Body() body: UpdateSourceNameDto,
   ) {
     if (!body.name || typeof body.name !== 'string') {
       throw new HttpException(
@@ -59,7 +65,7 @@ export class SourcesController {
   }
 
   @Post('sync')
-  async syncGroups(@Request() req: any) {
+  async syncGroups(@Request() req: AuthenticatedRequest) {
     const result = await this.sourcesService.syncGroups(req.user.userId);
     if (!result.success) {
       throw new HttpException(
@@ -71,14 +77,14 @@ export class SourcesController {
   }
 
   @Delete(':id')
-  async deleteSource(@Request() req: any, @Param('id') id: string) {
+  async deleteSource(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.sourcesService.deleteSource(id, req.user.userId);
   }
 
   @Post('bulk-delete')
   async bulkDeleteSources(
-    @Request() req: any,
-    @Body() body: { ids: string[] },
+    @Request() req: AuthenticatedRequest,
+    @Body() body: BulkDeleteSourcesDto,
   ) {
     if (!body.ids || !Array.isArray(body.ids)) {
       throw new HttpException(

@@ -45,6 +45,17 @@ export default function SettingsPage() {
     priceRounding: 50,
     captionFooter: '',
   });
+  // POST /api/settings accepts exactly these editable fields (the API
+  // rejects unknown properties), so never send the merged GET record
+  // (which carries id/userId/timestamps) back to it.
+  const settingsPayload = (s: typeof settings) => ({
+    isSyncActive: s.isSyncActive,
+    historySyncDepthHours: s.historySyncDepthHours,
+    marginType: s.marginType,
+    marginValue: s.marginValue,
+    priceRounding: s.priceRounding,
+    captionFooter: s.captionFooter,
+  });
   const [waStatus, setWaStatus] = useState<any>(null);
   const [socialAccounts, setSocialAccounts] = useState<any[]>([]);
 
@@ -118,7 +129,7 @@ export default function SettingsPage() {
       await fetchWithAuth(`${API_URL}/api/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
+        body: JSON.stringify(settingsPayload(settings)),
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -614,10 +625,12 @@ export default function SettingsPage() {
                         await fetchWithAuth(`${API_URL}/api/settings`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            ...settings,
-                            historySyncDepthHours: newDepth,
-                          }),
+                          body: JSON.stringify(
+                            settingsPayload({
+                              ...settings,
+                              historySyncDepthHours: newDepth,
+                            }),
+                          ),
                         });
                         setSaved(true);
                         setTimeout(() => setSaved(false), 3000);

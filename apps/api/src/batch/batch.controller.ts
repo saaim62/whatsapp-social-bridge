@@ -12,6 +12,20 @@ import {
 } from '@nestjs/common';
 import { BatchService } from './batch.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AuthenticatedRequest } from '../auth/authenticated-request';
+import {
+  ApproveBatchDto,
+  IdsDto,
+  MaskMediaDto,
+  MoveMediaDto,
+  PublishBatchDto,
+  PublishBulkDto,
+  RenameBatchDto,
+  ReorderMediaDto,
+  SendBatchDto,
+  SendBulkDto,
+  SetPriceDto,
+} from './dto/batch.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('api/batches')
@@ -19,24 +33,24 @@ export class BatchController {
   constructor(private readonly batchService: BatchService) {}
 
   @Get()
-  async getAllBatches(@Request() req: any) {
+  async getAllBatches(@Request() req: AuthenticatedRequest) {
     return this.batchService.getBatches(req.user.userId);
   }
 
   @Get(':id')
-  async getBatch(@Request() req: any, @Param('id') id: string) {
+  async getBatch(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.batchService.getBatch(id, req.user.userId);
   }
 
   @Post(':id/delete')
-  async deleteBatch(@Request() req: any, @Param('id') id: string) {
+  async deleteBatch(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.batchService.deleteBatch(id, req.user.userId);
   }
 
   @Post('delete-bulk')
   async deleteBatchesBulk(
-    @Request() req: any,
-    @Body() body: { ids: string[] },
+    @Request() req: AuthenticatedRequest,
+    @Body() body: IdsDto,
   ) {
     if (!body.ids || !Array.isArray(body.ids) || body.ids.length === 0) {
       throw new HttpException('No IDs provided', HttpStatus.BAD_REQUEST);
@@ -46,8 +60,8 @@ export class BatchController {
 
   @Post('publish-bulk')
   async publishBatchesBulk(
-    @Request() req: any,
-    @Body() body: { ids: string[]; force?: boolean },
+    @Request() req: AuthenticatedRequest,
+    @Body() body: PublishBulkDto,
   ) {
     if (!body.ids || !Array.isArray(body.ids) || body.ids.length === 0) {
       throw new HttpException('No IDs provided', HttpStatus.BAD_REQUEST);
@@ -61,18 +75,18 @@ export class BatchController {
 
   @Post(':id/approve')
   async approveBatch(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id') id: string,
-    @Body() body: any,
+    @Body() body: ApproveBatchDto,
   ) {
     return this.batchService.approveBatch(id, body, req.user.userId);
   }
 
   @Post(':id/publish')
   async publishBatch(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id') id: string,
-    @Body() body: any,
+    @Body() body: PublishBatchDto,
   ) {
     // `force: true` is the explicit opt-in to re-post to destinations
     // that already have a live PUBLISHED record (P0-3); default false.
@@ -85,19 +99,19 @@ export class BatchController {
   }
 
   @Post(':id/reject')
-  async rejectBatch(@Request() req: any, @Param('id') id: string) {
+  async rejectBatch(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.batchService.rejectBatch(id, req.user.userId);
   }
 
   @Post(':id/clear-ai')
-  async clearAIContent(@Request() req: any, @Param('id') id: string) {
+  async clearAIContent(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.batchService.clearAIContent(id, req.user.userId);
   }
 
   @Post('clear-ai-bulk')
   async clearAIContentBulk(
-    @Request() req: any,
-    @Body() body: { ids: string[] },
+    @Request() req: AuthenticatedRequest,
+    @Body() body: IdsDto,
   ) {
     if (!body.ids || !Array.isArray(body.ids) || body.ids.length === 0) {
       throw new HttpException('No IDs provided', HttpStatus.BAD_REQUEST);
@@ -106,15 +120,15 @@ export class BatchController {
   }
 
   @Post('media/:mediaId/delete')
-  async deleteMedia(@Request() req: any, @Param('mediaId') mediaId: string) {
+  async deleteMedia(@Request() req: AuthenticatedRequest, @Param('mediaId') mediaId: string) {
     return this.batchService.deleteMedia(mediaId, req.user.userId);
   }
 
   @Post(':id/media/reorder')
   async reorderMedia(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id') id: string,
-    @Body() body: { orderedMediaIds: string[] },
+    @Body() body: ReorderMediaDto,
   ) {
     if (!body.orderedMediaIds || !Array.isArray(body.orderedMediaIds)) {
       throw new HttpException('Invalid media IDs', HttpStatus.BAD_REQUEST);
@@ -128,12 +142,9 @@ export class BatchController {
 
   @Post('media/:mediaId/mask')
   async maskMedia(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('mediaId') mediaId: string,
-    @Body()
-    body: {
-      boxes: { left: number; top: number; width: number; height: number }[];
-    },
+@Body() body: MaskMediaDto,
   ) {
     const result = await this.batchService.maskMediaLogo(
       mediaId,
@@ -147,7 +158,7 @@ export class BatchController {
   }
 
   @Post('media/:mediaId/revert')
-  async revertMedia(@Request() req: any, @Param('mediaId') mediaId: string) {
+  async revertMedia(@Request() req: AuthenticatedRequest, @Param('mediaId') mediaId: string) {
     const result = await this.batchService.revertMediaLogo(
       mediaId,
       req.user.userId,
@@ -166,7 +177,7 @@ export class BatchController {
 
   @Post('media/:mediaId/trigger-auto-blur')
   async triggerAutoBlur(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('mediaId') mediaId: string,
   ) {
     const result = await this.batchService.triggerManualAutoBlur(
@@ -183,7 +194,7 @@ export class BatchController {
   }
 
   @Post('media/:mediaId/stop-blur')
-  async stopMediaBlur(@Request() req: any, @Param('mediaId') mediaId: string) {
+  async stopMediaBlur(@Request() req: AuthenticatedRequest, @Param('mediaId') mediaId: string) {
     const result = await this.batchService.stopMediaBlur(
       mediaId,
       req.user.userId,
@@ -199,9 +210,9 @@ export class BatchController {
 
   @Post('media/:mediaId/move')
   async moveMedia(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('mediaId') mediaId: string,
-    @Body() body: { targetBatchId: string; retainAI?: boolean },
+    @Body() body: MoveMediaDto,
   ) {
     if (!body.targetBatchId) {
       throw new HttpException(
@@ -219,8 +230,8 @@ export class BatchController {
 
   @Post('send-bulk')
   async sendBatchesBulk(
-    @Request() req: any,
-    @Body() body: { batchIds: string[]; targetEmails: string[] },
+    @Request() req: AuthenticatedRequest,
+    @Body() body: SendBulkDto,
   ) {
     if (
       !body.batchIds ||
@@ -242,9 +253,9 @@ export class BatchController {
 
   @Post(':id/send')
   async sendBatchToUser(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id') id: string,
-    @Body() body: { targetEmails: string[] },
+    @Body() body: SendBatchDto,
   ) {
     if (!body.targetEmails || body.targetEmails.length === 0) {
       throw new HttpException(
@@ -261,9 +272,9 @@ export class BatchController {
 
   @Patch(':id/rename')
   async renameBatch(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id') id: string,
-    @Body() body: { name: string },
+    @Body() body: RenameBatchDto,
   ) {
     if (!body.name) {
       throw new HttpException('name is required', HttpStatus.BAD_REQUEST);
@@ -273,9 +284,9 @@ export class BatchController {
 
   @Patch(':id/price')
   async setBatchPrice(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id') id: string,
-    @Body() body: { price: number },
+    @Body() body: SetPriceDto,
   ) {
     if (body.price === undefined || body.price === null) {
       throw new HttpException('price is required', HttpStatus.BAD_REQUEST);
@@ -295,7 +306,7 @@ export class BatchController {
   }
 
   @Post('media/:id/force-image')
-  async forceImage(@Request() req: any, @Param('id') id: string) {
+  async forceImage(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.batchService.forceImage(id, req.user.userId);
   }
 }

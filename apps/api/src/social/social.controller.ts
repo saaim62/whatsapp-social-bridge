@@ -13,6 +13,8 @@ import {
 import { Response } from 'express';
 import { SocialService } from './social.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AuthenticatedRequest } from '../auth/authenticated-request';
+import { SaveMetaDestinationDto } from './dto/social.dto';
 
 @Controller('api/social')
 export class SocialController {
@@ -20,7 +22,7 @@ export class SocialController {
 
   @UseGuards(JwtAuthGuard)
   @Get('oauth/facebook')
-  async getOAuthUrl(@Request() req: any) {
+  async getOAuthUrl(@Request() req: AuthenticatedRequest) {
     const url = await this.socialService.getMetaOAuthUrl(req.user.userId);
     return { url };
   }
@@ -55,13 +57,13 @@ export class SocialController {
 
   @UseGuards(JwtAuthGuard)
   @Get('accounts')
-  async getAccounts(@Request() req: any) {
+  async getAccounts(@Request() req: AuthenticatedRequest) {
     return this.socialService.getSocialAccounts(req.user.userId);
   }
 
   @UseGuards(JwtAuthGuard)
   @Delete('disconnect')
-  async disconnectMeta(@Request() req: any) {
+  async disconnectMeta(@Request() req: AuthenticatedRequest) {
     return this.socialService.disconnectMeta(req.user.userId);
   }
 
@@ -69,7 +71,7 @@ export class SocialController {
   // accounts) — the choices for the publishing-destination picker.
   @UseGuards(JwtAuthGuard)
   @Get('meta/pages')
-  async listMetaPages(@Request() req: any) {
+  async listMetaPages(@Request() req: AuthenticatedRequest) {
     return this.socialService.listMetaPages(req.user.userId);
   }
 
@@ -78,8 +80,8 @@ export class SocialController {
   @UseGuards(JwtAuthGuard)
   @Post('meta/destination')
   async saveMetaDestination(
-    @Request() req: any,
-    @Body() body: { pageId: string; instagramAccountId?: string | null },
+    @Request() req: AuthenticatedRequest,
+    @Body() body: SaveMetaDestinationDto,
   ) {
     if (!body?.pageId) {
       return { success: false, message: 'pageId is required' };

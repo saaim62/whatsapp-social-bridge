@@ -21,10 +21,10 @@ describe('AuthController mock-pay production gate', () => {
   it('returns 410 Gone in production and never touches the account', async () => {
     process.env.NODE_ENV = 'production';
     await expect(
-      controller.mockPay({ user: { email: 'a@b.c' } }),
+      controller.mockPay({ user: { userId: 'u1', email: 'a@b.c' } } as any),
     ).rejects.toBeInstanceOf(HttpException);
     try {
-      await controller.mockPay({ user: { email: 'a@b.c' } });
+      await controller.mockPay({ user: { userId: 'u1', email: 'a@b.c' } } as any);
     } catch (e: any) {
       expect(e.getStatus()).toBe(HttpStatus.GONE);
     }
@@ -33,7 +33,7 @@ describe('AuthController mock-pay production gate', () => {
 
   it('still works outside production (dev behavior unchanged)', async () => {
     process.env.NODE_ENV = 'development';
-    const res = await controller.mockPay({ user: { email: 'a@b.c' } });
+    const res = await controller.mockPay({ user: { userId: 'u1', email: 'a@b.c' } } as any);
     expect(res.message).toBe('Payment successful.');
     expect(authService.mockPay).toHaveBeenCalledWith('a@b.c');
   });

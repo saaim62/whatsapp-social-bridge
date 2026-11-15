@@ -14,6 +14,13 @@ import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from '../auth/guards/admin.guard';
 import { OwnerGuard } from '../auth/guards/owner.guard';
+import { AdminAuthenticatedRequest } from '../auth/authenticated-request';
+import {
+  ExtendTrialDto,
+  SetPaidDto,
+  SetRoleDto,
+  UpdateStorageLimitDto,
+} from './dto/admin.dto';
 
 @Controller('api/admin')
 @UseGuards(JwtAuthGuard, AdminGuard)
@@ -22,7 +29,7 @@ export class AdminController {
 
   /** The signed-in admin's own identity + role (drives the console UI). */
   @Get('me')
-  async getMe(@Request() req: any) {
+  async getMe(@Request() req: AdminAuthenticatedRequest) {
     return this.adminService.getMe(req.dbUser.id);
   }
 
@@ -53,18 +60,18 @@ export class AdminController {
 
   @Post('users/:id/extend-trial')
   async extendTrial(
-    @Request() req: any,
+    @Request() req: AdminAuthenticatedRequest,
     @Param('id') id: string,
-    @Body() body: { days: number },
+    @Body() body: ExtendTrialDto,
   ) {
     return this.adminService.extendTrial(req.dbUser, id, Number(body?.days));
   }
 
   @Post('users/:id/paid')
   async setPaid(
-    @Request() req: any,
+    @Request() req: AdminAuthenticatedRequest,
     @Param('id') id: string,
-    @Body() body: { isPaid: boolean },
+    @Body() body: SetPaidDto,
   ) {
     if (typeof body?.isPaid !== 'boolean') {
       throw new BadRequestException('isPaid must be a boolean');
@@ -74,7 +81,7 @@ export class AdminController {
 
   @Patch('users/:id/block')
   async toggleBlockStatus(
-    @Request() req: any,
+    @Request() req: AdminAuthenticatedRequest,
     @Param('id') id: string,
     @Body('isBlocked') isBlocked: boolean,
   ) {
@@ -83,9 +90,9 @@ export class AdminController {
 
   @Post('users/:id/storage')
   async updateStorageLimit(
-    @Request() req: any,
+    @Request() req: AdminAuthenticatedRequest,
     @Param('id') userId: string,
-    @Body() body: { storageLimitBytes: number },
+    @Body() body: UpdateStorageLimitDto,
   ) {
     if (!body.storageLimitBytes || body.storageLimitBytes < 0) {
       throw new BadRequestException('Invalid storage limit');
@@ -110,8 +117,8 @@ export class AdminController {
   @Post('team/role')
   @UseGuards(OwnerGuard)
   async setRole(
-    @Request() req: any,
-    @Body() body: { userId: string; role: string },
+    @Request() req: AdminAuthenticatedRequest,
+    @Body() body: SetRoleDto,
   ) {
     if (!body?.userId || !body?.role) {
       throw new BadRequestException('userId and role are required');

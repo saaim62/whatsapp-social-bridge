@@ -15,6 +15,8 @@ import { AuthService } from './auth.service';
 import { EmailService } from './email.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { AuthThrottleGuard } from './auth-throttle.guard';
+import { LoginDto, RegisterDto, ResetPasswordDto } from './dto/auth.dto';
+import { AuthenticatedRequest } from './authenticated-request';
 
 @Controller('api/account')
 export class AuthController {
@@ -26,13 +28,13 @@ export class AuthController {
 
   @UseGuards(AuthThrottleGuard)
   @Post('login')
-  async login(@Body() body) {
+  async login(@Body() body: LoginDto) {
     return this.authService.login(body.email, body.password);
   }
 
   @UseGuards(AuthThrottleGuard)
   @Post('register')
-  async register(@Body() body) {
+  async register(@Body() body: RegisterDto) {
     this.logger.log(`[Register] Starting register process for ${body.email}`);
     const user = await this.authService.register(
       body.email,
@@ -85,7 +87,7 @@ export class AuthController {
   }
 
   @Post('reset-password')
-  async resetPassword(@Body() body) {
+  async resetPassword(@Body() body: ResetPasswordDto) {
     return this.authService.resetPassword(body.token, body.password);
   }
 
@@ -108,7 +110,7 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Post('mock-pay')
-  async mockPay(@Request() req) {
+  async mockPay(@Request() req: AuthenticatedRequest) {
     // Mock billing must never be reachable in production: it marks the
     // caller's account paid without any payment. It stays available in
     // development only, until the real billing module replaces it.

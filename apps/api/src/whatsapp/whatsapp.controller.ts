@@ -9,6 +9,8 @@ import {
 } from '@nestjs/common';
 import { WhatsappService } from './whatsapp.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AuthenticatedRequest } from '../auth/authenticated-request';
+import { ResyncHistoryDto } from './dto/whatsapp.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('api/whatsapp')
@@ -16,7 +18,7 @@ export class WhatsappController {
   constructor(private readonly whatsappService: WhatsappService) {}
 
   @Get('status')
-  getStatus(@Request() req: any) {
+  getStatus(@Request() req: AuthenticatedRequest) {
     const userId = req.user.userId;
     const client = this.whatsappService.getClient(userId);
 
@@ -42,10 +44,8 @@ export class WhatsappController {
 
   @UseGuards(JwtAuthGuard)
   @Post('resync-history')
-  async resyncHistory(@Request() req: any, @Body() body: any) {
-    const customDepth = body?.depthHours
-      ? parseInt(body.depthHours, 10)
-      : undefined;
+  async resyncHistory(@Request() req: AuthenticatedRequest, @Body() body: ResyncHistoryDto) {
+    const customDepth = body?.depthHours;
     return this.whatsappService.resyncHistoricalBuffer(
       req.user.userId,
       customDepth,
@@ -54,7 +54,7 @@ export class WhatsappController {
 
   @UseGuards(JwtAuthGuard)
   @Delete('disconnect')
-  async disconnectWhatsApp(@Request() req: any) {
+  async disconnectWhatsApp(@Request() req: AuthenticatedRequest) {
     return this.whatsappService.disconnectWhatsApp(req.user.userId);
   }
 }

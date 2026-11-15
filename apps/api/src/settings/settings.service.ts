@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { UpdateSettingsDto } from './dto/update-settings.dto';
 
 @Injectable()
 export class SettingsService {
@@ -23,7 +24,7 @@ export class SettingsService {
     return settings;
   }
 
-  async updateSettings(userId: string, data: any) {
+  async updateSettings(userId: string, data: UpdateSettingsDto) {
     const isSyncActive =
       typeof data?.isSyncActive === 'boolean' ? data.isSyncActive : undefined;
     let historySyncDepthHours: number | undefined = undefined;
