@@ -38,28 +38,77 @@ export default function DashboardPage() {
   const [batches, setBatches] = useState<any[]>([]);
   const [waStatus, setWaStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  const loadAll = () => {
+    fetchWithAuth(`${API_URL}/api/batches`)
+      .then((res) => res.json())
+      .then((data) => {
+        setBatches(Array.isArray(data) ? data : []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+    fetchWithAuth(`${API_URL}/api/whatsapp/status`)
+      .then((res) => res.json())
+      .then((data) => { if (data && !data.error) setWaStatus(data); })
+      .catch(() => {});
+  };
 
   useEffect(() => {
-    let alive = true;
-    const load = () => {
-      fetchWithAuth(`${API_URL}/api/batches`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (alive) {
-            setBatches(Array.isArray(data) ? data : []);
-            setLoading(false);
-          }
-        })
-        .catch(() => { if (alive) setLoading(false); });
-      fetchWithAuth(`${API_URL}/api/whatsapp/status`)
-        .then((res) => res.json())
-        .then((data) => { if (alive && data && !data.error) setWaStatus(data); })
-        .catch(() => {});
-    };
-    load();
-    const t = setInterval(load, 30000);
-    return () => { alive = false; clearInterval(t); };
+    loadAll();
+    const t = setInterval(loadAll, 30000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const toggleSelect = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  /* Bulk actions — wired to the existing bulk endpoints.
+     Publish stays staggered server-side (1/min, anti-ban pacing). */
+  const runBulk = async (kind: "approve" | "publish" | "delete") => {
+    const ids = Array.from(selected);
+    if (!ids.length || bulkBusy) return;
+    if (kind === "delete" && !window.confirm(`Delete ${ids.length} product(s)? This cannot be undone.`)) return;
+    setBulkBusy(true);
+    try {
+      const jsonHeaders = { "Content-Type": "application/json" };
+      if (kind === "approve") {
+        await Promise.all(
+          ids.map((id) =>
+            fetchWithAuth(`${API_URL}/api/batches/${id}/approve`, {
+              method: "POST",
+              headers: jsonHeaders,
+              body: JSON.stringify({}),
+            })
+          )
+        );
+      } else if (kind === "publish") {
+        await fetchWithAuth(`${API_URL}/api/batches/publish-bulk`, {
+          method: "POST",
+          headers: jsonHeaders,
+          body: JSON.stringify({ ids }),
+        });
+      } else {
+        await fetchWithAuth(`${API_URL}/api/batches/delete-bulk`, {
+          method: "POST",
+          headers: jsonHeaders,
+          body: JSON.stringify({ ids }),
+        });
+      }
+      setSelected(new Set());
+      loadAll();
+    } catch (e) {
+      console.error(e);
+    }
+    setBulkBusy(false);
+  };
 
   if (loading) return <LoadingSpinner label="Initializing systems..." />;
 
@@ -121,6 +170,8 @@ export default function DashboardPage() {
   const failedCount = batches.filter((b) => b.status === "FAILED").length;
   const publishedCount = batches.filter((b) => ["PUBLISHED", "PARTIALLY_PUBLISHED"].includes(b.status)).length;
   const waitingValue = readyQueue.reduce((sum, b) => {
+    const sv = b.extractedData?.selling_price_value;
+    if (typeof sv === "number" && sv > 0) return sum + sv;
     const n = Number(String(b.extractedData?.price ?? "").replace(/[^\d]/g, ""));
     return sum + (isNaN(n) ? 0 : n);
   }, 0);
@@ -173,7 +224,7 @@ export default function DashboardPage() {
               <p className="text-slate-400 text-sm mt-1">
                 Products extracted from your WhatsApp sources, waiting for your decision.
                 {waitingValue > 0 && (
-                  <span className="text-gold-300 font-semibold"> ≈ Rs. {waitingValue.toLocaleString()} of stock in this queue.</span>
+                  <span className="text-gold-300 font-semibold"> ≈ Rs. {waitingValue.toLocaleString()} in this queue at your selling prices.</span>
                 )}
               </p>
             </div>
@@ -226,14 +277,76 @@ export default function DashboardPage() {
               </p>
             </div>
           ) : (
+            <>
+            {/* Selection + bulk actions */}
+            <div className="relative z-10 mb-3 flex flex-wrap items-center gap-3 px-1">
+              <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-400 hover:text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={readyQueue.slice(0, 5).every((b) => selected.has(b.id))}
+                  onChange={(e) =>
+                    setSelected(
+                      e.target.checked
+                        ? new Set(readyQueue.slice(0, 5).map((b) => b.id))
+                        : new Set()
+                    )
+                  }
+                  className="w-4 h-4 accent-amber-400 cursor-pointer"
+                />
+                Select all
+              </label>
+              {selected.size > 0 && (
+                <>
+                  <span className="text-xs font-bold text-gold-300">{selected.size} selected</span>
+                  <div className="flex flex-wrap gap-2 ml-auto">
+                    <button
+                      onClick={() => runBulk("approve")}
+                      disabled={bulkBusy}
+                      className="text-xs font-bold uppercase tracking-wider text-emerald-300 border border-emerald-500/40 rounded-full px-3.5 py-1.5 hover:bg-emerald-500/10 transition-colors disabled:opacity-50"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => runBulk("publish")}
+                      disabled={bulkBusy}
+                      className="text-xs font-bold uppercase tracking-wider text-gold-300 border border-gold-500/40 rounded-full px-3.5 py-1.5 hover:bg-gold-500/10 transition-colors disabled:opacity-50"
+                    >
+                      Publish
+                    </button>
+                    <button
+                      onClick={() => runBulk("delete")}
+                      disabled={bulkBusy}
+                      className="text-xs font-bold uppercase tracking-wider text-rose-300 border border-rose-500/40 rounded-full px-3.5 py-1.5 hover:bg-rose-500/10 transition-colors disabled:opacity-50"
+                    >
+                      Delete
+                    </button>
+                    <button
+                      onClick={() => setSelected(new Set())}
+                      className="text-xs font-bold uppercase tracking-wider text-slate-400 border border-white/15 rounded-full px-3.5 py-1.5 hover:bg-white/5 transition-colors"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  {bulkBusy && <span className="text-xs text-slate-400">Working…</span>}
+                </>
+              )}
+            </div>
             <ul className="relative z-10 divide-y divide-white/[0.06] rounded-2xl border border-white/[0.07] bg-white/[0.02] overflow-hidden">
               {readyQueue.slice(0, 5).map((batch: any) => {
                 const t = thumbFor(batch);
                 return (
-                  <li key={batch.id}>
+                  <li key={batch.id} className="flex items-stretch">
+                    <label className="flex items-center pl-4 pr-0.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(batch.id)}
+                        onChange={() => toggleSelect(batch.id)}
+                        className="w-4 h-4 accent-amber-400 cursor-pointer"
+                      />
+                    </label>
                     <Link
                       href={`/products/${batch.id}`}
-                      className="group flex items-center gap-4 px-4 py-3.5 hover:bg-white/[0.03] transition-colors"
+                      className="group flex flex-1 items-center gap-4 px-4 py-3.5 hover:bg-white/[0.03] transition-colors min-w-0"
                     >
                       <div className="w-12 h-12 rounded-lg bg-graphite border border-white/10 overflow-hidden shrink-0 relative">
                         {t.src ? (
@@ -260,10 +373,17 @@ export default function DashboardPage() {
                           <span>{batch.mediaAssets?.length || 0} assets</span>
                         </div>
                       </div>
-                      {batch.extractedData?.price && (
-                        <span className="shrink-0 text-sm font-bold text-gold-300 bg-gold-500/10 border border-gold-500/25 rounded-full px-3 py-1">
-                          {batch.extractedData.price}
-                        </span>
+                      {(batch.extractedData?.selling_price || batch.extractedData?.price) && (
+                        <div className="shrink-0 text-right">
+                          <span className="text-sm font-bold text-gold-300 bg-gold-500/10 border border-gold-500/25 rounded-full px-3 py-1 inline-block">
+                            {batch.extractedData?.selling_price || batch.extractedData?.price}
+                          </span>
+                          {batch.extractedData?.selling_price && batch.extractedData?.price && (
+                            <div className="text-[10px] text-slate-500 mt-1.5 font-mono">
+                              <span className="line-through">{batch.extractedData.price}</span> supplier
+                            </div>
+                          )}
+                        </div>
                       )}
                       <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-white group-hover:translate-x-0.5 transition-all shrink-0" />
                     </Link>
@@ -271,6 +391,7 @@ export default function DashboardPage() {
                 );
               })}
             </ul>
+            </>
           )}
 
           {/* Slim real pipeline summary */}
