@@ -124,6 +124,36 @@ export class AuthService {
     return { message: 'Email successfully verified. You can now log in.' };
   }
 
+  /**
+   * Issue a FRESH verification token for an existing UNVERIFIED account.
+   * Returns null when there is nothing to do (unknown email, or the
+   * account is already verified) so the controller can answer uniformly
+   * and never reveal which case applied (no account enumeration).
+   *
+   * This is also the recovery path for pre-migration accounts: their
+   * verificationTokenExpiresAt is NULL, so the strict verifyEmail check
+   * can never accept their original token — and re-registering with the
+   * same email is rejected as a duplicate. Without a resend flow those
+   * users are stranded. Resend replaces the token (the old one dies)
+   * and gives it a real 24h expiry. The same applies to new users who
+   * simply miss the 24h window.
+   */
+  async generateVerificationToken(email: string) {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user || user.isEmailVerified) return null;
+
+    const token = randomBytes(32).toString('hex');
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        verificationToken: token,
+        verificationTokenExpiresAt: new Date(Date.now() + VERIFICATION_TOKEN_TTL_MS),
+      }
+    });
+
+    return token;
+  }
+
   async generatePasswordResetToken(email: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) return null;

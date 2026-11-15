@@ -26,6 +26,7 @@ export class AuthThrottleGuard implements CanActivate {
     { match: '/login', limit: 10, windowMs: 5 * 60 * 1000 },
     { match: '/register', limit: 5, windowMs: 10 * 60 * 1000 },
     { match: '/forgot-password', limit: 5, windowMs: 10 * 60 * 1000 },
+    { match: '/resend-verification', limit: 5, windowMs: 10 * 60 * 1000 },
   ];
 
   canActivate(context: ExecutionContext): boolean {

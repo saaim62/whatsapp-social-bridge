@@ -61,6 +61,20 @@ export class AuthController {
     return this.authService.resetPassword(body.token, body.password);
   }
 
+  @UseGuards(AuthThrottleGuard)
+  @Post('resend-verification')
+  async resendVerification(@Body('email') email: string) {
+    const token = await this.authService.generateVerificationToken(email);
+    if (token) {
+      this.emailService.sendVerificationEmail(email, token).catch(e => {
+        this.logger.error('[ResendVerification] Error triggering email', e);
+      });
+    }
+    // Uniform response whether the account is unknown, already
+    // verified, or freshly re-sent — no account enumeration.
+    return { message: 'If an unverified account with that email exists, we sent a new verification link.' };
+  }
+
   @UseGuards(JwtAuthGuard)
   @Post('mock-pay')
   async mockPay(@Request() req) {
