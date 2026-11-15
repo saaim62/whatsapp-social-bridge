@@ -64,8 +64,15 @@ export function analyzePrice(raw: unknown): PriceAnalysis {
   // Prefer the number following a currency marker ("Rs." itself
   // contains a dot — a naive digit/dot strip turns 1,850 into 0.185).
   const afterCurrency = cleaned.match(/(?:rs\.?|pkr)\s*(\d+(?:\.\d+)?)/i);
+  // Next, a number anchored to a price keyword ("price 1850",
+  // "Rate: 450", "amount=2400"). The unanchored fallback below takes
+  // the FIRST number in the string, which read "Size 42, price 1850"
+  // as Rs. 42 — a size, not a price.
+  const afterKeyword = cleaned.match(
+    /(?:price|rate|cost|amount|rs\.?|pkr)\b[\s:=#-]*(\d+(?:\.\d+)?)/i,
+  );
   const anyNumber = cleaned.match(/\d+(?:\.\d+)?/);
-  const pick = afterCurrency?.[1] ?? anyNumber?.[0];
+  const pick = afterCurrency?.[1] ?? afterKeyword?.[1] ?? anyNumber?.[0];
   if (!pick) return { price: null, ambiguous: false };
   const rounded = Math.round(parseFloat(pick));
   return { price: rounded > 0 ? rounded : null, ambiguous: false };

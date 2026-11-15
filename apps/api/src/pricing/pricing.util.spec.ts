@@ -46,6 +46,27 @@ describe('parsePrice / analyzePrice', () => {
     });
   });
 
+  it('"Size 42, price 1850" → 1850 (keyword-anchored number wins over the leading size)', () => {
+    expect(parsePrice('Size 42, price 1850')).toBe(1850);
+    expect(analyzePrice('Size 42, price 1850').ambiguous).toBe(false);
+  });
+
+  it('keyword anchors accept separators and other price words', () => {
+    expect(parsePrice('Rate: 450')).toBe(450);
+    expect(parsePrice('amount=2400')).toBe(2400);
+    expect(parsePrice('Cost price 2400')).toBe(2400);
+    expect(parsePrice('Rs: 1850')).toBe(1850);
+  });
+
+  it('"Pack of 2, price 2400" → null: a leading pack declaration stays quantity-ambiguous even with a keyword price (never guess whether the price is per pack or per piece)', () => {
+    expect(parsePrice('Pack of 2, price 2400')).toBeNull();
+    expect(analyzePrice('Pack of 2, price 2400')).toEqual({
+      price: null,
+      ambiguous: true,
+      reason: 'quantity',
+    });
+  });
+
   it('unparseable input → null, not ambiguous', () => {
     expect(parsePrice(null)).toBeNull();
     expect(parsePrice(undefined)).toBeNull();
