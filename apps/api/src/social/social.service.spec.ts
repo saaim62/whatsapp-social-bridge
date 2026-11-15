@@ -109,4 +109,33 @@ describe('SocialService Meta OAuth state handling', () => {
     );
     expect(prisma.socialAccount.upsert).toHaveBeenCalledTimes(1);
   });
+
+  it('stores the Meta token ENCRYPTED when TOKEN_ENCRYPTION_KEY is set, and it decrypts back', async () => {
+    const prev = process.env.TOKEN_ENCRYPTION_KEY;
+    process.env.TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString('base64');
+    try {
+      const nonce = 'e'.repeat(64);
+      prisma.oAuthState.findUnique.mockResolvedValue({
+        nonce,
+        userId: 'user-1',
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+      prisma.oAuthState.deleteMany.mockResolvedValue({ count: 1 });
+      mockedAxios.get
+        .mockResolvedValueOnce({ data: { access_token: 'short-lived' } })
+        .mockResolvedValueOnce({ data: { access_token: 'long-lived' } });
+
+      await service.handleMetaOAuthCallback('code-1', nonce);
+
+      const upsertArg = prisma.socialAccount.upsert.mock.calls[0][0];
+      const stored = upsertArg.create.accessToken;
+      expect(stored).not.toBe('long-lived');
+      expect(stored.startsWith('enc:v1:')).toBe(true);
+      const { decryptToken } = require('./token-crypto');
+      expect(decryptToken(stored)).toBe('long-lived');
+    } finally {
+      if (prev === undefined) delete process.env.TOKEN_ENCRYPTION_KEY;
+      else process.env.TOKEN_ENCRYPTION_KEY = prev;
+    }
+  });
 });

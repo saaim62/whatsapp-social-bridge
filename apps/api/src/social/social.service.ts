@@ -9,6 +9,11 @@ import * as util from 'util';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { randomBytes } from 'crypto';
+import {
+  encryptToken,
+  decryptToken,
+  assertTokenEncryptionConfigured,
+} from './token-crypto';
 
 const execPromise = util.promisify(exec);
 
@@ -22,7 +27,24 @@ export class SocialService {
   constructor(
     private configService: ConfigService,
     private prisma: PrismaService,
-  ) {}
+  ) {
+    // Meta access tokens are encrypted at rest; production must not
+    // boot without the key (see token-crypto.ts).
+    assertTokenEncryptionConfigured();
+  }
+
+  /**
+   * Fetch the user's stored Meta token, decrypted. Stored values may
+   * be AES-256-GCM ciphertext (`enc:v1:`) or legacy plaintext from
+   * before encryption landed — decryptToken handles both.
+   */
+  private async getMetaUserToken(userId: string): Promise<string | null> {
+    const socialAcc = await this.prisma.socialAccount.findUnique({
+      where: { userId_platform: { userId, platform: 'META' } },
+    });
+    if (!socialAcc?.accessToken) return null;
+    return decryptToken(socialAcc.accessToken);
+  }
 
   private async compressVideo(inputPath: string): Promise<string> {
     const stats = fs.statSync(inputPath);
@@ -171,13 +193,8 @@ export class SocialService {
 
   async publishInstagram(batch: any): Promise<{ id: string }> {
     this.logger.log(`Publishing to Instagram for batch ${batch.id}`);
-    
-    // We assume the Meta account is linked
-    const socialAcc = await this.prisma.socialAccount.findUnique({
-      where: { userId_platform: { userId: batch.userId, platform: 'META' } }
-    });
 
-    const userAccessToken = socialAcc?.accessToken;
+    const userAccessToken = await this.getMetaUserToken(batch.userId);
 
     if (!userAccessToken) {
       throw new Error('User Access Token is missing. Please connect your Meta account.');
@@ -284,12 +301,8 @@ export class SocialService {
 
   async publishFacebook(batch: any): Promise<{ id: string }> {
     this.logger.log(`Publishing to Facebook for batch ${batch.id}`);
-    
-    const socialAcc = await this.prisma.socialAccount.findUnique({
-      where: { userId_platform: { userId: batch.userId, platform: 'META' } }
-    });
 
-    const userAccessToken = socialAcc?.accessToken;
+    const userAccessToken = await this.getMetaUserToken(batch.userId);
 
     if (!userAccessToken) {
       throw new Error('Access Token is missing. Please connect your Meta account.');
@@ -482,7 +495,10 @@ export class SocialService {
     const longLivedRes = await axios.get(longLivedUrl);
     const longLivedToken = longLivedRes.data.access_token;
 
-    // 3. Save the token for the user
+    // 3. Save the token for the user — encrypted at rest (AES-256-GCM,
+    // see token-crypto.ts). Reads go through getMetaUserToken, which
+    // also accepts legacy plaintext rows until the backfill runs.
+    const encryptedToken = encryptToken(longLivedToken);
     await this.prisma.socialAccount.upsert({
       where: {
         userId_platform: {
@@ -491,12 +507,12 @@ export class SocialService {
         }
       },
       update: {
-        accessToken: longLivedToken,
+        accessToken: encryptedToken,
       },
       create: {
         userId,
         platform: 'META',
-        accessToken: longLivedToken,
+        accessToken: encryptedToken,
       }
     });
 
@@ -521,13 +537,8 @@ export class SocialService {
 
   async publishInstagramStory(batch: any): Promise<{ id: string }> {
     this.logger.log(`Publishing to Instagram Story for batch ${batch.id}`);
-    
-    // We assume the Meta account is linked
-    const socialAcc = await this.prisma.socialAccount.findUnique({
-      where: { userId_platform: { userId: batch.userId, platform: 'META' } }
-    });
 
-    const userAccessToken = socialAcc?.accessToken;
+    const userAccessToken = await this.getMetaUserToken(batch.userId);
 
     if (!userAccessToken) {
       throw new Error('User Access Token is missing. Please connect your Meta account.');
@@ -600,12 +611,8 @@ export class SocialService {
 
   async publishFacebookStory(batch: any): Promise<{ id: string }> {
     this.logger.log(`Publishing to Facebook Story for batch ${batch.id}`);
-    
-    const socialAcc = await this.prisma.socialAccount.findUnique({
-      where: { userId_platform: { userId: batch.userId, platform: 'META' } }
-    });
 
-    const userAccessToken = socialAcc?.accessToken;
+    const userAccessToken = await this.getMetaUserToken(batch.userId);
 
     if (!userAccessToken) {
       throw new Error('Access Token is missing. Please connect your Meta account.');
