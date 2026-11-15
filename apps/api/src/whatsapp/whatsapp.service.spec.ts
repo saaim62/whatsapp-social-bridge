@@ -1,5 +1,10 @@
 import { WhatsappService } from './whatsapp.service';
 
+// Baileys listeners are fire-and-forget (the emitter never awaits them),
+// so after invoking a captured handler the test must let the handler's
+// async chain settle before asserting.
+const settle = () => new Promise((r) => setTimeout(r, 600));
+
 /**
  * Ingestion privacy gate: a message may be cached or buffered ONLY when
  * (1) sync is not paused for the user, and (2) its source is in the user's
@@ -140,6 +145,7 @@ describe('WhatsappService ingestion allowlist gate', () => {
         type: 'notify',
         messages: [msg(GOOD_JID, 'm1')],
       });
+      await settle();
       expect(saveCacheSpy).not.toHaveBeenCalled();
       expect(debounceStore.push).not.toHaveBeenCalled();
     });
@@ -150,6 +156,7 @@ describe('WhatsappService ingestion allowlist gate', () => {
         type: 'notify',
         messages: [msg(GOOD_JID, 'm1')],
       });
+      await settle();
       expect(saveCacheSpy).not.toHaveBeenCalled();
       expect(debounceStore.push).not.toHaveBeenCalled();
     });
@@ -162,6 +169,7 @@ describe('WhatsappService ingestion allowlist gate', () => {
         type: 'notify',
         messages: [good, bad],
       });
+      await settle();
       expect(saveCacheSpy).toHaveBeenCalledTimes(1);
       const cached = saveCacheSpy.mock.calls[0][1];
       expect(cached).toEqual([good]);
@@ -178,6 +186,7 @@ describe('WhatsappService ingestion allowlist gate', () => {
         chats: [],
         messages: [msg(GOOD_JID, 'h1')],
       });
+      await settle();
       expect(saveCacheSpy).not.toHaveBeenCalled();
       expect(handleIncomingSpy).not.toHaveBeenCalled();
     });
@@ -189,6 +198,7 @@ describe('WhatsappService ingestion allowlist gate', () => {
         chats: [],
         messages: [msg(GOOD_JID, 'h1'), msg(BAD_JID, 'h2')],
       });
+      await settle();
       expect(saveCacheSpy).not.toHaveBeenCalled();
       expect(handleIncomingSpy).not.toHaveBeenCalled();
       // The old code flipped isEnabled=true for every sender when the user
@@ -205,6 +215,7 @@ describe('WhatsappService ingestion allowlist gate', () => {
         chats: [],
         messages: [good, bad],
       });
+      await settle();
       expect(saveCacheSpy).toHaveBeenCalledTimes(1);
       expect(saveCacheSpy.mock.calls[0][1]).toEqual([good]);
       expect(handleIncomingSpy).toHaveBeenCalledTimes(1);

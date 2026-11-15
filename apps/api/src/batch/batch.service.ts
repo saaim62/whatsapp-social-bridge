@@ -10,18 +10,51 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-const sharp = require('sharp');
 const execAsync = promisify(exec);
 import { AiService } from '../ai/ai.service';
 import { OcrService } from '../ai/ocr.service';
-import {
-  blurRegions,
-  isMaskableImage,
-  normalizeImageFile,
-} from '../ai/image-mask.util';
 import { StorageService } from '../storage/storage.service';
 import { formatRs } from '../pricing/pricing.util';
 import { MediaSigningService } from '../media/media-signing.service';
+import type { MediaAsset, User } from '@prisma/client';
+import sharp from 'sharp';
+import type { ApproveBatchDto } from './dto/batch.dto';
+
+/** Payload handed from the WhatsApp layer (and the webhook/history
+ *  queues) into BatchService.handleMessage. Mirrors what
+ *  WhatsappService.handleIncomingMessage constructs. */
+export interface IncomingMessagePayload {
+  id?: string | null;
+  from?: string | null;
+  userId?: string;
+  senderName?: string;
+  timestamp?: string;
+  type?: string;
+  _localPath?: string | null;
+  _originalUrl?: string | null;
+  text?: { body?: string };
+  image?: { id?: string | null; mime_type?: string; caption?: string };
+}
+
+/** Job data for the 'batch-processing' queue. */
+export interface ProcessBatchJob {
+  batchId: string;
+  userId: string;
+  targets?: string[];
+  force?: boolean;
+}
+
+/** Response of GET graph.facebook.com/{media-id} (Cloud API). */
+export interface MetaMediaInfo {
+  url: string;
+  mime_type: string;
+}
+
+/** Job data for the 'image-blur' queue. */
+export interface BlurImageJob {
+  mediaId: string;
+  localPath: string;
+}
 
 @Injectable()
 export class BatchService implements OnModuleDestroy {
@@ -38,9 +71,10 @@ export class BatchService implements OnModuleDestroy {
     private aiService: AiService,
     private ocrService: OcrService,
     private storageService: StorageService,
-    @InjectQueue('batch-processing') private batchQueue: Queue,
-    @InjectQueue('history-sync-queue') private historySyncQueue: Queue,
-    @InjectQueue('image-blur') private imageBlurQueue: Queue,
+    @InjectQueue('batch-processing') private batchQueue: Queue<ProcessBatchJob>,
+    @InjectQueue('history-sync-queue')
+    private historySyncQueue: Queue<IncomingMessagePayload>,
+    @InjectQueue('image-blur') private imageBlurQueue: Queue<BlurImageJob>,
     @Optional() private mediaSigning?: MediaSigningService,
   ) {
     this.redisClient = new Redis({
@@ -53,7 +87,7 @@ export class BatchService implements OnModuleDestroy {
   }
 
   onModuleDestroy() {
-    this.redisClient.quit();
+    void this.redisClient.quit();
   }
 
   private getLocalPathFromMedia(localPathUrl: string): string {
@@ -62,15 +96,15 @@ export class BatchService implements OnModuleDestroy {
     return path.join(process.cwd(), 'uploads', fileName);
   }
 
-  async isMacWorkerOnline(): Promise<boolean> {
+  isMacWorkerOnline(): boolean {
     return true; // Server-side image blur processor is active
   }
 
-  async queueHistoryMessage(message: any) {
+  async queueHistoryMessage(message: IncomingMessagePayload) {
     await this.historySyncQueue.add('process-history-message', message);
   }
 
-  async handleMessage(message: any) {
+  async handleMessage(message: IncomingMessagePayload) {
     const from = message.from;
     const userId = message.userId;
     if (!userId || !from) return;
@@ -95,14 +129,14 @@ export class BatchService implements OnModuleDestroy {
     await nextLock;
   }
 
-  private async _handleMessage(message: any) {
+  private async _handleMessage(message: IncomingMessagePayload) {
     // 1. Extract info from message
     const messageId = message.id;
     const from = message.from; // Sender ID (conversation)
     const senderName = message.senderName || '';
-    const timestamp = parseInt(message.timestamp, 10);
     const type = message.type; // 'text', 'image', etc.
     const userId = message.userId;
+    if (!userId || !from) return;
 
     let textContent = '';
     let mediaId: string | null = null;
@@ -112,8 +146,8 @@ export class BatchService implements OnModuleDestroy {
     if (type === 'text') {
       textContent = message.text?.body || '';
     } else if (type === 'image') {
-      mediaId = message.image?.id;
-      mimeType = message.image?.mime_type;
+      mediaId = message.image?.id ?? null;
+      mimeType = message.image?.mime_type ?? null;
       textContent = message.image?.caption || '';
       localPath = message._localPath || null;
 
@@ -204,8 +238,11 @@ export class BatchService implements OnModuleDestroy {
           },
           include: { mediaAssets: true },
         });
-      } catch (err: any) {
-        if (err.code === 'P2002') {
+      } catch (err) {
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === 'P2002'
+        ) {
           this.logger.warn(
             `Duplicate webhook or test message received for ID ${messageId}. Ignoring.`,
           );
@@ -240,7 +277,7 @@ export class BatchService implements OnModuleDestroy {
           } else {
             this.logger.warn(`Could not determine file size for ${localPath}`);
           }
-        } catch (e) {
+        } catch {
           this.logger.warn(`Could not determine file size for ${localPath}`);
         }
       }
@@ -271,36 +308,123 @@ export class BatchService implements OnModuleDestroy {
     // 3. Debounce processing as a fallback
     if (!activeBatch) return;
 
-    const batchWindowStr = this.configService.get('BATCH_WINDOW_SECONDS', '30');
+    const batchWindowStr = this.configService.get<string>(
+      'BATCH_WINDOW_SECONDS',
+      '30',
+    );
     const batchWindowMs = parseInt(batchWindowStr, 10) * 1000;
 
     if (this.activeTimeouts.has(activeBatch.id)) {
       clearTimeout(this.activeTimeouts.get(activeBatch.id));
     }
 
-    const timeout = setTimeout(async () => {
-      try {
-        this.logger.log(
-          `Fallback window closed for ${activeBatch.id}. Queueing processing.`,
-        );
-        await this.prisma.productBatch.update({
-          where: { id: activeBatch.id, userId },
-          data: { status: 'PROCESSING' },
-        });
-        await this.batchQueue.add('process-batch', {
-          batchId: activeBatch.id,
-          userId,
-        });
-      } catch (err) {
-        this.logger.warn(
-          `Could not update batch ${activeBatch.id} - it may have been deleted.`,
-        );
-      } finally {
-        this.activeTimeouts.delete(activeBatch.id);
-      }
+    const timeout = setTimeout(() => {
+      void this.closeBatchAfterWindow(activeBatch.id, userId);
     }, batchWindowMs);
 
     this.activeTimeouts.set(activeBatch.id, timeout);
+  }
+
+  private async closeBatchAfterWindow(batchId: string, userId: string) {
+    try {
+      this.logger.log(
+        `Fallback window closed for ${batchId}. Queueing processing.`,
+      );
+      await this.prisma.productBatch.update({
+        where: { id: batchId, userId },
+        data: { status: 'PROCESSING' },
+      });
+      await this.batchQueue.add('process-batch', {
+        batchId: batchId,
+        userId,
+      });
+    } catch {
+      this.logger.warn(
+        `Could not update batch ${batchId} - it may have been deleted.`,
+      );
+    } finally {
+      this.activeTimeouts.delete(batchId);
+    }
+  }
+
+  private async cleanupBatchMedia(assets: MediaAsset[]) {
+    for (const media of assets) {
+      const r2Target = media.originalUrl || media.localPath;
+      if (r2Target) {
+        await this.storageService.deleteFile(r2Target).catch(() => {});
+      }
+      if (media.localPath) {
+        try {
+          const absolutePath = this.getLocalPathFromMedia(media.localPath);
+          if (fs.existsSync(absolutePath)) fs.unlinkSync(absolutePath);
+          const ext = path.extname(absolutePath);
+          const originalPath = absolutePath.replace(ext, `_original${ext}`);
+          if (fs.existsSync(originalPath)) fs.unlinkSync(originalPath);
+        } catch {
+          // Best-effort cleanup; the DB record is already gone.
+        }
+      }
+    }
+  }
+
+  private async cleanupBulkMedia(
+    batches: Array<{ mediaAssets: MediaAsset[] }>,
+  ) {
+    const r2Keys = new Set<string>();
+    const diskPaths = new Set<string>();
+
+    for (const batch of batches) {
+      for (const media of batch.mediaAssets) {
+        if (media.originalUrl) {
+          r2Keys.add(media.originalUrl);
+        } else if (media.localPath) {
+          r2Keys.add(media.localPath);
+        }
+        if (media.localPath) {
+          diskPaths.add(media.localPath);
+        }
+      }
+    }
+
+    // Concurrently delete from Cloudflare R2 in chunks of 15
+    const keysArray = Array.from(r2Keys);
+    for (let i = 0; i < keysArray.length; i += 15) {
+      const chunk = keysArray.slice(i, i + 15);
+      await Promise.all(
+        chunk.map((key) => this.storageService.deleteFile(key).catch(() => {})),
+      );
+    }
+
+    // Delete disk files
+    for (const localPath of diskPaths) {
+      try {
+        const absolutePath = this.getLocalPathFromMedia(localPath);
+        if (fs.existsSync(absolutePath)) fs.unlinkSync(absolutePath);
+        const ext = path.extname(absolutePath);
+        const originalPath = absolutePath.replace(ext, `_original${ext}`);
+        if (fs.existsSync(originalPath)) fs.unlinkSync(originalPath);
+      } catch {
+        // Best-effort cleanup; the DB record is already gone.
+      }
+    }
+  }
+
+  private async cleanupMediaFiles(media: MediaAsset) {
+    const r2Target = media.originalUrl || media.localPath;
+    if (r2Target) {
+      await this.storageService.deleteFile(r2Target).catch(() => {});
+    }
+    if (media.localPath) {
+      try {
+        const absolutePath = this.getLocalPathFromMedia(media.localPath);
+        if (fs.existsSync(absolutePath)) fs.unlinkSync(absolutePath);
+        const ext = path.extname(absolutePath);
+        const originalPath = absolutePath.replace(ext, `_original${ext}`);
+        if (fs.existsSync(originalPath)) fs.unlinkSync(originalPath);
+      } catch {
+        // Best-effort cleanup; the DB record is already gone.
+      }
+    }
   }
 
   async forceCloseActiveBatch(userId: string, senderId: string) {
@@ -348,7 +472,7 @@ export class BatchService implements OnModuleDestroy {
    * Assets without a local file (demo data, R2-only) get mediaUrl
    * null and the web falls back to originalUrl.
    */
-  private withMediaUrl(asset: any) {
+  private withMediaUrl(asset: MediaAsset) {
     if (!asset?.localPath || !this.mediaSigning) {
       return { ...asset, mediaUrl: null };
     }
@@ -370,9 +494,9 @@ export class BatchService implements OnModuleDestroy {
       },
       orderBy: { createdAt: 'desc' },
     });
-    return batches.map((b: any) => ({
+    return batches.map((b) => ({
       ...b,
-      mediaAssets: (b.mediaAssets ?? []).map((a: any) => this.withMediaUrl(a)),
+      mediaAssets: (b.mediaAssets ?? []).map((a) => this.withMediaUrl(a)),
     }));
   }
 
@@ -390,13 +514,11 @@ export class BatchService implements OnModuleDestroy {
     if (!batch) return batch;
     return {
       ...batch,
-      mediaAssets: ((batch as any).mediaAssets ?? []).map((a: any) =>
-        this.withMediaUrl(a),
-      ),
+      mediaAssets: (batch.mediaAssets ?? []).map((a) => this.withMediaUrl(a)),
     };
   }
 
-  async approveBatch(id: string, body: any, userId: string) {
+  async approveBatch(id: string, body: ApproveBatchDto, userId: string) {
     if (body) {
       const { instagramCaption, facebookCaption, storyText } = body;
 
@@ -571,22 +693,8 @@ export class BatchService implements OnModuleDestroy {
     await this.prisma.productBatch.delete({ where: { id } });
 
     // 2. Perform R2 and disk deletions asynchronously in background
-    setImmediate(async () => {
-      for (const media of batch.mediaAssets) {
-        const r2Target = media.originalUrl || media.localPath;
-        if (r2Target) {
-          await this.storageService.deleteFile(r2Target).catch(() => {});
-        }
-        if (media.localPath) {
-          try {
-            const absolutePath = this.getLocalPathFromMedia(media.localPath);
-            if (fs.existsSync(absolutePath)) fs.unlinkSync(absolutePath);
-            const ext = path.extname(absolutePath);
-            const originalPath = absolutePath.replace(ext, `_original${ext}`);
-            if (fs.existsSync(originalPath)) fs.unlinkSync(originalPath);
-          } catch (err) {}
-        }
-      }
+    setImmediate(() => {
+      void this.cleanupBatchMedia(batch.mediaAssets);
     });
 
     return { success: true };
@@ -613,44 +721,8 @@ export class BatchService implements OnModuleDestroy {
     });
 
     // 2. Perform R2 and disk deletions asynchronously in background
-    setImmediate(async () => {
-      const r2Keys = new Set<string>();
-      const diskPaths = new Set<string>();
-
-      for (const batch of batches) {
-        for (const media of batch.mediaAssets) {
-          if (media.originalUrl) {
-            r2Keys.add(media.originalUrl);
-          } else if (media.localPath) {
-            r2Keys.add(media.localPath);
-          }
-          if (media.localPath) {
-            diskPaths.add(media.localPath);
-          }
-        }
-      }
-
-      // Concurrently delete from Cloudflare R2 in chunks of 15
-      const keysArray = Array.from(r2Keys);
-      for (let i = 0; i < keysArray.length; i += 15) {
-        const chunk = keysArray.slice(i, i + 15);
-        await Promise.all(
-          chunk.map((key) =>
-            this.storageService.deleteFile(key).catch(() => {}),
-          ),
-        );
-      }
-
-      // Delete disk files
-      for (const localPath of diskPaths) {
-        try {
-          const absolutePath = this.getLocalPathFromMedia(localPath);
-          if (fs.existsSync(absolutePath)) fs.unlinkSync(absolutePath);
-          const ext = path.extname(absolutePath);
-          const originalPath = absolutePath.replace(ext, `_original${ext}`);
-          if (fs.existsSync(originalPath)) fs.unlinkSync(originalPath);
-        } catch (err) {}
-      }
+    setImmediate(() => {
+      void this.cleanupBulkMedia(batches);
     });
 
     return { success: true, deletedCount: batches.length };
@@ -668,20 +740,8 @@ export class BatchService implements OnModuleDestroy {
     await this.prisma.mediaAsset.delete({ where: { id: mediaId } });
 
     // 2. Cleanup R2 and disk asynchronously
-    setImmediate(async () => {
-      const r2Target = media.originalUrl || media.localPath;
-      if (r2Target) {
-        await this.storageService.deleteFile(r2Target).catch(() => {});
-      }
-      if (media.localPath) {
-        try {
-          const absolutePath = this.getLocalPathFromMedia(media.localPath);
-          if (fs.existsSync(absolutePath)) fs.unlinkSync(absolutePath);
-          const ext = path.extname(absolutePath);
-          const originalPath = absolutePath.replace(ext, `_original${ext}`);
-          if (fs.existsSync(originalPath)) fs.unlinkSync(originalPath);
-        } catch (err) {}
-      }
+    setImmediate(() => {
+      void this.cleanupMediaFiles(media);
     });
 
     return { success: true };
@@ -721,9 +781,9 @@ export class BatchService implements OnModuleDestroy {
             fs.writeFileSync(fallbackPath, buf);
             absolutePath = fallbackPath;
           }
-        } catch (e: any) {
+        } catch (e) {
           this.logger.error(
-            `Could not download video from R2 for forceImage: ${e.message}`,
+            `Could not download video from R2 for forceImage: ${e instanceof Error ? e.message : String(e)}`,
           );
         }
       }
@@ -746,7 +806,7 @@ export class BatchService implements OnModuleDestroy {
         await execAsync(
           `ffmpeg -y -ss 00:00:00.500 -i "${absolutePath}" -vframes 1 "${newAbsolutePath}"`,
         );
-      } catch (ffErr) {
+      } catch {
         await execAsync(
           `ffmpeg -y -i "${absolutePath}" -vframes 1 "${newAbsolutePath}"`,
         );
@@ -789,17 +849,22 @@ export class BatchService implements OnModuleDestroy {
         if (absolutePath !== newAbsolutePath && fs.existsSync(absolutePath)) {
           fs.unlinkSync(absolutePath);
         }
-      } catch (err) {}
+      } catch {
+        // Old file may already be gone; the new frame is what matters.
+      }
 
       return { success: true, originalUrl: newR2Url };
-    } catch (err: any) {
+    } catch (err) {
       this.logger.error(
         `Failed to force image using ffmpeg for ${mediaId}`,
         err,
       );
       return {
         success: false,
-        message: err.message || 'Failed to convert video to image',
+        message:
+          err instanceof Error
+            ? err.message
+            : 'Failed to convert video to image',
       };
     }
   }
@@ -863,18 +928,18 @@ export class BatchService implements OnModuleDestroy {
 
         const left = Math.max(
           0,
-          Math.min(metadata.width! - 1, Math.round(box.left)),
+          Math.min(metadata.width - 1, Math.round(box.left)),
         );
         const top = Math.max(
           0,
-          Math.min(metadata.height! - 1, Math.round(box.top)),
+          Math.min(metadata.height - 1, Math.round(box.top)),
         );
         const width = Math.min(
-          metadata.width! - left,
+          metadata.width - left,
           Math.max(1, Math.round(box.width)),
         );
         const height = Math.min(
-          metadata.height! - top,
+          metadata.height - top,
           Math.max(1, Math.round(box.height)),
         );
 
@@ -902,16 +967,19 @@ export class BatchService implements OnModuleDestroy {
           where: { id: mediaId },
           data: { originalUrl: r2Url },
         });
-      } catch (r2Err: any) {
+      } catch (r2Err) {
         this.logger.warn(
-          `Could not sync newly masked image to R2: ${r2Err.message}`,
+          `Could not sync newly masked image to R2: ${r2Err instanceof Error ? r2Err.message : String(r2Err)}`,
         );
       }
 
       return { success: true, message: 'Logos masked successfully' };
-    } catch (e: any) {
+    } catch (e) {
       this.logger.error(`Failed to mask logo for media ${mediaId}`, e);
-      return { success: false, message: e.message || 'Failed to mask logo' };
+      return {
+        success: false,
+        message: e instanceof Error ? e.message : 'Failed to mask logo',
+      };
     }
   }
 
@@ -945,9 +1013,9 @@ export class BatchService implements OnModuleDestroy {
             where: { id: mediaId },
             data: { originalUrl: r2Url },
           });
-        } catch (r2Err: any) {
+        } catch (r2Err) {
           this.logger.warn(
-            `Could not sync reverted image to R2: ${r2Err.message}`,
+            `Could not sync reverted image to R2: ${r2Err instanceof Error ? r2Err.message : String(r2Err)}`,
           );
         }
 
@@ -955,7 +1023,7 @@ export class BatchService implements OnModuleDestroy {
           success: true,
           message: 'Image reverted to original successfully',
         };
-      } catch (e: any) {
+      } catch (e) {
         this.logger.error(`Failed to revert logo for media ${mediaId}`, e);
         return { success: false, message: 'Failed to copy backup file' };
       }
@@ -965,7 +1033,7 @@ export class BatchService implements OnModuleDestroy {
   }
 
   private async downloadWhatsappMedia(mediaId: string): Promise<string | null> {
-    const token = this.configService.get('WHATSAPP_ACCESS_TOKEN');
+    const token = this.configService.get<string>('WHATSAPP_ACCESS_TOKEN');
     if (!token || token === 'test_token') {
       this.logger.warn(
         'No valid WHATSAPP_ACCESS_TOKEN. Cannot download media.',
@@ -976,7 +1044,7 @@ export class BatchService implements OnModuleDestroy {
     try {
       this.logger.log(`Fetching media URL for WhatsApp media: ${mediaId}`);
       // 1. Get Media URL
-      const res = await axios.get(
+      const res = await axios.get<MetaMediaInfo>(
         `https://graph.facebook.com/v19.0/${mediaId}`,
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -992,7 +1060,7 @@ export class BatchService implements OnModuleDestroy {
       const absolutePath = path.join(process.cwd(), 'uploads', fileName);
 
       this.logger.log(`Downloading media binary from: ${mediaUrl}`);
-      const downloadRes = await axios.get(mediaUrl, {
+      const downloadRes = await axios.get<NodeJS.ReadableStream>(mediaUrl, {
         headers: { Authorization: `Bearer ${token}` },
         responseType: 'stream',
       });
@@ -1025,10 +1093,14 @@ export class BatchService implements OnModuleDestroy {
 
       this.logger.log(`Successfully downloaded WhatsApp media: ${finalPath}`);
       return finalPath;
-    } catch (err: any) {
+    } catch (err) {
       this.logger.error(
         `Failed to download WhatsApp media ${mediaId}`,
-        err.response?.data || err.message,
+        axios.isAxiosError(err)
+          ? (err.response?.data ?? err.message)
+          : err instanceof Error
+            ? err.message
+            : err,
       );
       return null;
     }
@@ -1036,7 +1108,7 @@ export class BatchService implements OnModuleDestroy {
 
   async triggerManualAutoBlur(mediaId: string, userId: string) {
     try {
-      const isOnline = await this.isMacWorkerOnline();
+      const isOnline = this.isMacWorkerOnline();
       if (!isOnline) {
         return { success: false, message: 'Macbook worker is offline' };
       }
@@ -1066,7 +1138,7 @@ export class BatchService implements OnModuleDestroy {
       );
 
       return { success: true };
-    } catch (err: any) {
+    } catch (err) {
       this.logger.error(
         `Error triggering manual auto blur for ${mediaId}`,
         err,
@@ -1171,7 +1243,13 @@ export class BatchService implements OnModuleDestroy {
       where: { id: batchId, userId },
     });
     if (!batch) return { success: false };
-    const extractedData = (batch.extractedData as any) || {};
+    const current = batch.extractedData;
+    const extractedData: { [key: string]: Prisma.InputJsonValue } = {};
+    if (current && typeof current === 'object' && !Array.isArray(current)) {
+      for (const [key, value] of Object.entries(current)) {
+        extractedData[key] = value as Prisma.InputJsonValue;
+      }
+    }
     extractedData.product_name = name;
     await this.prisma.productBatch.update({
       where: { id: batchId },
@@ -1200,7 +1278,13 @@ export class BatchService implements OnModuleDestroy {
     });
     if (!batch) return { success: false, message: 'Batch not found' };
     const decided = Math.round(price);
-    const extractedData = (batch.extractedData as any) || {};
+    const extractedData: { [key: string]: Prisma.InputJsonValue } = {};
+    const current = batch.extractedData;
+    if (current && typeof current === 'object' && !Array.isArray(current)) {
+      for (const [key, value] of Object.entries(current)) {
+        extractedData[key] = value as Prisma.InputJsonValue;
+      }
+    }
     extractedData.manual_price_override = decided;
     extractedData.selling_price_value = decided;
     extractedData.selling_price = formatRs(decided);
@@ -1252,7 +1336,7 @@ export class BatchService implements OnModuleDestroy {
   private async sendBatchToUsersInternal(
     batchId: string,
     fromUserId: string,
-    users: any[],
+    users: User[],
   ) {
     const sourceBatch = await this.prisma.productBatch.findUnique({
       where: { id: batchId, userId: fromUserId },

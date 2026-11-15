@@ -29,7 +29,7 @@ export class WhatsappController {
 
     const isReady = this.whatsappService.isReady(userId);
     const qrUrl = this.whatsappService.getQrCodeUrl(userId);
-    let phoneNumber = null;
+    let phoneNumber: string | null = null;
 
     if (isReady && client?.user?.id) {
       phoneNumber = client.user.id.split(':')[0].split('@')[0];
@@ -44,7 +44,10 @@ export class WhatsappController {
 
   @UseGuards(JwtAuthGuard)
   @Post('resync-history')
-  async resyncHistory(@Request() req: AuthenticatedRequest, @Body() body: ResyncHistoryDto) {
+  async resyncHistory(
+    @Request() req: AuthenticatedRequest,
+    @Body() body: ResyncHistoryDto,
+  ) {
     const customDepth = body?.depthHours;
     return this.whatsappService.resyncHistoricalBuffer(
       req.user.userId,

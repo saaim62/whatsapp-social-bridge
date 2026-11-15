@@ -14,7 +14,67 @@ import * as path from 'path';
 import { SourcesService } from '../sources/sources.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
-import { DebounceStore } from './debounce.store';
+import { DebounceStore, DueBuffer } from './debounce.store';
+import type {
+  WAMessage,
+  WAMessageContent,
+  WASocket,
+} from '@whiskeysockets/baileys';
+import type { ILogger } from '@whiskeysockets/baileys/lib/Utils/logger';
+import type { IncomingMessagePayload } from '../batch/batch.service';
+
+/** The dynamically loaded Baileys module (ESM-only; loaded via eval-import). */
+type BaileysModule = typeof import('@whiskeysockets/baileys');
+
+/** Structural shape shared by Baileys Contact and Chat objects when all
+ *  we need is an id plus the best available display name. */
+export interface ContactLike {
+  id: string;
+  name?: string | null;
+  verifiedName?: string | null;
+  notify?: string | null;
+  pushName?: string | null;
+}
+
+/** Loose contact/chat shape as delivered by Baileys events (proto
+ *  conversations may lack an id or any name field). */
+export interface ContactLikeInput {
+  id?: string | null;
+  name?: string | null;
+  verifiedName?: string | null;
+  notify?: string | null;
+  pushName?: string | null;
+}
+
+/** WAMessage plus the R2 URL handleIncomingMessage stashes on it. */
+type WAMessageWithOrigin = WAMessage & { _originalUrl?: string };
+
+/** Baileys timestamps arrive as number | protobuf Long | (after a JSON
+ *  round-trip) a {low, high} plain object. Normalize to epoch seconds. */
+export function toContactLikes(
+  chats: readonly ContactLikeInput[],
+): { id: string; name: string }[] {
+  return chats
+    .map((c) => ({
+      id: c.id ?? undefined,
+      name: c.name || c.verifiedName || c.pushName || c.notify,
+    }))
+    .filter((c): c is { id: string; name: string } => !!c.name && !!c.id);
+}
+
+export function messageTimestampSeconds(
+  ts: WAMessage['messageTimestamp'],
+): number {
+  if (typeof ts === 'number') return ts;
+  if (ts && typeof ts === 'object') {
+    // Both a real protobuf Long and its JSON round-trip form expose
+    // {low, high}; reconstruct the 64-bit value from the two halves.
+    const parts = ts as { low?: number; high?: number };
+    return (parts.high ?? 0) * 2 ** 32 + ((parts.low ?? 0) >>> 0);
+  }
+  if (ts === null || ts === undefined) return 0;
+  return parseInt(String(ts), 10);
+}
 
 @Injectable()
 export class WhatsappService implements OnModuleInit, OnModuleDestroy {
@@ -22,14 +82,14 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
   // live WhatsApp socket connection cannot be externalized to Redis.
   // Only the debounce buffering moved to Redis (see DebounceStore);
   // that is the part that previously lost messages on restart.
-  private clients: Map<string, any> = new Map();
+  private clients: Map<string, WASocket> = new Map();
   private qrUrls: Map<string, string | null> = new Map();
   private clientsReady: Map<string, boolean> = new Map();
 
   private readonly logger = new Logger(WhatsappService.name);
   private sweepTimer: NodeJS.Timeout | null = null;
   private groupNameCache: Map<string, string> = new Map();
-  private baileysModule: any;
+  private baileysModule: BaileysModule | null = null;
   private initializing: Set<string> = new Set();
 
   constructor(
@@ -42,9 +102,12 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
     private readonly debounceStore: DebounceStore,
   ) {}
 
-  private cachedWaVersion: any = null;
+  private cachedWaVersion: {
+    version: [number, number, number];
+    isLatest: boolean;
+  } | null = null;
 
-  async onModuleInit() {
+  onModuleInit() {
     // Drain Redis debounce buffers whose silence window has elapsed.
     // Runs in every replica; DebounceStore.collectDue claims each
     // buffer atomically, so a buffer is flushed exactly once.
@@ -54,21 +117,25 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
     this.sweepTimer.unref?.();
 
     // Run initialization in background so NestJS can bind to port 3001 immediately
-    setImmediate(async () => {
-      try {
-        const users = await this.prisma.user.findMany();
-        for (const user of users) {
-          this.initializeWhatsApp(user.id).catch((err) => {
-            this.logger.error(
-              `Failed to initialize WhatsApp for user ${user.id}:`,
-              err,
-            );
-          });
-        }
-      } catch (err) {
-        this.logger.error('Failed to load users for WhatsApp init:', err);
-      }
+    setImmediate(() => {
+      void this.initializeAllUsers();
     });
+  }
+
+  private async initializeAllUsers() {
+    try {
+      const users = await this.prisma.user.findMany();
+      for (const user of users) {
+        this.initializeWhatsApp(user.id).catch((err) => {
+          this.logger.error(
+            `Failed to initialize WhatsApp for user ${user.id}:`,
+            err,
+          );
+        });
+      }
+    } catch (err) {
+      this.logger.error('Failed to load users for WhatsApp init:', err);
+    }
   }
 
   getQrCodeUrl(userId: string) {
@@ -83,9 +150,12 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
     return this.clients.get(userId);
   }
 
-  private async loadBaileys() {
+  private async loadBaileys(): Promise<BaileysModule> {
     if (!this.baileysModule) {
-      this.baileysModule = await eval('import("@whiskeysockets/baileys")');
+      // Baileys ships ESM; this codebase is CommonJS, hence eval-import.
+      this.baileysModule = (await eval(
+        'import("@whiskeysockets/baileys")',
+      )) as BaileysModule;
     }
     return this.baileysModule;
   }
@@ -101,9 +171,28 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       const existingClient = this.clients.get(userId);
       if (existingClient) {
         try {
-          existingClient.ev.removeAllListeners();
-          existingClient.end(undefined);
-        } catch (e) {}
+          // Baileys' typed emitter requires an event name for
+          // removeAllListeners; remove exactly the events registered
+          // in initializeWhatsApp below (the runtime emitter is Node's,
+          // where the no-arg form would clear everything).
+          for (const event of [
+            'creds.update',
+            'connection.update',
+            'contacts.upsert',
+            'contacts.update',
+            'chats.upsert',
+            'chats.update',
+            'messages.upsert',
+            'messaging-history.set',
+          ] as const) {
+            existingClient.ev.removeAllListeners(event);
+          }
+          Promise.resolve(existingClient.end(undefined)).catch(() => {
+            // Socket teardown is best-effort.
+          });
+        } catch {
+          // The old socket may already be torn down; nothing to clean up.
+        }
       }
 
       const {
@@ -123,7 +212,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       if (!this.cachedWaVersion) {
         try {
           this.cachedWaVersion = await fetchLatestWaWebVersion();
-        } catch (err) {
+        } catch {
           this.cachedWaVersion = {
             version: [2, 3000, 1046623424],
             isLatest: true,
@@ -145,397 +234,413 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
 
       this.clients.set(userId, client);
 
-      client.ev.on('creds.update', saveCreds);
-
-      client.ev.on('connection.update', async (update: any) => {
-        const { connection, lastDisconnect, qr } = update;
-
-        if (qr) {
-          this.logger.log(`New QR code generated for user ${userId}!`);
-          try {
-            this.qrUrls.set(userId, await qrcode.toDataURL(qr));
-          } catch (err) {
-            this.logger.error(
-              `Failed to generate QR data URL for user ${userId}`,
-              err,
-            );
-          }
-        }
-
-        if (connection === 'close') {
-          const boomError = lastDisconnect?.error as any;
-          const statusCode = boomError?.output?.statusCode;
-          const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-
-          this.logger.warn(
-            `WhatsApp disconnected for user ${userId}. Reason: ${statusCode}. Reconnecting: ${shouldReconnect}`,
-          );
-          this.clientsReady.set(userId, false);
-
-          if (shouldReconnect) {
-            this.initializeWhatsApp(userId);
-          } else {
-            // If logged out (401), we MUST clear the session data so the user can scan a new QR code!
-            this.logger.warn(
-              `Session for ${userId} was logged out or invalid. Clearing session data.`,
-            );
-            const authFolder = `./sessions/user_${userId}_auth`;
-            if (fs.existsSync(authFolder)) {
-              fs.rmSync(authFolder, { recursive: true, force: true });
-            }
-            // Now re-initialize to trigger a fresh QR code generation
-            this.initializeWhatsApp(userId);
-          }
-        } else if (connection === 'open') {
-          this.logger.log(
-            `✅ WhatsApp Linked Device connected and active for user ${userId}!`,
-          );
-          this.clientsReady.set(userId, true);
-          this.qrUrls.set(userId, null);
-        }
+      client.ev.on('creds.update', () => {
+        void saveCreds();
       });
 
-      client.ev.on('contacts.upsert', async (contacts: any[]) => {
-        this.logger.log(
-          `Received contacts upsert for ${contacts.length} contacts.`,
-        );
-        if (contacts && contacts.length > 0) {
-          await this.sourcesService.syncContacts(userId, contacts);
-        }
-      });
+      client.ev.on('connection.update', (update) => {
+        void (async () => {
+          const { connection, lastDisconnect, qr } = update;
 
-      client.ev.on('contacts.update', async (contacts: any[]) => {
-        this.logger.log(
-          `Received contacts update for ${contacts.length} contacts.`,
-        );
-        if (contacts && contacts.length > 0) {
-          await this.sourcesService.syncContacts(userId, contacts);
-        }
-      });
-
-      client.ev.on('chats.upsert', async (chats: any[]) => {
-        this.logger.log(`Received chats upsert for ${chats.length} chats.`);
-        const chatContacts = chats
-          .map((c: any) => ({
-            id: c.id,
-            name: c.name || c.verifiedName || c.pushName || c.notify,
-          }))
-          .filter((c: any) => c.name);
-        if (chatContacts.length > 0) {
-          await this.sourcesService.syncContacts(userId, chatContacts);
-        }
-      });
-
-      client.ev.on('chats.update', async (chats: any[]) => {
-        const chatContacts = chats
-          .map((c: any) => ({
-            id: c.id,
-            name: c.name || c.verifiedName || c.pushName || c.notify,
-          }))
-          .filter((c: any) => c.name);
-        if (chatContacts.length > 0) {
-          await this.sourcesService.syncContacts(userId, chatContacts);
-        }
-      });
-
-      client.ev.on('messages.upsert', async (m: any) => {
-        this.logger.log(
-          `RAW messages.upsert EVENT TYPE: ${m.type}, count: ${m.messages?.length || 0}`,
-        );
-
-        const debugLog = `[${new Date().toISOString()}] UP EVENT: ${m.type} for ${userId}, count: ${m.messages?.length || 0}\n`;
-        require('fs').appendFileSync(
-          require('path').join(process.cwd(), 'debug-messages.log'),
-          debugLog,
-        );
-
-        // Privacy gate FIRST: nothing is cached or buffered before the
-        // paused check and the per-source allowlist check have passed.
-        // Previously every incoming message was written to the on-disk
-        // history cache before either check ran.
-        const settings = await this.settingsService.getSettings(userId);
-        if (!settings.isSyncActive) {
-          this.logger.log(
-            'Live Sync is paused in settings. Ignoring incoming messages.',
-          );
-          return;
-        }
-
-        if (m.type === 'notify' || m.type === 'append') {
-          const cacheable: any[] = [];
-          for (const msg of m.messages) {
-            const senderId = msg.key.remoteJid;
-            if (!senderId) continue;
-
-            let pushName = msg.key.fromMe ? undefined : msg.pushName;
-
-            // Auto-resolve WhatsApp Channel (newsletter) names
-            if (senderId.endsWith('@newsletter') && !pushName) {
-              try {
-                const meta = await client.newsletterMetadata('jid', senderId);
-                if (meta && meta.name) pushName = meta.name;
-              } catch (err) {
-                this.logger.warn(
-                  `Could not fetch channel metadata for ${senderId}`,
-                );
-              }
-            }
-
-            const isAllowed = await this.sourcesService.isSourceAllowed(
-              senderId,
-              pushName,
-              userId,
-            );
-
-            require('fs').appendFileSync(
-              require('path').join(process.cwd(), 'debug-messages.log'),
-              `[DEBUG] fromMe: ${msg.key.fromMe}, isAllowed: ${isAllowed}, senderId: ${senderId}\n`,
-            );
-
-            // Ignore messages sent by ourselves from being processed as product drops
-            if (msg.key.fromMe) continue;
-
-            if (!isAllowed) continue;
-
-            // Only allowlisted, non-own messages may enter the history cache.
-            cacheable.push(msg);
-
-            // Buffer in Redis (DebounceStore): the buffer survives an
-            // API restart, and each push re-arms a 3.5s silence window
-            // before the sweeper flushes — heavy videos get time to
-            // catch up with the rest of their burst.
-            await this.debounceStore.push(userId, senderId, msg);
-          }
-
-          if (cacheable.length > 0) {
-            this.saveMessagesToCache(userId, cacheable);
-          }
-        }
-      });
-
-      client.ev.on('messaging-history.set', async (history: any) => {
-        const contacts = history.contacts || [];
-        const chats = history.chats || [];
-        const messages = history.messages || [];
-        this.logger.log(
-          `Received historical sync for user ${userId}: ${contacts.length} contacts, ${chats.length} chats, ${messages.length} messages.`,
-        );
-
-        // NOTE: messages are deliberately NOT written to the history
-        // cache here. Caching happens further down, after the paused
-        // check and the per-source allowlist gate, and only for sources
-        // the user has explicitly enabled.
-
-        // 1. Synchronize Address Book & Contacts first
-        const uniqueContacts = new Map<string, any>();
-        for (const c of contacts) {
-          if (c.id && (c.name || c.verifiedName || c.pushName || c.notify)) {
-            uniqueContacts.set(c.id, c);
-          }
-        }
-        for (const c of chats) {
-          const name = c.name || c.verifiedName || c.pushName || c.notify;
-          if (name && c.id && !uniqueContacts.has(c.id)) {
-            uniqueContacts.set(c.id, { id: c.id, name });
-          }
-        }
-        for (const m of messages) {
-          const jid = m.key?.remoteJid;
-          if (jid && m.pushName && !uniqueContacts.has(jid)) {
-            uniqueContacts.set(jid, { id: jid, name: m.pushName });
-          }
-        }
-
-        const allContacts = Array.from(uniqueContacts.values());
-        if (allContacts.length > 0) {
-          this.sourcesService
-            .syncContacts(userId, allContacts)
-            .catch((err) =>
-              this.logger.error(
-                `Failed async syncContacts for user ${userId}`,
-                err,
-              ),
-            );
-        }
-
-        // 2. Check settings
-        const settings = await this.settingsService.getSettings(userId);
-        if (!settings.isSyncActive) {
-          this.logger.log(
-            'Live Sync is paused in settings. Skipping historical sync.',
-          );
-          return;
-        }
-
-        if (!messages || messages.length === 0) return;
-
-        const depthHours = settings.historySyncDepthHours || 24;
-        const cutoffTimeMs = Date.now() - depthHours * 60 * 60 * 1000;
-        const cutoffSeconds = Math.floor(cutoffTimeMs / 1000);
-
-        this.logger.log(
-          `Historical buffer depth: ${depthHours}h. Filtering ${messages.length} messages since ${new Date(cutoffTimeMs).toISOString()}...`,
-        );
-
-        // 3. Filter messages by timestamp and not fromMe
-        let droppedCount = 0;
-        const chatGroups: Record<string, any[]> = {};
-
-        for (const msg of messages) {
-          if (!msg.message || msg.key?.fromMe) continue;
-
-          const sender = msg.key?.remoteJid;
-          if (!sender) continue;
-
-          const tsRaw = msg.messageTimestamp;
-          const msgTime =
-            typeof tsRaw === 'number'
-              ? tsRaw
-              : typeof tsRaw?.toNumber === 'function'
-                ? tsRaw.toNumber()
-                : tsRaw?.low || parseInt(tsRaw?.toString() || '0', 10);
-
-          if (msgTime < cutoffSeconds) {
-            droppedCount++;
-            continue;
-          }
-
-          if (!chatGroups[sender]) {
-            chatGroups[sender] = [];
-          }
-          chatGroups[sender].push(msg);
-        }
-
-        this.logger.log(
-          `Historical buffer filtered: ${Object.keys(chatGroups).length} chats found within ${depthHours}h window. Dropped ${droppedCount} older messages.`,
-        );
-
-        // Load existing batches and media to ensure ZERO duplicates
-        const existingBatches = await this.prisma.productBatch.findMany({
-          where: { userId },
-          select: { whatsappMessageId: true, senderId: true, rawText: true },
-        });
-        const existingMedia = await this.prisma.mediaAsset.findMany({
-          where: { batch: { userId } },
-          select: { whatsappMediaId: true },
-        });
-        const existingMsgIds = new Set<string>();
-        for (const b of existingBatches) {
-          if (b.whatsappMessageId) existingMsgIds.add(b.whatsappMessageId);
-        }
-        for (const m of existingMedia) {
-          if (m.whatsappMediaId) existingMsgIds.add(m.whatsappMediaId);
-        }
-
-        let totalBundlesIngested = 0;
-        const allowedMessages: any[] = [];
-
-        for (const sender in chatGroups) {
-          const chatMsgs = chatGroups[sender];
-          if (!chatMsgs || chatMsgs.length === 0) continue;
-
-          // Register/resolve the source and apply the allowlist gate.
-          // isSourceAllowed registers unknown sources as DISABLED (so the
-          // user can enable them in the UI) and returns true only for
-          // sources the user explicitly enabled. An empty allowlist
-          // therefore ingests ZERO messages, and history import never
-          // auto-enables a source the user did not select.
-          let pushName = chatMsgs[0]?.pushName;
-          if (sender.endsWith('@newsletter') && !pushName) {
+          if (qr) {
+            this.logger.log(`New QR code generated for user ${userId}!`);
             try {
-              const meta = await client.newsletterMetadata('jid', sender);
-              if (meta?.name) pushName = meta.name;
-            } catch (err) {}
+              this.qrUrls.set(userId, await qrcode.toDataURL(qr));
+            } catch (err) {
+              this.logger.error(
+                `Failed to generate QR data URL for user ${userId}`,
+                err,
+              );
+            }
           }
-          const isAllowed = await this.sourcesService.isSourceAllowed(
-            sender,
-            pushName,
-            userId,
-          );
-          if (!isAllowed) {
-            this.logger.log(
-              `Skipping historical messages for source not in allowlist: ${sender}`,
+
+          if (connection === 'close') {
+            const boomError = lastDisconnect?.error as
+              { output?: { statusCode?: number } } | undefined;
+            const statusCode = boomError?.output?.statusCode;
+            const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+
+            this.logger.warn(
+              `WhatsApp disconnected for user ${userId}. Reason: ${statusCode}. Reconnecting: ${shouldReconnect}`,
             );
-            continue;
-          }
-          allowedMessages.push(...chatMsgs);
+            this.clientsReady.set(userId, false);
 
-          // Sort messages strictly by timestamp
-          const sortedChatMessages = chatMsgs.sort((a: any, b: any) => {
-            const tsA =
-              typeof a.messageTimestamp === 'number'
-                ? a.messageTimestamp
-                : Number(a.messageTimestamp?.toString() || 0);
-            const tsB =
-              typeof b.messageTimestamp === 'number'
-                ? b.messageTimestamp
-                : Number(b.messageTimestamp?.toString() || 0);
-            return tsA - tsB;
-          });
-
-          const productBundles = this.extractProductBundles(sortedChatMessages);
-
-          for (const bundle of productBundles) {
-            const isMsgDuplicate = bundle.some(
-              (m: any) => m.key?.id && existingMsgIds.has(m.key.id),
-            );
-            const bundleText = bundle
-              .map((m: any) => {
-                const c = this.unwrapMessage(m.message);
-                return (
-                  c?.imageMessage?.caption ||
-                  c?.videoMessage?.caption ||
-                  c?.conversation ||
-                  c?.extendedTextMessage?.text ||
-                  ''
+            if (shouldReconnect) {
+              this.initializeWhatsApp(userId).catch((err) => {
+                this.logger.error(
+                  `Failed to reconnect WhatsApp for user ${userId}:`,
+                  err,
                 );
-              })
-              .join('\n')
-              .trim();
+              });
+            } else {
+              // If logged out (401), we MUST clear the session data so the user can scan a new QR code!
+              this.logger.warn(
+                `Session for ${userId} was logged out or invalid. Clearing session data.`,
+              );
+              const authFolder = `./sessions/user_${userId}_auth`;
+              if (fs.existsSync(authFolder)) {
+                fs.rmSync(authFolder, { recursive: true, force: true });
+              }
+              // Now re-initialize to trigger a fresh QR code generation
+              this.initializeWhatsApp(userId).catch((err) => {
+                this.logger.error(
+                  `Failed to reinitialize WhatsApp for user ${userId}:`,
+                  err,
+                );
+              });
+            }
+          } else if (connection === 'open') {
+            this.logger.log(
+              `✅ WhatsApp Linked Device connected and active for user ${userId}!`,
+            );
+            this.clientsReady.set(userId, true);
+            this.qrUrls.set(userId, null);
+          }
+        })();
+      });
 
-            const isContentDuplicate =
-              bundleText.length > 20 &&
-              existingBatches.some(
-                (b) =>
-                  b.senderId === sender &&
-                  b.rawText &&
-                  b.rawText.trim() === bundleText,
+      client.ev.on('contacts.upsert', (contacts) => {
+        void (async () => {
+          this.logger.log(
+            `Received contacts upsert for ${contacts.length} contacts.`,
+          );
+          if (contacts && contacts.length > 0) {
+            await this.sourcesService.syncContacts(userId, contacts);
+          }
+        })();
+      });
+
+      client.ev.on('contacts.update', (contacts) => {
+        void (async () => {
+          this.logger.log(
+            `Received contacts update for ${contacts.length} contacts.`,
+          );
+          if (contacts && contacts.length > 0) {
+            await this.sourcesService.syncContacts(userId, contacts);
+          }
+        })();
+      });
+
+      client.ev.on('chats.upsert', (chats) => {
+        void (async () => {
+          this.logger.log(`Received chats upsert for ${chats.length} chats.`);
+          const chatContacts = toContactLikes(chats);
+          if (chatContacts.length > 0) {
+            await this.sourcesService.syncContacts(userId, chatContacts);
+          }
+        })();
+      });
+
+      client.ev.on('chats.update', (chats) => {
+        void (async () => {
+          const chatContacts = toContactLikes(chats);
+          if (chatContacts.length > 0) {
+            await this.sourcesService.syncContacts(userId, chatContacts);
+          }
+        })();
+      });
+
+      client.ev.on('messages.upsert', (m) => {
+        void (async () => {
+          this.logger.log(
+            `RAW messages.upsert EVENT TYPE: ${m.type}, count: ${m.messages?.length || 0}`,
+          );
+
+          const debugLog = `[${new Date().toISOString()}] UP EVENT: ${m.type} for ${userId}, count: ${m.messages?.length || 0}\n`;
+          fs.appendFileSync(
+            path.join(process.cwd(), 'debug-messages.log'),
+            debugLog,
+          );
+
+          // Privacy gate FIRST: nothing is cached or buffered before the
+          // paused check and the per-source allowlist check have passed.
+          // Previously every incoming message was written to the on-disk
+          // history cache before either check ran.
+          const settings = await this.settingsService.getSettings(userId);
+          if (!settings.isSyncActive) {
+            this.logger.log(
+              'Live Sync is paused in settings. Ignoring incoming messages.',
+            );
+            return;
+          }
+
+          if (m.type === 'notify' || m.type === 'append') {
+            const cacheable: WAMessage[] = [];
+            for (const msg of m.messages) {
+              const senderId = msg.key.remoteJid;
+              if (!senderId) continue;
+
+              let pushName = msg.key.fromMe
+                ? undefined
+                : (msg.pushName ?? undefined);
+
+              // Auto-resolve WhatsApp Channel (newsletter) names
+              if (senderId.endsWith('@newsletter') && !pushName) {
+                try {
+                  const meta = await client.newsletterMetadata('jid', senderId);
+                  if (meta && meta.name) pushName = meta.name;
+                } catch {
+                  this.logger.warn(
+                    `Could not fetch channel metadata for ${senderId}`,
+                  );
+                }
+              }
+
+              const isAllowed = await this.sourcesService.isSourceAllowed(
+                senderId,
+                pushName,
+                userId,
               );
 
-            if (isMsgDuplicate || isContentDuplicate) {
-              continue; // Skip duplicate!
+              fs.appendFileSync(
+                path.join(process.cwd(), 'debug-messages.log'),
+                `[DEBUG] fromMe: ${msg.key.fromMe}, isAllowed: ${isAllowed}, senderId: ${senderId}\n`,
+              );
+
+              // Ignore messages sent by ourselves from being processed as product drops
+              if (msg.key.fromMe) continue;
+
+              if (!isAllowed) continue;
+
+              // Only allowlisted, non-own messages may enter the history cache.
+              cacheable.push(msg);
+
+              // Buffer in Redis (DebounceStore): the buffer survives an
+              // API restart, and each push re-arms a 3.5s silence window
+              // before the sweeper flushes — heavy videos get time to
+              // catch up with the rest of their burst.
+              await this.debounceStore.push(userId, senderId, msg);
             }
 
-            for (const msg of bundle) {
-              await this.handleIncomingMessage(userId, msg);
-              if (msg.key?.id) existingMsgIds.add(msg.key.id);
+            if (cacheable.length > 0) {
+              this.saveMessagesToCache(userId, cacheable);
             }
-            await new Promise((resolve) => setTimeout(resolve, 400));
-            await this.batchService.forceCloseActiveBatch(userId, sender);
-            totalBundlesIngested++;
           }
-        }
+        })();
+      });
 
-        // Only now — after the allowlist gate — may messages enter the cache.
-        if (allowedMessages.length > 0) {
-          this.saveMessagesToCache(userId, allowedMessages);
-        }
+      client.ev.on('messaging-history.set', (history) => {
+        void (async () => {
+          const contacts = history.contacts || [];
+          const chats = history.chats || [];
+          const messages = history.messages || [];
+          this.logger.log(
+            `Received historical sync for user ${userId}: ${contacts.length} contacts, ${chats.length} chats, ${messages.length} messages.`,
+          );
 
-        this.logger.log(
-          `Finished retroactive historical sync for user ${userId}: ${totalBundlesIngested} product drops ingested.`,
-        );
+          // NOTE: messages are deliberately NOT written to the history
+          // cache here. Caching happens further down, after the paused
+          // check and the per-source allowlist gate, and only for sources
+          // the user has explicitly enabled.
 
-        if (totalBundlesIngested > 0) {
-          await this.prisma.notification.create({
-            data: {
-              userId,
-              title: 'Historical Sync Completed',
-              message: `Successfully ingested ${totalBundlesIngested} product drops from the last ${depthHours} hours.`,
-              type: 'success',
-              link: '/catalog',
-            },
+          // 1. Synchronize Address Book & Contacts first
+          const uniqueContacts = new Map<string, ContactLike>();
+          for (const c of contacts) {
+            const like = c as ContactLikeInput;
+            if (
+              c.id &&
+              (like.name || like.verifiedName || like.pushName || like.notify)
+            ) {
+              uniqueContacts.set(c.id, c);
+            }
+          }
+          for (const c of chats) {
+            const like = c as ContactLike;
+            const name =
+              like.name || like.verifiedName || like.pushName || like.notify;
+            if (name && c.id && !uniqueContacts.has(c.id)) {
+              uniqueContacts.set(c.id, { id: c.id, name });
+            }
+          }
+          for (const m of messages) {
+            const jid = m.key?.remoteJid;
+            if (jid && m.pushName && !uniqueContacts.has(jid)) {
+              uniqueContacts.set(jid, { id: jid, name: m.pushName });
+            }
+          }
+
+          const allContacts = Array.from(uniqueContacts.values());
+          if (allContacts.length > 0) {
+            this.sourcesService
+              .syncContacts(userId, allContacts)
+              .catch((err) =>
+                this.logger.error(
+                  `Failed async syncContacts for user ${userId}`,
+                  err,
+                ),
+              );
+          }
+
+          // 2. Check settings
+          const settings = await this.settingsService.getSettings(userId);
+          if (!settings.isSyncActive) {
+            this.logger.log(
+              'Live Sync is paused in settings. Skipping historical sync.',
+            );
+            return;
+          }
+
+          if (!messages || messages.length === 0) return;
+
+          const depthHours = settings.historySyncDepthHours || 24;
+          const cutoffTimeMs = Date.now() - depthHours * 60 * 60 * 1000;
+          const cutoffSeconds = Math.floor(cutoffTimeMs / 1000);
+
+          this.logger.log(
+            `Historical buffer depth: ${depthHours}h. Filtering ${messages.length} messages since ${new Date(cutoffTimeMs).toISOString()}...`,
+          );
+
+          // 3. Filter messages by timestamp and not fromMe
+          let droppedCount = 0;
+          const chatGroups: Record<string, WAMessage[]> = {};
+
+          for (const msg of messages) {
+            if (!msg.message || msg.key?.fromMe) continue;
+
+            const sender = msg.key?.remoteJid;
+            if (!sender) continue;
+
+            const msgTime = messageTimestampSeconds(msg.messageTimestamp);
+
+            if (msgTime < cutoffSeconds) {
+              droppedCount++;
+              continue;
+            }
+
+            if (!chatGroups[sender]) {
+              chatGroups[sender] = [];
+            }
+            chatGroups[sender].push(msg);
+          }
+
+          this.logger.log(
+            `Historical buffer filtered: ${Object.keys(chatGroups).length} chats found within ${depthHours}h window. Dropped ${droppedCount} older messages.`,
+          );
+
+          // Load existing batches and media to ensure ZERO duplicates
+          const existingBatches = await this.prisma.productBatch.findMany({
+            where: { userId },
+            select: { whatsappMessageId: true, senderId: true, rawText: true },
           });
-        }
+          const existingMedia = await this.prisma.mediaAsset.findMany({
+            where: { batch: { userId } },
+            select: { whatsappMediaId: true },
+          });
+          const existingMsgIds = new Set<string>();
+          for (const b of existingBatches) {
+            if (b.whatsappMessageId) existingMsgIds.add(b.whatsappMessageId);
+          }
+          for (const m of existingMedia) {
+            if (m.whatsappMediaId) existingMsgIds.add(m.whatsappMediaId);
+          }
+
+          let totalBundlesIngested = 0;
+          const allowedMessages: WAMessage[] = [];
+
+          for (const sender in chatGroups) {
+            const chatMsgs = chatGroups[sender];
+            if (!chatMsgs || chatMsgs.length === 0) continue;
+
+            // Register/resolve the source and apply the allowlist gate.
+            // isSourceAllowed registers unknown sources as DISABLED (so the
+            // user can enable them in the UI) and returns true only for
+            // sources the user explicitly enabled. An empty allowlist
+            // therefore ingests ZERO messages, and history import never
+            // auto-enables a source the user did not select.
+            let pushName = chatMsgs[0]?.pushName;
+            if (sender.endsWith('@newsletter') && !pushName) {
+              try {
+                const meta = await client.newsletterMetadata('jid', sender);
+                if (meta?.name) pushName = meta.name;
+              } catch {
+                // Channel metadata is best-effort; the JID alone is enough.
+              }
+            }
+            const isAllowed = await this.sourcesService.isSourceAllowed(
+              sender,
+              pushName ?? undefined,
+              userId,
+            );
+            if (!isAllowed) {
+              this.logger.log(
+                `Skipping historical messages for source not in allowlist: ${sender}`,
+              );
+              continue;
+            }
+            allowedMessages.push(...chatMsgs);
+
+            // Sort messages strictly by timestamp
+            const sortedChatMessages = chatMsgs.sort(
+              (a, b) =>
+                messageTimestampSeconds(a.messageTimestamp) -
+                messageTimestampSeconds(b.messageTimestamp),
+            );
+
+            const productBundles =
+              this.extractProductBundles(sortedChatMessages);
+
+            for (const bundle of productBundles) {
+              const isMsgDuplicate = bundle.some(
+                (m) => m.key?.id && existingMsgIds.has(m.key.id),
+              );
+              const bundleText = bundle
+                .map((m) => {
+                  const c = this.unwrapMessage(m.message);
+                  return (
+                    c?.imageMessage?.caption ||
+                    c?.videoMessage?.caption ||
+                    c?.conversation ||
+                    c?.extendedTextMessage?.text ||
+                    ''
+                  );
+                })
+                .join('\n')
+                .trim();
+
+              const isContentDuplicate =
+                bundleText.length > 20 &&
+                existingBatches.some(
+                  (b) =>
+                    b.senderId === sender &&
+                    b.rawText &&
+                    b.rawText.trim() === bundleText,
+                );
+
+              if (isMsgDuplicate || isContentDuplicate) {
+                continue; // Skip duplicate!
+              }
+
+              for (const msg of bundle) {
+                await this.handleIncomingMessage(userId, msg);
+                if (msg.key?.id) existingMsgIds.add(msg.key.id);
+              }
+              await new Promise((resolve) => setTimeout(resolve, 400));
+              await this.batchService.forceCloseActiveBatch(userId, sender);
+              totalBundlesIngested++;
+            }
+          }
+
+          // Only now — after the allowlist gate — may messages enter the cache.
+          if (allowedMessages.length > 0) {
+            this.saveMessagesToCache(userId, allowedMessages);
+          }
+
+          this.logger.log(
+            `Finished retroactive historical sync for user ${userId}: ${totalBundlesIngested} product drops ingested.`,
+          );
+
+          if (totalBundlesIngested > 0) {
+            await this.prisma.notification.create({
+              data: {
+                userId,
+                title: 'Historical Sync Completed',
+                message: `Successfully ingested ${totalBundlesIngested} product drops from the last ${depthHours} hours.`,
+                type: 'success',
+                link: '/catalog',
+              },
+            });
+          }
+        })();
       });
 
       this.logger.log('Initializing WhatsApp Web Bridge (Baileys)...');
@@ -553,7 +658,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
 
   /** Flush every Redis debounce buffer whose silence window elapsed. */
   private async sweepDebounceBuffers() {
-    let due;
+    let due: DueBuffer[];
     try {
       due = await this.debounceStore.collectDue();
     } catch (err) {
@@ -579,10 +684,10 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
   private async flushMessageBuffer(
     userId: string,
     senderId: string,
-    messages: any[],
+    messages: WAMessage[],
   ) {
-    require('fs').appendFileSync(
-      require('path').join(process.cwd(), 'debug-messages.log'),
+    fs.appendFileSync(
+      path.join(process.cwd(), 'debug-messages.log'),
       `[DEBUG FLUSH] bufferKey: ${userId}_${senderId}, messages: ${messages.length}\n`,
     );
 
@@ -602,33 +707,24 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private unwrapMessage(message: any): any {
-    if (!message) return message;
+  private unwrapMessage(
+    message: WAMessageContent | null | undefined,
+  ): WAMessageContent | null | undefined {
     let content = message;
-    let unwrapped = true;
-    while (unwrapped) {
-      unwrapped = false;
-      if (content.ephemeralMessage?.message) {
-        content = content.ephemeralMessage.message;
-        unwrapped = true;
-      } else if (content.viewOnceMessage?.message) {
-        content = content.viewOnceMessage.message;
-        unwrapped = true;
-      } else if (content.viewOnceMessageV2?.message) {
-        content = content.viewOnceMessageV2.message;
-        unwrapped = true;
-      } else if (content.viewOnceMessageV2Extension?.message) {
-        content = content.viewOnceMessageV2Extension.message;
-        unwrapped = true;
-      } else if (content.documentWithCaptionMessage?.message) {
-        content = content.documentWithCaptionMessage.message;
-        unwrapped = true;
-      }
+    while (content) {
+      const next =
+        content.ephemeralMessage?.message ??
+        content.viewOnceMessage?.message ??
+        content.viewOnceMessageV2?.message ??
+        content.viewOnceMessageV2Extension?.message ??
+        content.documentWithCaptionMessage?.message;
+      if (!next) break;
+      content = next;
     }
     return content;
   }
 
-  async handleIncomingMessage(userId: string, msg: any) {
+  async handleIncomingMessage(userId: string, msg: WAMessage) {
     const { downloadMediaMessage } = await this.loadBaileys();
     const messageContent = this.unwrapMessage(msg.message);
     if (!messageContent) return;
@@ -649,7 +745,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
             senderName = groupMeta.subject;
             this.groupNameCache.set(jid, senderName);
           }
-        } catch (err) {
+        } catch {
           this.logger.warn(`Could not fetch group metadata for ${jid}`);
         }
       }
@@ -702,7 +798,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
     if (!isMedia && !caption) return;
 
     let localPath: string | null = null;
-    let mimeType =
+    const mimeType =
       imageMessage?.mimetype ||
       videoMessage?.mimetype ||
       documentMessage?.mimetype ||
@@ -720,13 +816,15 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
           'buffer',
           {},
           {
-            logger: this.logger as any,
+            // Nest's Logger does not structurally match Baileys' ILogger;
+            // it is only used for download diagnostics inside the library.
+            logger: this.logger as unknown as ILogger,
             reuploadRequest: client.updateMediaMessage,
           },
         );
 
         const ext = mimeType.split('/')[1]?.split(';')[0] || 'jpeg'; // Strip out any charset etc
-        const fileName = `${messageId}.${ext}`.replace(/[^a-zA-Z0-9.\-]/g, '_');
+        const fileName = `${messageId}.${ext}`.replace(/[^a-zA-Z0-9.-]/g, '_');
         const relPath = `api/uploads/${fileName}`;
         // Store physical files in 'uploads' without the api prefix in the filesystem
         const absolutePath = path.join(process.cwd(), 'uploads', fileName);
@@ -748,7 +846,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
           );
           this.logger.log(`Uploaded media to R2: ${r2Url}`);
           // Pass the R2 URL to batch service via payload
-          (msg as any)._originalUrl = r2Url;
+          (msg as WAMessageWithOrigin)._originalUrl = r2Url;
         } catch (r2Err) {
           this.logger.error('Failed to upload media to R2', r2Err);
         }
@@ -757,7 +855,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    const payload: any = {
+    const payload: IncomingMessagePayload = {
       id: messageId,
       from: jid,
       userId: userId,
@@ -765,7 +863,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       timestamp: msg.messageTimestamp?.toString() || Date.now().toString(),
       type: isMedia ? 'image' : 'text', // BatchService uses 'image' to detect media, so we keep it for now
       _localPath: localPath,
-      _originalUrl: (msg as any)._originalUrl || null,
+      _originalUrl: (msg as WAMessageWithOrigin)._originalUrl || null,
       text: !isMedia ? { body: caption } : undefined,
     };
 
@@ -831,19 +929,24 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
     return path.join(dir, `user_${userId}_history.json`);
   }
 
-  private saveMessagesToCache(userId: string, newMessages: any[]) {
+  private saveMessagesToCache(userId: string, newMessages: WAMessage[]) {
     try {
       const filePath = this.getHistoryCachePath(userId);
-      let existing: any[] = [];
+      let existing: WAMessage[] = [];
       if (fs.existsSync(filePath)) {
         try {
-          existing = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-        } catch (e) {
+          // The cache file is written only by this service; parse to
+          // unknown first, then treat the array as WAMessages.
+          const parsed: unknown = JSON.parse(
+            fs.readFileSync(filePath, 'utf-8'),
+          );
+          if (Array.isArray(parsed)) existing = parsed as WAMessage[];
+        } catch {
           existing = [];
         }
       }
 
-      const map = new Map<string, any>();
+      const map = new Map<string, WAMessage>();
       for (const m of existing) {
         if (m?.key?.id) map.set(m.key.id, m);
       }
@@ -851,11 +954,11 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
         if (m?.key?.id) map.set(m.key.id, m);
       }
 
-      const all = Array.from(map.values()).sort((a, b) => {
-        const tsA = Number(a.messageTimestamp?.toString() || 0);
-        const tsB = Number(b.messageTimestamp?.toString() || 0);
-        return tsA - tsB;
-      });
+      const all = Array.from(map.values()).sort(
+        (a, b) =>
+          messageTimestampSeconds(a.messageTimestamp) -
+          messageTimestampSeconds(b.messageTimestamp),
+      );
 
       // Keep latest 10,000 messages to prevent unbounded growth
       const trimmed = all.slice(-10000);
@@ -868,11 +971,12 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private loadMessagesFromCache(userId: string): any[] {
+  private loadMessagesFromCache(userId: string): WAMessage[] {
     try {
       const filePath = this.getHistoryCachePath(userId);
       if (fs.existsSync(filePath)) {
-        return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        const parsed: unknown = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        if (Array.isArray(parsed)) return parsed as WAMessage[];
       }
     } catch (err) {
       this.logger.error(
@@ -883,13 +987,14 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
     return [];
   }
 
-  private extractProductBundles(sortedChatMessages: any[]): any[][] {
-    let currentBundle: any[] = [];
-    let bundleHasMedia = false;
+  private extractProductBundles(
+    sortedChatMessages: WAMessage[],
+  ): WAMessage[][] {
+    let currentBundle: WAMessage[] = [];
     let bundleHasDesc = false;
     let bundleFirstItemType: 'media' | 'desc' | 'both' | null = null;
     let lastTimestamp = 0;
-    const productBundles: any[][] = [];
+    const productBundles: WAMessage[][] = [];
 
     for (const msg of sortedChatMessages) {
       const content = this.unwrapMessage(msg.message);
@@ -918,9 +1023,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       if (!hasMedia && !hasDesc) continue;
 
       let shouldStartNewBundle = false;
-      const tsRaw = msg.messageTimestamp;
-      const ts =
-        typeof tsRaw === 'number' ? tsRaw : Number(tsRaw?.toString() || 0);
+      const ts = messageTimestampSeconds(msg.messageTimestamp);
 
       if (
         currentBundle.length > 0 &&
@@ -944,7 +1047,6 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       if (shouldStartNewBundle) {
         if (currentBundle.length > 0) productBundles.push(currentBundle);
         currentBundle = [msg];
-        bundleHasMedia = hasMedia;
         bundleHasDesc = hasDesc;
         bundleFirstItemType =
           hasMedia && hasDesc ? 'both' : hasMedia ? 'media' : 'desc';
@@ -955,7 +1057,6 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
           bundleFirstItemType =
             hasMedia && hasDesc ? 'both' : hasMedia ? 'media' : 'desc';
         }
-        if (hasMedia) bundleHasMedia = true;
         if (hasDesc) bundleHasDesc = true;
         lastTimestamp = ts;
       }
@@ -1009,19 +1110,13 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       if (m.whatsappMediaId) existingMsgIds.add(m.whatsappMediaId);
     }
 
-    const chatGroups: Record<string, any[]> = {};
+    const chatGroups: Record<string, WAMessage[]> = {};
     for (const msg of messages) {
       if (!msg.message || msg.key?.fromMe) continue;
       const sender = msg.key?.remoteJid;
       if (!sender) continue;
 
-      const tsRaw = msg.messageTimestamp;
-      const msgTime =
-        typeof tsRaw === 'number'
-          ? tsRaw
-          : typeof tsRaw?.toNumber === 'function'
-            ? tsRaw.toNumber()
-            : tsRaw?.low || parseInt(tsRaw?.toString() || '0', 10);
+      const msgTime = messageTimestampSeconds(msg.messageTimestamp);
 
       if (msgTime < cutoffSeconds) continue;
 
@@ -1041,7 +1136,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       // the user explicitly enabled it. Re-sync never auto-enables sources.
       const isAllowed = await this.sourcesService.isSourceAllowed(
         sender,
-        chatMsgs[0]?.pushName,
+        chatMsgs[0]?.pushName ?? undefined,
         userId,
       );
       if (!isAllowed) {
@@ -1051,29 +1146,23 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
         continue;
       }
 
-      const sortedChatMessages = chatMsgs.sort((a: any, b: any) => {
-        const tsA =
-          typeof a.messageTimestamp === 'number'
-            ? a.messageTimestamp
-            : Number(a.messageTimestamp?.toString() || 0);
-        const tsB =
-          typeof b.messageTimestamp === 'number'
-            ? b.messageTimestamp
-            : Number(b.messageTimestamp?.toString() || 0);
-        return tsA - tsB;
-      });
+      const sortedChatMessages = chatMsgs.sort(
+        (a, b) =>
+          messageTimestampSeconds(a.messageTimestamp) -
+          messageTimestampSeconds(b.messageTimestamp),
+      );
 
       const productBundles = this.extractProductBundles(sortedChatMessages);
 
       for (const bundle of productBundles) {
         // DEDUPLICATION: Skip if ANY message ID is already registered
         const isMsgDuplicate = bundle.some(
-          (m: any) => m.key?.id && existingMsgIds.has(m.key.id),
+          (m) => m.key?.id && existingMsgIds.has(m.key.id),
         );
 
         // Also skip if rawText identically matches existing batch from this sender
         const bundleText = bundle
-          .map((m: any) => {
+          .map((m) => {
             const c = this.unwrapMessage(m.message);
             return (
               c?.imageMessage?.caption ||

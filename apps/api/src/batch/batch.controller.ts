@@ -38,12 +38,18 @@ export class BatchController {
   }
 
   @Get(':id')
-  async getBatch(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
+  async getBatch(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
     return this.batchService.getBatch(id, req.user.userId);
   }
 
   @Post(':id/delete')
-  async deleteBatch(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
+  async deleteBatch(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
     return this.batchService.deleteBatch(id, req.user.userId);
   }
 
@@ -99,12 +105,18 @@ export class BatchController {
   }
 
   @Post(':id/reject')
-  async rejectBatch(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
+  async rejectBatch(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
     return this.batchService.rejectBatch(id, req.user.userId);
   }
 
   @Post(':id/clear-ai')
-  async clearAIContent(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
+  async clearAIContent(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
     return this.batchService.clearAIContent(id, req.user.userId);
   }
 
@@ -120,7 +132,10 @@ export class BatchController {
   }
 
   @Post('media/:mediaId/delete')
-  async deleteMedia(@Request() req: AuthenticatedRequest, @Param('mediaId') mediaId: string) {
+  async deleteMedia(
+    @Request() req: AuthenticatedRequest,
+    @Param('mediaId') mediaId: string,
+  ) {
     return this.batchService.deleteMedia(mediaId, req.user.userId);
   }
 
@@ -144,7 +159,7 @@ export class BatchController {
   async maskMedia(
     @Request() req: AuthenticatedRequest,
     @Param('mediaId') mediaId: string,
-@Body() body: MaskMediaDto,
+    @Body() body: MaskMediaDto,
   ) {
     const result = await this.batchService.maskMediaLogo(
       mediaId,
@@ -158,7 +173,10 @@ export class BatchController {
   }
 
   @Post('media/:mediaId/revert')
-  async revertMedia(@Request() req: AuthenticatedRequest, @Param('mediaId') mediaId: string) {
+  async revertMedia(
+    @Request() req: AuthenticatedRequest,
+    @Param('mediaId') mediaId: string,
+  ) {
     const result = await this.batchService.revertMediaLogo(
       mediaId,
       req.user.userId,
@@ -170,8 +188,8 @@ export class BatchController {
   }
 
   @Get('worker-status')
-  async getWorkerStatus() {
-    const isOnline = await this.batchService.isMacWorkerOnline();
+  getWorkerStatus() {
+    const isOnline = this.batchService.isMacWorkerOnline();
     return { isWorkerOnline: isOnline };
   }
 
@@ -194,7 +212,10 @@ export class BatchController {
   }
 
   @Post('media/:mediaId/stop-blur')
-  async stopMediaBlur(@Request() req: AuthenticatedRequest, @Param('mediaId') mediaId: string) {
+  async stopMediaBlur(
+    @Request() req: AuthenticatedRequest,
+    @Param('mediaId') mediaId: string,
+  ) {
     const result = await this.batchService.stopMediaBlur(
       mediaId,
       req.user.userId,
@@ -306,7 +327,10 @@ export class BatchController {
   }
 
   @Post('media/:id/force-image')
-  async forceImage(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
+  async forceImage(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
     return this.batchService.forceImage(id, req.user.userId);
   }
 }
