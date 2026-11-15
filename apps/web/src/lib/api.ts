@@ -10,7 +10,7 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
     return demoFetch(url, options);
   }
 
-  const session: any = await getSession();
+  const session = await getSession();
 
   // No session = demo mode, even if the demo flag hasn't flipped yet.
   // On first paint a page's fetch can fire before AppShell's effect

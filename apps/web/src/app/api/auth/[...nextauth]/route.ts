@@ -2,6 +2,17 @@ import NextAuth, { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import axios from 'axios';
 
+interface LoginResponse {
+  access_token: string;
+  user: {
+    id?: string;
+    email: string;
+    name?: string;
+    role?: string;
+    trialExpired?: boolean;
+  };
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
@@ -10,7 +21,7 @@ export const authOptions: NextAuthOptions = {
         email: { label: 'Email', type: 'text' },
         password: { label: 'Password', type: 'password' },
       },
-      async authorize(credentials, req) {
+      async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
         try {
           const res = await axios.post(
@@ -20,7 +31,7 @@ export const authOptions: NextAuthOptions = {
               password: credentials.password,
             },
           );
-          const user = res.data;
+          const user = res.data as LoginResponse;
           if (user && user.access_token) {
             return {
               id: user.user.id || credentials.email, // backend should return userId
@@ -32,9 +43,11 @@ export const authOptions: NextAuthOptions = {
             };
           }
           return null;
-        } catch (e: any) {
-          const message = e.response?.data?.message || 'Invalid credentials';
-          throw new Error(message);
+        } catch (e) {
+          const data = axios.isAxiosError(e)
+            ? (e.response?.data as { message?: string } | undefined)
+            : undefined;
+          throw new Error(data?.message || 'Invalid credentials');
         }
       },
     }),
@@ -42,19 +55,19 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.accessToken = (user as any).accessToken;
+        token.accessToken = user.accessToken;
         token.id = user.id;
-        token.role = (user as any).role;
-        token.trialExpired = (user as any).trialExpired;
+        token.role = user.role;
+        token.trialExpired = user.trialExpired;
       }
       return token;
     },
     async session({ session, token }) {
-      (session as any).accessToken = token.accessToken;
+      session.accessToken = token.accessToken;
       if (session.user) {
-        (session.user as any).id = token.id;
-        (session.user as any).role = token.role;
-        (session.user as any).trialExpired = token.trialExpired;
+        session.user.id = token.id;
+        session.user.role = token.role;
+        session.user.trialExpired = token.trialExpired;
       }
       return session;
     },

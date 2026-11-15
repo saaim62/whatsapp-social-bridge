@@ -13,7 +13,14 @@ import { API_URL } from '@/lib/api';
  *      that carry an id + localPath but no mediaUrl)
  *   4. legacy static path (last resort for very old cached data)
  */
-export function mediaSrcFor(m: any): string | null {
+export interface MediaSrcInput {
+  id?: string;
+  mediaUrl?: string | null;
+  originalUrl?: string | null;
+  localPath?: string | null;
+}
+
+export function mediaSrcFor(m: MediaSrcInput | null | undefined): string | null {
   if (!m) return null;
   if (m.mediaUrl) return m.mediaUrl;
   if (m.originalUrl) return m.originalUrl;
