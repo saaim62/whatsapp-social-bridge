@@ -14,6 +14,13 @@ function requireJwtSecret(): string {
   return secret;
 }
 
+/** Claims carried by our access tokens (sv = sessionVersion at mint). */
+export interface JwtPayload {
+  sub: string;
+  email: string;
+  sv?: number;
+}
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(private prisma: PrismaService) {
@@ -24,7 +31,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: any) {
+  async validate(payload: JwtPayload) {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
     });

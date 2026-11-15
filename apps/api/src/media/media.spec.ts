@@ -4,6 +4,16 @@ import { MediaSigningService } from './media-signing.service';
 import { MediaController } from './media.controller';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
+import type { AuthenticatedRequest } from '../auth/authenticated-request';
+
+/** Minimal authenticated-request fake (only req.user is read). */
+function reqFor(userId: string): AuthenticatedRequest {
+  return {
+    user: { userId, email: `${userId}@test.local` },
+  } as unknown as AuthenticatedRequest;
+}
+
+
 /**
  * Media protection (P1-5): uploads are no longer served statically.
  * Dashboard access is JWT + tenant-checked; public access exists only
@@ -91,7 +101,7 @@ describe('MediaController', () => {
   });
 
   it('owner can fetch their own media', async () => {
-    await controller.serveOwned('asset-1', { user: { userId: 'user-1' } }, res);
+    await controller.serveOwned('asset-1', reqFor('user-1'), res);
     expect(res.redirect).toHaveBeenCalledWith(
       'https://cdn.example.com/photo.jpg',
     );
@@ -99,7 +109,7 @@ describe('MediaController', () => {
 
   it('another tenant gets 404 (existence is not leaked)', async () => {
     await expect(
-      controller.serveOwned('asset-1', { user: { userId: 'user-2' } }, res),
+      controller.serveOwned('asset-1', reqFor('user-2'), res),
     ).rejects.toThrow('Media not found');
     expect(res.redirect).not.toHaveBeenCalled();
     expect(res.sendFile).not.toHaveBeenCalled();

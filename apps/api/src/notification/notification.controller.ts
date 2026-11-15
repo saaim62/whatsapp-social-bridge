@@ -23,7 +23,10 @@ export class NotificationController {
   }
 
   @Post()
-  async createNotification(@Request() req: AuthenticatedRequest, @Body() body: CreateNotificationDto) {
+  async createNotification(
+    @Request() req: AuthenticatedRequest,
+    @Body() body: CreateNotificationDto,
+  ) {
     return this.notificationService.createNotification(
       req.user.userId,
       body.title,
@@ -39,7 +42,10 @@ export class NotificationController {
   }
 
   @Post(':id/read')
-  async markAsRead(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
+  async markAsRead(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
     return this.notificationService.markAsRead(id, req.user.userId);
   }
 }

@@ -1,3 +1,4 @@
+import type { Server } from 'http';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
@@ -47,10 +48,10 @@ async function bootstrap() {
     credentials: true,
   });
 
-  const server = app.getHttpServer();
+  const server = app.getHttpServer() as Server;
   server.keepAliveTimeout = 65000;
   server.headersTimeout = 66000;
 
   await app.listen(process.env.PORT ?? 3001);
 }
-bootstrap();
+void bootstrap();

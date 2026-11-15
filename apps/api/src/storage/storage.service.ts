@@ -86,7 +86,7 @@ export class StorageService implements OnModuleInit {
     try {
       const usage = await this.redisClient.get(`r2_usage:${accountId}`);
       return usage ? parseInt(usage, 10) : 0;
-    } catch (e) {
+    } catch {
       return 0;
     }
   }
@@ -98,7 +98,9 @@ export class StorageService implements OnModuleInit {
     try {
       await this.redisClient.incrby(`r2_usage:${accountId}`, bytes);
     } catch (e) {
-      this.logger.warn(`Could not increment R2 usage in Redis: ${e.message}`);
+      this.logger.warn(
+        `Could not increment R2 usage in Redis: ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   }
 
@@ -114,7 +116,9 @@ export class StorageService implements OnModuleInit {
         await this.redisClient.set(`r2_usage:${accountId}`, 0);
       }
     } catch (e) {
-      this.logger.warn(`Could not decrement R2 usage in Redis: ${e.message}`);
+      this.logger.warn(
+        `Could not decrement R2 usage in Redis: ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   }
 
@@ -164,7 +168,7 @@ export class StorageService implements OnModuleInit {
       try {
         await this.redisClient.set(`r2_file_account:${filename}`, account.id);
         await this.redisClient.set(`r2_file_size:${filename}`, fileSizeBytes);
-      } catch (redisErr) {
+      } catch {
         // Non-critical
       }
 
@@ -186,7 +190,13 @@ export class StorageService implements OnModuleInit {
   }
 
   async getStorageStats() {
-    const stats: any[] = [];
+    const stats: Array<{
+      id: string;
+      bucketName: string;
+      publicUrl: string;
+      usageBytes: number;
+      limitBytes: number;
+    }> = [];
     for (const acc of this.accounts) {
       const usage = await this.getAccountUsage(acc.id);
       stats.push({
@@ -208,7 +218,9 @@ export class StorageService implements OnModuleInit {
     let accountId: string | null = null;
     try {
       accountId = await this.redisClient.get(`r2_file_account:${filename}`);
-    } catch (e) {}
+    } catch {
+      // Usage tracking is best-effort; deletion proceeds for all accounts.
+    }
 
     const targetAccounts = accountId
       ? this.accounts.filter((a) => a.id === accountId)
@@ -234,7 +246,9 @@ export class StorageService implements OnModuleInit {
           }
           await this.redisClient.del(`r2_file_account:${filename}`);
           await this.redisClient.del(`r2_file_size:${filename}`);
-        } catch (e) {}
+        } catch {
+          // Best-effort per-account cleanup.
+        }
       } catch (error) {
         this.logger.error(
           `Failed to delete ${filename} from R2 account ${account.id}`,

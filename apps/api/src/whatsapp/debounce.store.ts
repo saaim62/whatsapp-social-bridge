@@ -43,7 +43,7 @@ function reviveMessage(raw: unknown): WAMessage {
     const high = ts.high ?? 0;
     msg.messageTimestamp = high * 2 ** 32 + (low >>> 0);
   }
-  return msg as WAMessage;
+  return msg;
 }
 
 @Injectable()
@@ -67,11 +67,7 @@ export class DebounceStore {
   ): Promise<void> {
     const member = this.member(userId, senderId);
     await this.redis.rpush(this.listKey(member), JSON.stringify(message));
-    await this.redis.zadd(
-      DUE_KEY,
-      Date.now() + DEBOUNCE_WINDOW_MS,
-      member,
-    );
+    await this.redis.zadd(DUE_KEY, Date.now() + DEBOUNCE_WINDOW_MS, member);
   }
 
   /** Drain every buffer whose silence window has elapsed. */

@@ -4,7 +4,6 @@ import {
   Post,
   Body,
   Query,
-  Req,
   Res,
   UseGuards,
   Request,
@@ -46,11 +45,11 @@ export class SocialController {
       const frontendUrl =
         process.env.FRONTEND_URL || 'http://130.110.113.71:3000';
       return res.redirect(`${frontendUrl}/settings?social=success`);
-    } catch (err: any) {
+    } catch (err) {
       const frontendUrl =
         process.env.FRONTEND_URL || 'http://130.110.113.71:3000';
       return res.redirect(
-        `${frontendUrl}/settings?social=error&message=${encodeURIComponent(err.message)}`,
+        `${frontendUrl}/settings?social=error&message=${encodeURIComponent(err instanceof Error ? err.message : String(err))}`,
       );
     }
   }

@@ -151,8 +151,11 @@ async function sync() {
       console.log(
         `[${uploadedCount}/${pendingAssets.length}] Uploaded ${filename} (${fileBuffer.length} bytes) -> ${r2Url}`,
       );
-    } catch (err: any) {
-      console.error(`Failed to upload ${filePath}:`, err.message);
+    } catch (err) {
+      console.error(
+        `Failed to upload ${filePath}:`,
+        err instanceof Error ? err.message : err,
+      );
     }
   }
 

@@ -51,7 +51,10 @@ const RANGE_RE = /\d[\d,]*\s*(?:[-–—]| to )\s*(?:rs\.?|pkr)?\s*\d[\d,]*/i;
 export function analyzePrice(raw: unknown): PriceAnalysis {
   if (raw === null || raw === undefined)
     return { price: null, ambiguous: false };
-  const text = String(raw);
+  // Only strings/numbers carry price text; anything else is unparseable
+  // (String(obj) would yield '[object Object]' and parse to null anyway).
+  const text =
+    typeof raw === 'string' ? raw : typeof raw === 'number' ? String(raw) : '';
   if (!text.trim()) return { price: null, ambiguous: false };
 
   if (

@@ -5,6 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { AuthenticatedRequest } from '../authenticated-request';
 
 /**
  * Admin area access: ADMIN and OWNER roles. The role is loaded fresh
@@ -18,7 +19,7 @@ export class AdminGuard implements CanActivate {
   constructor(private prisma: PrismaService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest();
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const user = request.user; // Set by JwtAuthGuard
 
     if (!user || !user.userId) {

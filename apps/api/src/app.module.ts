@@ -39,7 +39,7 @@ import { AppController } from './app.controller';
     // short-lived signed /api/media/signed/:token URLs for Meta.
     BullModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => {
+      useFactory: (configService: ConfigService) => {
         return {
           connection: {
             host: configService.get<string>('REDIS_HOST', '127.0.0.1'),

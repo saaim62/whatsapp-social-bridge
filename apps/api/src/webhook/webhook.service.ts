@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { BatchService } from '../batch/batch.service';
+import { BatchService, IncomingMessagePayload } from '../batch/batch.service';
 
 @Injectable()
 export class WebhookService {
@@ -7,7 +7,7 @@ export class WebhookService {
 
   constructor(private readonly batchService: BatchService) {}
 
-  async processIncomingMessage(message: any) {
+  async processIncomingMessage(message: IncomingMessagePayload) {
     this.logger.log(`Received message: ${message.id}`);
 
     // Add to batch processing queue or handle directly

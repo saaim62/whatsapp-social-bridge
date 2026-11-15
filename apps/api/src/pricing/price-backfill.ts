@@ -19,7 +19,9 @@ export interface PriceBackfillDecision {
   reason?: PriceAmbiguity;
 }
 
-export function decidePriceBackfill(extractedData: any): PriceBackfillDecision {
+export function decidePriceBackfill(
+  extractedData: Record<string, unknown> | null | undefined,
+): PriceBackfillDecision {
   const data = extractedData ?? {};
   if (
     typeof data.manual_price_override === 'number' &&
@@ -35,7 +37,9 @@ export function decidePriceBackfill(extractedData: any): PriceBackfillDecision {
 }
 
 /** Return the extractedData the backfill should persist for one batch. */
-export function applyPriceBackfill(extractedData: any): any {
+export function applyPriceBackfill(
+  extractedData: Record<string, unknown> | null,
+): Record<string, unknown> | null {
   const decision = decidePriceBackfill(extractedData);
   if (decision.action !== 'clear' || extractedData == null) {
     return extractedData;

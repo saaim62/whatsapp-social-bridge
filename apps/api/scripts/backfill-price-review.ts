@@ -17,11 +17,22 @@
  *   npx ts-node scripts/backfill-price-review.ts            # dry run
  *   npx ts-node scripts/backfill-price-review.ts --apply    # write
  */
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import {
+
+
   decidePriceBackfill,
   applyPriceBackfill,
 } from '../src/pricing/price-backfill';
+
+/** The JSON column can hold any JSON value; the backfill logic only
+ *  operates on plain objects. */
+function asRecord(v: unknown): Record<string, unknown> | null {
+  return v && typeof v === 'object' && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : null;
+}
+
 
 async function main() {
   const apply = process.argv.includes('--apply');
@@ -38,12 +49,13 @@ async function main() {
     );
     let changed = 0;
     for (const batch of batches) {
-      const decision = decidePriceBackfill(batch.extractedData);
+      const data = asRecord(batch.extractedData);
+      const decision = decidePriceBackfill(data);
       if (decision.action !== 'clear') continue;
-      const next = applyPriceBackfill(batch.extractedData);
+      const next = applyPriceBackfill(data);
       const dirty =
         JSON.stringify(next) !== JSON.stringify(batch.extractedData ?? null);
-      const priceText = (batch.extractedData as any)?.price ?? null;
+      const priceText = data?.price ?? null;
       console.log(
         `${dirty ? 'CLEAR ' : 'FLAG  '} batch ${batch.id} [${batch.status}] price=${JSON.stringify(priceText)} reason=${decision.reason}`,
       );
@@ -52,7 +64,8 @@ async function main() {
         if (apply) {
           await prisma.productBatch.update({
             where: { id: batch.id },
-            data: { extractedData: next },
+            // 'clear' implies a non-null record (see decidePriceBackfill).
+            data: { extractedData: next as Prisma.InputJsonObject },
           });
         }
       }

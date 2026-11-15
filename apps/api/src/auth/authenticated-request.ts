@@ -1,6 +1,9 @@
 import { Request } from 'express';
 import { User } from '@prisma/client';
 
+/** The user row shape AdminGuard/OwnerGuard attach (id/email/name/role). */
+export type DbUserSummary = Pick<User, 'id' | 'email' | 'name' | 'role'>;
+
 /** Shape JwtStrategy.validate() attaches to `req.user`. */
 export interface JwtUser {
   userId: string;
@@ -13,10 +16,10 @@ export interface JwtUser {
  */
 export interface AuthenticatedRequest extends Request {
   user: JwtUser;
-  dbUser?: User;
+  dbUser?: DbUserSummary;
 }
 
 /** Request on admin routes, where AdminGuard guarantees `dbUser`. */
 export interface AdminAuthenticatedRequest extends AuthenticatedRequest {
-  dbUser: User;
+  dbUser: DbUserSummary;
 }

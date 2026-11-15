@@ -22,7 +22,10 @@ export class SettingsController {
   }
 
   @Post()
-  async updateSettings(@Request() req: AuthenticatedRequest, @Body() body: UpdateSettingsDto) {
+  async updateSettings(
+    @Request() req: AuthenticatedRequest,
+    @Body() body: UpdateSettingsDto,
+  ) {
     return this.settingsService.updateSettings(req.user.userId, body);
   }
 }

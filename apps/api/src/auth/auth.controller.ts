@@ -2,7 +2,6 @@ import {
   Controller,
   Post,
   Body,
-  UnauthorizedException,
   Get,
   Query,
   Logger,
@@ -48,11 +47,14 @@ export class AuthController {
     // Send verification email
     this.logger.log('[Register] Triggering verification email...');
     // We intentionally don't await this to avoid any potential event loop blocking
-    this.emailService
-      .sendVerificationEmail(user.email, user.verificationToken as string)
-      .catch((e) => {
-        this.logger.error('[Register] Error triggering email', e);
-      });
+    try {
+      this.emailService.sendVerificationEmail(
+        user.email,
+        user.verificationToken as string,
+      );
+    } catch (e) {
+      this.logger.error('[Register] Error triggering email', e);
+    }
     this.logger.log('[Register] Returning success response');
     return {
       message:
@@ -75,9 +77,11 @@ export class AuthController {
     this.logger.log(`[ForgotPassword] Token generated? ${!!token}`);
     if (token) {
       this.logger.log('[ForgotPassword] Triggering reset email...');
-      this.emailService.sendPasswordResetEmail(email, token).catch((e) => {
+      try {
+        this.emailService.sendPasswordResetEmail(email, token);
+      } catch (e) {
         this.logger.error('[ForgotPassword] Error triggering reset email', e);
-      });
+      }
     }
     this.logger.log('[ForgotPassword] Returning success response');
     return {
@@ -96,9 +100,11 @@ export class AuthController {
   async resendVerification(@Body('email') email: string) {
     const token = await this.authService.generateVerificationToken(email);
     if (token) {
-      this.emailService.sendVerificationEmail(email, token).catch((e) => {
+      try {
+        this.emailService.sendVerificationEmail(email, token);
+      } catch (e) {
         this.logger.error('[ResendVerification] Error triggering email', e);
-      });
+      }
     }
     // Uniform response whether the account is unknown, already
     // verified, or freshly re-sent — no account enumeration.

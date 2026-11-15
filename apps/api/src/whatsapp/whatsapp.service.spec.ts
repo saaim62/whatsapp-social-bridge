@@ -99,13 +99,11 @@ describe('WhatsappService ingestion allowlist gate', () => {
 
     buffered = new Map<string, any[]>();
     debounceStore = {
-      push: jest.fn(
-        async (userId: string, senderId: string, message: any) => {
-          const key = `${userId}_${senderId}`;
-          if (!buffered.has(key)) buffered.set(key, []);
-          buffered.get(key)!.push(message);
-        },
-      ),
+      push: jest.fn(async (userId: string, senderId: string, message: any) => {
+        const key = `${userId}_${senderId}`;
+        if (!buffered.has(key)) buffered.set(key, []);
+        buffered.get(key)!.push(message);
+      }),
       collectDue: jest.fn(async () => []),
       pendingMessages: jest.fn(
         async (userId: string, senderId: string) =>

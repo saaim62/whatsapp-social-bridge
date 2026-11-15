@@ -13,6 +13,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
+import type { AuthenticatedRequest } from '../auth/authenticated-request';
+import type { MediaAsset } from '@prisma/client';
 import { MediaSigningService } from './media-signing.service';
 
 const MIME_BY_EXT: Record<string, string> = {
@@ -66,7 +68,10 @@ export class MediaController {
     return res.sendFile(filePath);
   }
 
-  private serveAsset(asset: any, res: Response) {
+  private serveAsset(
+    asset: Pick<MediaAsset, 'localPath' | 'mimeType' | 'originalUrl'>,
+    res: Response,
+  ) {
     if (asset.localPath) {
       // localPath values look like "api/uploads/<file>"; only the
       // basename is ever resolved inside the uploads directory.
@@ -110,7 +115,7 @@ export class MediaController {
   @UseGuards(JwtAuthGuard)
   async serveOwned(
     @Param('id') id: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Res() res: Response,
   ) {
     const asset = await this.prisma.mediaAsset.findUnique({

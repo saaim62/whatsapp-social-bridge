@@ -1,3 +1,4 @@
+import type { Request } from 'express';
 import {
   CanActivate,
   ExecutionContext,
@@ -34,7 +35,7 @@ export class AuthThrottleGuard implements CanActivate {
   ];
 
   canActivate(context: ExecutionContext): boolean {
-    const req = context.switchToHttp().getRequest();
+    const req = context.switchToHttp().getRequest<Request>();
     const path: string = req.path || req.url || '';
     const rule = this.rules.find((r) => path.includes(r.match));
     if (!rule) return true;

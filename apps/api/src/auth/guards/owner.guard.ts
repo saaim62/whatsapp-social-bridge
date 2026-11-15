@@ -5,6 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { AuthenticatedRequest } from '../authenticated-request';
 
 /**
  * Owner-only access. Used for the actions that define who holds power
@@ -18,7 +19,7 @@ export class OwnerGuard implements CanActivate {
   constructor(private prisma: PrismaService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest();
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const user = request.user; // Set by JwtAuthGuard
 
     if (!user || !user.userId) {

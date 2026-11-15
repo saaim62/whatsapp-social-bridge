@@ -77,7 +77,10 @@ export class SourcesController {
   }
 
   @Delete(':id')
-  async deleteSource(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
+  async deleteSource(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
     return this.sourcesService.deleteSource(id, req.user.userId);
   }
 

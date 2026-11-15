@@ -7,7 +7,9 @@ export class EmailService {
   private readonly logger = new Logger(EmailService.name);
 
   constructor() {
-    this.initTransporter();
+    // Fire-and-forget: transport setup (incl. the Ethereal test-account
+    // fallback) must not block service construction.
+    void this.initTransporter();
   }
 
   private async initTransporter() {
@@ -40,7 +42,7 @@ export class EmailService {
     }
   }
 
-  async sendVerificationEmail(email: string, token: string) {
+  sendVerificationEmail(email: string, token: string) {
     const url = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/verify-email?token=${token}`;
 
     // Never log the link itself — it carries a live token. Recipient + template only.
@@ -77,7 +79,7 @@ export class EmailService {
     }, 0);
   }
 
-  async sendPasswordResetEmail(email: string, token: string) {
+  sendPasswordResetEmail(email: string, token: string) {
     const url = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
 
     // Never log the link itself — it carries a live token. Recipient + template only.

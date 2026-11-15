@@ -11,6 +11,16 @@ import { Response } from 'express';
 import { WebhookService } from './webhook.service';
 import { ConfigService } from '@nestjs/config';
 
+import type { IncomingMessagePayload } from '../batch/batch.service';
+
+/** Meta WhatsApp webhook envelope (only the fields this handler reads). */
+interface WhatsAppWebhookBody {
+  object?: string;
+  entry?: Array<{
+    changes?: Array<{ value?: { messages?: IncomingMessagePayload[] } }>;
+  }>;
+}
+
 @Controller('webhooks/whatsapp')
 export class WebhookController {
   constructor(
@@ -39,14 +49,17 @@ export class WebhookController {
   }
 
   @Post()
-  async handleIncomingMessage(@Body() body: any, @Res() res: Response) {
+  async handleIncomingMessage(
+    @Body() body: WhatsAppWebhookBody,
+    @Res() res: Response,
+  ) {
     // Acknowledge quickly
     res.sendStatus(HttpStatus.OK);
 
     try {
       if (body.object === 'whatsapp_business_account') {
-        for (const entry of body.entry) {
-          for (const change of entry.changes) {
+        for (const entry of body.entry ?? []) {
+          for (const change of entry.changes ?? []) {
             if (
               change.value &&
               change.value.messages &&

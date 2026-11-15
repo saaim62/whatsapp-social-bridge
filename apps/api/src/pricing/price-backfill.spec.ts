@@ -1,5 +1,13 @@
 import { decidePriceBackfill, applyPriceBackfill } from './price-backfill';
 
+/** applyPriceBackfill returns null only for null input; these cases
+ *  pass records, so unwrap with a guard instead of a cast. */
+function applied(data: Record<string, unknown>): Record<string, unknown> {
+  const next = applyPriceBackfill(data);
+  if (!next) throw new Error('expected a record');
+  return next;
+}
+
 describe('price backfill decision', () => {
   it('clears calculated values stored for a pack-quantity price', () => {
     const data = {
@@ -11,7 +19,7 @@ describe('price backfill decision', () => {
       action: 'clear',
       reason: 'quantity',
     });
-    const next = applyPriceBackfill(data);
+    const next = applied(data);
     expect(next.selling_price).toBeUndefined();
     expect(next.selling_price_value).toBeUndefined();
     expect(next.price_needs_review).toBe(true);
@@ -23,7 +31,7 @@ describe('price backfill decision', () => {
   it('clears a zero selling value stored for an ambiguous price', () => {
     const data = { price: '2 pcs 1850', selling_price_value: 0 };
     expect(decidePriceBackfill(data).action).toBe('clear');
-    expect(applyPriceBackfill(data).selling_price_value).toBeUndefined();
+    expect(applied(data).selling_price_value).toBeUndefined();
   });
 
   it('clears calculated values stored for a price range', () => {
@@ -35,7 +43,7 @@ describe('price backfill decision', () => {
   });
 
   it('flags an ambiguous batch even when nothing was stored', () => {
-    const next = applyPriceBackfill({ price: '2 pcs 1850' });
+    const next = applied({ price: '2 pcs 1850' });
     expect(next.price_needs_review).toBe(true);
     expect(next.price_ambiguity).toBe('quantity');
   });
