@@ -181,9 +181,7 @@ export class BatchProcessor extends WorkerHost {
     // Every publish route (single, bulk, queued, auto) passes through
     // here, so the {{PRICE}} placeholder can never reach Meta and the
     // price shown is always the reseller's selling price, recomputed
-    // from the CURRENT margin rule. If the review page already
-    // committed a substituted caption (manual override), there is no
-    // placeholder left and this is a no-op — the override wins.
+    // from the CURRENT margin rule.
     {
       const settings = await this.prisma.settings.findUnique({
         where: { userId: batch.userId },
@@ -195,13 +193,14 @@ export class BatchProcessor extends WorkerHost {
       };
       const extracted: any = batch.extractedData || {};
       const gc: any = batch.generatedContent;
-      const captions = [gc.instagramCaption, gc.facebookCaption, gc.storyText];
-      const hasPlaceholder = captions.some((c) => (c ?? '').includes('{{PRICE}}'));
-      // An explicit manual price override set on the batch wins over
-      // every derived value. (The review page's other override path —
-      // committing captions with the price already substituted, leaving
-      // no {{PRICE}} placeholder — is honored below: with no placeholder
-      // there is nothing to substitute, so the block does not apply.)
+      // An explicit manual price override — recorded through the
+      // dedicated price-update action (PATCH /api/batches/:id/price) —
+      // wins over every derived value. A price that merely appears
+      // inside a caption is NOT an override: captions arrive here with
+      // {{PRICE}} already substituted by the review page, and that page
+      // used to pre-fill its price field from the raw supplier text,
+      // so a substituted caption proves nothing about whether the
+      // reseller ever made a price decision.
       const manualOverride =
         typeof extracted.manual_price_override === 'number' &&
         extracted.manual_price_override > 0
@@ -214,15 +213,20 @@ export class BatchProcessor extends WorkerHost {
           ? extracted.selling_price_value
           : null);
 
-      // PRICE SAFETY GATE: never publish a zero or unknown price.
-      // If the captions still carry {{PRICE}} and no valid selling
-      // price exists (unparseable/ambiguous supplier text, or a margin
-      // rule that computes to 0), publishing would substitute garbage
-      // or "Rs. 0" into a live listing. Send the batch back to the
-      // review queue and tell the user instead.
-      if (hasPlaceholder && (selling === null || selling <= 0)) {
+      // PRICE DECISION GATE: publishing requires a real price decision —
+      //   (a) a structured selling price > 0 derived from an UNAMBIGUOUS
+      //       supplier-price parse (the `selling` chain above), or
+      //   (b) an explicit manual_price_override recorded through the
+      //       dedicated price-update action.
+      // This applies whether or not the captions still carry {{PRICE}}:
+      // a placeholder-free caption is not evidence of a decision (see
+      // the manualOverride comment above). Without (a) or (b), send the
+      // batch back to the review queue and tell the user a price
+      // decision is needed — never publish a guessed, zero, or raw
+      // supplier price.
+      if (selling === null || selling <= 0) {
         this.logger.warn(
-          `Publishing blocked for batch ${batchId}: no valid selling price (supplier price text: ${JSON.stringify(extracted.price ?? null)}). Sent back to review.`,
+          `Publishing blocked for batch ${batchId}: no price decision (supplier price text: ${JSON.stringify(extracted.price ?? null)}, manual override: ${JSON.stringify(extracted.manual_price_override ?? null)}). Sent back to review.`,
         );
         await this.prisma.productBatch.update({
           where: { id: batchId },
@@ -231,9 +235,9 @@ export class BatchProcessor extends WorkerHost {
         await this.prisma.notification.create({
           data: {
             userId: batch.userId,
-            title: 'Publishing blocked — price needs review',
+            title: 'Publishing blocked — price decision needed',
             message:
-              'A product could not be published because its price could not be determined safely. Open it, set the price, and publish again.',
+              'A product could not be published because no confirmed selling price is set for it. Open it, enter the selling price, and publish again.',
             type: 'warning',
             link: `/products/${batchId}`,
           },
@@ -241,8 +245,7 @@ export class BatchProcessor extends WorkerHost {
         return;
       }
 
-      const sellingStr =
-        selling !== null && selling > 0 ? formatRs(selling) : (extracted.price ?? '');
+      const sellingStr = formatRs(selling);
       const footer = settings?.captionFooter ?? null;
       batch.generatedContent = {
         ...gc,

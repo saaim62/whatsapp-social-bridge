@@ -176,6 +176,18 @@ export class BatchController {
     return this.batchService.renameBatch(id, req.user.userId, body.name);
   }
 
+  @Patch(':id/price')
+  async setBatchPrice(@Request() req: any, @Param('id') id: string, @Body() body: { price: number }) {
+    if (body.price === undefined || body.price === null) {
+      throw new HttpException('price is required', HttpStatus.BAD_REQUEST);
+    }
+    const result = await this.batchService.setManualPrice(id, req.user.userId, Number(body.price));
+    if (!result.success) {
+      throw new HttpException(result.message || 'Failed to set price', HttpStatus.BAD_REQUEST);
+    }
+    return result;
+  }
+
   @Post('media/:id/force-image')
   async forceImage(@Request() req: any, @Param('id') id: string) {
     return this.batchService.forceImage(id, req.user.userId);

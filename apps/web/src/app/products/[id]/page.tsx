@@ -202,10 +202,14 @@ export default function ProductDetailPage() {
             setEditedStory(data.generatedContent.storyText || "");
             hasInitializedEdits.current = true;
           }
-          if (data.extractedData?.selling_price || data.extractedData?.price) {
-            // Default to the margin-engine selling price, not the
-            // supplier's wholesale price. Still fully editable.
-            setOverridePrice(data.extractedData.selling_price || data.extractedData.price);
+          if (data.extractedData?.selling_price) {
+            // Pre-fill ONLY with the margin-engine selling price —
+            // never the raw supplier text. When no selling price could
+            // be derived (ambiguous or missing supplier price), the
+            // field starts EMPTY so the reseller must type a price: a
+            // deliberate decision, which is what the publish gate
+            // requires. Still fully editable when pre-filled.
+            setOverridePrice(data.extractedData.selling_price);
           }
         }
         setLoading(false);
@@ -238,6 +242,20 @@ export default function ProductDetailPage() {
     setIsPublishModalOpen(false);
     setBatch((prev: any) => ({ ...prev, status: "PUBLISHING" }));
     try {
+      // If no selling price was derived (ambiguous/missing supplier
+      // price) and the reseller typed one into the price field, record
+      // it as an explicit price decision BEFORE approving — the backend
+      // publish gate requires a recorded decision, not merely a price
+      // baked into the caption text by applyPrice below.
+      const derivedValue = Number(batch.extractedData?.selling_price_value);
+      const typedPrice = parseFloat((overridePrice || "").replace(/[^0-9.]/g, ""));
+      if (!(derivedValue > 0) && Number.isFinite(typedPrice) && typedPrice > 0) {
+        await fetchWithAuth(`${API_URL}/api/batches/${id}/price`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ price: Math.round(typedPrice) }),
+        });
+      }
       if (batch.status === 'READY' || batch.status === 'FAILED' || batch.status === 'RECEIVED') {
         await fetchWithAuth(`${API_URL}/api/batches/${id}/approve`, {
           method: "POST",
@@ -913,9 +931,14 @@ export default function ProductDetailPage() {
                       type="text"
                       value={overridePrice}
                       onChange={(e) => setOverridePrice(e.target.value)}
-                      placeholder="e.g. $49.99"
+                      placeholder="Enter the selling price — required to publish"
                       className="w-full bg-graphite/50 border border-graphite-border rounded-lg mt-2 px-3 py-1.5 text-white focus:border-electric-cyan focus:ring-1 focus:ring-electric-cyan text-sm transition-all"
                     />
+                    {batch.extractedData?.price_needs_review && !overridePrice && (
+                      <p className="text-[11px] text-amber-400 mt-2">
+                        The supplier price could not be read unambiguously — enter the selling price to publish this product.
+                      </p>
+                    )}
                   </div>
                 </div>
 

@@ -1,9 +1,16 @@
 import { BatchProcessor } from './batch.processor';
 
 /**
- * Publish price-safety gate: a batch whose selling price computes to 0
- * or null must never reach Meta — unless the user set an explicit
- * manual price override on the batch.
+ * Publish price-decision gate: a batch may reach Meta only with a real
+ * price decision —
+ *   (a) a structured selling price > 0 derived from an unambiguous
+ *       supplier-price parse, or
+ *   (b) an explicit manual_price_override recorded through the
+ *       dedicated price-update action (PATCH /api/batches/:id/price).
+ * A caption whose {{PRICE}} was already substituted by the review page
+ * is NOT a decision: the page once pre-filled its price field from the
+ * raw supplier text, so an ambiguous price could be "approved" without
+ * the reseller ever choosing one.
  */
 describe('BatchProcessor publish price gate', () => {
   let prisma: any;
@@ -107,7 +114,12 @@ describe('BatchProcessor publish price gate', () => {
     expect(statusUpdates()).toContain('PUBLISHED');
   });
 
-  it('captions the user already committed (no placeholder) are published as-is, never blocked', async () => {
+  it('BLOCKS an ambiguous batch whose captions were pre-substituted by the review page, when no override was recorded', async () => {
+    // The review page used to pre-fill its price field from the raw
+    // supplier text and substitute it into the captions before
+    // approval — so this batch arrives with no {{PRICE}} placeholder
+    // and a price nobody consciously chose. A rendered caption is not
+    // a price decision.
     const batch = batchWith(
       { price: '2 pcs 1850' },
       {
@@ -118,7 +130,42 @@ describe('BatchProcessor publish price gate', () => {
     );
     setup(batch);
     await publish();
+    expect(socialService.publishInstagram).not.toHaveBeenCalled();
+    expect(socialService.publishFacebook).not.toHaveBeenCalled();
+    expect(statusUpdates()).toContain('READY');
+    expect(statusUpdates()).not.toContain('PUBLISHED');
+    expect(prisma.notification.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('the same pre-substituted ambiguous batch publishes once an explicit override is recorded', async () => {
+    const batch = batchWith(
+      { price: '2 pcs 1850', manual_price_override: 2999 },
+      {
+        instagramCaption: 'Beautiful suit — only Rs. 2,999!',
+        facebookCaption: 'Beautiful suit — only Rs. 2,999!',
+        storyText: 'Rs. 2,999',
+      },
+    );
+    setup(batch);
+    await publish();
     expect(socialService.publishInstagram).toHaveBeenCalledTimes(1);
     expect(statusUpdates()).toContain('PUBLISHED');
+    expect(prisma.notification.create).not.toHaveBeenCalled();
+  });
+
+  it('BLOCKS a batch with no price at all and no override, even with placeholder-free captions', async () => {
+    const batch = batchWith(
+      { price: 'Price not specified' },
+      {
+        instagramCaption: 'New arrival — DM for details!',
+        facebookCaption: 'New arrival — DM for details!',
+        storyText: 'New arrival',
+      },
+    );
+    setup(batch);
+    await publish();
+    expect(socialService.publishInstagram).not.toHaveBeenCalled();
+    expect(statusUpdates()).toContain('READY');
+    expect(prisma.notification.create).toHaveBeenCalledTimes(1);
   });
 });

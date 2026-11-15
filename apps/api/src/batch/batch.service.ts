@@ -20,6 +20,7 @@ import {
   normalizeImageFile,
 } from '../ai/image-mask.util';
 import { StorageService } from '../storage/storage.service';
+import { formatRs } from '../pricing/pricing.util';
 
 @Injectable()
 export class BatchService implements OnModuleDestroy {
@@ -1037,6 +1038,39 @@ export class BatchService implements OnModuleDestroy {
       data: { extractedData }
     });
     return { success: true };
+  }
+
+  /**
+   * Record an explicit, deliberate selling-price decision for a batch.
+   *
+   * This endpoint is the ONLY writer of manual_price_override: the
+   * publish gate treats that field as proof the reseller personally
+   * chose the price. It is never inferred from caption content — a
+   * caption with the price already substituted by the review page is
+   * not a decision (the page once pre-filled its price field from the
+   * raw supplier text, so a substituted caption could carry a price
+   * nobody ever chose).
+   */
+  async setManualPrice(batchId: string, userId: string, price: number) {
+    if (typeof price !== 'number' || !Number.isFinite(price) || price <= 0) {
+      return { success: false, message: 'A positive price is required' };
+    }
+    const batch = await this.prisma.productBatch.findUnique({
+      where: { id: batchId, userId }
+    });
+    if (!batch) return { success: false, message: 'Batch not found' };
+    const decided = Math.round(price);
+    const extractedData = batch.extractedData as any || {};
+    extractedData.manual_price_override = decided;
+    extractedData.selling_price_value = decided;
+    extractedData.selling_price = formatRs(decided);
+    delete extractedData.price_needs_review;
+    delete extractedData.price_ambiguity;
+    await this.prisma.productBatch.update({
+      where: { id: batchId },
+      data: { extractedData }
+    });
+    return { success: true, price: decided };
   }
 
   async sendBatchesBulk(batchIds: string[], fromUserId: string, targetEmails: string[]) {
