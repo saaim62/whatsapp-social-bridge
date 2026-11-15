@@ -3,13 +3,22 @@ import { PassportStrategy } from '@nestjs/passport';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
+function requireJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    // No fallback: a known default secret lets anyone forge any user's token.
+    throw new Error('JWT_SECRET environment variable is not set — refusing to start');
+  }
+  return secret;
+}
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(private prisma: PrismaService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET || 'super-secret-key-change-me',
+      secretOrKey: requireJwtSecret(),
     });
   }
 
@@ -18,6 +27,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       where: { id: payload.sub },
     });
     if (!user) {
+      throw new UnauthorizedException();
+    }
+    // A blocked account's existing tokens stop working immediately —
+    // checking isBlocked only at login left live sessions untouched.
+    if (user.isBlocked) {
       throw new UnauthorizedException();
     }
     // Session revocation: a password reset increments user.sessionVersion,

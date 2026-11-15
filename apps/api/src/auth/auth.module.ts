@@ -8,12 +8,19 @@ import { JwtStrategy } from './jwt.strategy';
 
 import { EmailService } from './email.service';
 
+// Fail fast: a hardcoded fallback secret would let anyone forge tokens for
+// any account. The app must not start without a real JWT_SECRET.
+const jwtSecret = process.env.JWT_SECRET;
+if (!jwtSecret) {
+  throw new Error('JWT_SECRET environment variable is not set — refusing to start');
+}
+
 @Module({
   imports: [
     PrismaModule,
     PassportModule,
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'super-secret-key-change-me',
+      secret: jwtSecret,
       signOptions: { expiresIn: '365d' },
     }),
   ],
