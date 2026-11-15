@@ -63,7 +63,7 @@
      Real translucency (the scene blurs through), a lit top edge,
      a deep soft shadow beneath. Restraint is the luxury. */
   .glass-panel {
-    @apply backdrop-blur-2xl backdrop-saturate-150 border border-white/[0.09];
+    @apply backdrop-blur-md backdrop-saturate-150 border border-white/[0.09];
     background: linear-gradient(160deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018) 42%, rgba(0, 0, 0, 0.12));
     background-color: var(--color-surface-glass);
     box-shadow:
@@ -73,7 +73,7 @@
   }
 
   .glass-card {
-    @apply backdrop-blur-xl backdrop-saturate-150 border border-white/[0.08] rounded-2xl overflow-hidden transition-all duration-300;
+    @apply backdrop-blur-md backdrop-saturate-150 border border-white/[0.08] rounded-2xl overflow-hidden transition-all duration-300;
     background: linear-gradient(165deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012) 45%, rgba(0, 0, 0, 0.1));
     background-color: rgba(15, 15, 17, 0.62);
     box-shadow:
@@ -82,7 +82,7 @@
   }
 
   .glass-card-hover {
-    @apply backdrop-blur-xl backdrop-saturate-150 border border-white/[0.08] rounded-2xl overflow-hidden transition-all duration-300 hover:border-gold-500/30 hover:-translate-y-0.5;
+    @apply backdrop-blur-md backdrop-saturate-150 border border-white/[0.08] rounded-2xl overflow-hidden transition-all duration-300 hover:border-gold-500/30 hover:-translate-y-0.5;
     background: linear-gradient(165deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012) 45%, rgba(0, 0, 0, 0.1));
     background-color: rgba(15, 15, 17, 0.62);
     box-shadow:
@@ -97,21 +97,7 @@
       0 0 28px rgba(217, 165, 33, 0.05);
   }
 
-  /* Backdrop plate drift — a slow Ken Burns push-in over the showroom
-     video, alternating so it breathes in and out. Deliberately out of
-     sync with the video's own 20s loop. */
-  @keyframes showroom-drift {
-    from {
-      transform: scale(1.03) translate(0.4%, 0.3%);
-    }
-    to {
-      transform: scale(1.15) translate(-1.4%, -1.6%);
-    }
-  }
-  .showroom-video {
-    animation: showroom-drift 24s ease-in-out infinite alternate;
-    will-change: transform;
-  }
+
 
   .text-gradient-gold {
     @apply bg-clip-text text-transparent bg-gradient-to-b from-gold-300 via-gold-400 to-gold-600;

@@ -8,11 +8,15 @@ import { useEffect, useRef } from "react";
  * boomerang-looped so it runs seamlessly (20s, no jump). It IS the
  * approved image, in motion — behind the glass UI.
  *
- * Playback is forced from JS (muted as a property + explicit play())
- * because attribute-only autoplay can stall on the poster frame.
- * A slow Ken Burns drift on the element (globals.css .showroom-video)
- * layers on top, so the backdrop breathes even if a browser throttles
- * the video itself.
+ * The animated clip was generated from the plate at only 1248×704
+ * and pixelated on retina screens, so the shipped loop is that clip
+ * Lanczos-upscaled to 1920×1088 with a light sharpen, boomerang-
+ * looped (20s, seamless); the poster is the full-res plate
+ * (2048×1152) for a crisp first paint. Playback is forced from JS
+ * (muted as a property + explicit play()) because attribute-only
+ * autoplay can stall on the poster frame. No CSS animation runs on
+ * the element, and the glass panels use a light backdrop blur —
+ * heavy blur over a moving full-screen video was the jank source.
  */
 export default function ShowroomBackdrop() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -36,8 +40,9 @@ export default function ShowroomBackdrop() {
     <div className="pointer-events-none fixed inset-0 z-[1] overflow-hidden" aria-hidden>
       <video
         ref={videoRef}
-        className="showroom-video h-full w-full object-cover"
-        src="/showroom-loop.mp4"
+        className="h-full w-full object-cover"
+        src="/showroom-loop-hd.mp4"
+        poster="/showroom-poster.jpg"
         autoPlay
         loop
         muted
