@@ -1,4 +1,5 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Res } from '@nestjs/common';
+import { Response } from 'express';
 import Redis from 'ioredis';
 import { PrismaService } from './prisma/prisma.service';
 
@@ -15,9 +16,11 @@ export class AppController {
     };
   }
 
-  /** Readiness: the process can actually serve traffic (DB + Redis reachable). */
+  /** Readiness: the process can actually serve traffic (DB + Redis reachable).
+   *  Returns HTTP 503 when any dependency is down — a 200 with a
+   *  "not_ready" body is invisible to load balancers and uptime checks. */
   @Get('ready')
-  async checkReadiness() {
+  async checkReadiness(@Res() res: Response) {
     const checks: Record<string, string> = {};
 
     try {
@@ -45,10 +48,10 @@ export class AppController {
     }
 
     const ready = Object.values(checks).every((v) => v === 'up');
-    return {
+    return res.status(ready ? 200 : 503).json({
       status: ready ? 'ready' : 'not_ready',
       checks,
       timestamp: new Date().toISOString(),
-    };
+    });
   }
 }

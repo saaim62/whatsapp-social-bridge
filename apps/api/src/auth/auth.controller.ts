@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UnauthorizedException, Get, Query, Logger, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Body, UnauthorizedException, Get, Query, Logger, UseGuards, Request, HttpException, HttpStatus } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { EmailService } from './email.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -64,6 +64,12 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Post('mock-pay')
   async mockPay(@Request() req) {
+    // Mock billing must never be reachable in production: it marks the
+    // caller's account paid without any payment. It stays available in
+    // development only, until the real billing module replaces it.
+    if (process.env.NODE_ENV === 'production') {
+      throw new HttpException('mock-pay is not available in production', HttpStatus.GONE);
+    }
     // Identity comes from the caller's JWT — never trust an email from the body:
     // otherwise anyone could unlock any account for free just by knowing its email.
     return this.authService.mockPay(req.user.email);
