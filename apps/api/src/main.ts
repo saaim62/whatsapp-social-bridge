@@ -2,7 +2,10 @@ import type { Server } from 'http';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
-import compression from 'compression';
+// compression ships an `export =` CommonJS bundle; a default import
+// compiles to `.default` (undefined at runtime) under this tsconfig.
+// The namespace form resolves to the function itself.
+import * as compression from 'compression';
 import { AppModule } from './app.module';
 
 const DEFAULT_CORS_ORIGINS = [
