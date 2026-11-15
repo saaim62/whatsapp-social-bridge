@@ -4,12 +4,29 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
 
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+// Tokens are issued as randomBytes(32).toString('hex') — 64 lowercase hex chars.
+const TOKEN_FORMAT = /^[0-9a-f]{64}$/;
+
 @Injectable()
 export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService
   ) {}
+
+  /**
+   * Reject missing/empty/malformed tokens BEFORE any database query.
+   * A token filter built from undefined/empty input can be silently dropped
+   * by Prisma, turning a findFirst into "return the first user in the table" —
+   * that must never reach the database.
+   */
+  private assertWellFormedToken(token: unknown): asserts token is string {
+    if (typeof token !== 'string' || !TOKEN_FORMAT.test(token)) {
+      throw new BadRequestException('Invalid or expired token');
+    }
+  }
 
   async register(email: string, password: string, name?: string, city?: string, country?: string) {
     const existing = await this.prisma.user.findUnique({ where: { email } });
@@ -33,6 +50,7 @@ export class AuthService {
         country,
         trialEndsAt,
         verificationToken,
+        verificationTokenExpiresAt: new Date(Date.now() + VERIFICATION_TOKEN_TTL_MS),
         settings: {
           create: {}
         }
@@ -70,7 +88,7 @@ export class AuthService {
     // Check trial expiration
     const trialExpired = !user.isPaid && user.trialEndsAt && new Date() > user.trialEndsAt;
 
-    const payload = { email: user.email, sub: user.id, trialExpired };
+    const payload = { email: user.email, sub: user.id, trialExpired, sv: user.sessionVersion };
     return {
       access_token: this.jwtService.sign(payload),
       user: { 
@@ -84,13 +102,24 @@ export class AuthService {
   }
 
   async verifyEmail(token: string) {
-    const user = await this.prisma.user.findFirst({ where: { verificationToken: token } });
-    if (!user) throw new BadRequestException('Invalid or expired verification token');
+    this.assertWellFormedToken(token);
 
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { isEmailVerified: true, verificationToken: null }
+    // Atomic consume: the token is cleared only when it matches AND is
+    // unexpired, so an expired or already-used token updates zero rows.
+    const result = await this.prisma.user.updateMany({
+      where: {
+        verificationToken: token,
+        verificationTokenExpiresAt: { gt: new Date() },
+      },
+      data: {
+        isEmailVerified: true,
+        verificationToken: null,
+        verificationTokenExpiresAt: null,
+      },
     });
+    if (result.count === 0) {
+      throw new BadRequestException('Invalid or expired verification token');
+    }
 
     return { message: 'Email successfully verified. You can now log in.' };
   }
@@ -102,21 +131,41 @@ export class AuthService {
     const token = randomBytes(32).toString('hex');
     await this.prisma.user.update({
       where: { id: user.id },
-      data: { resetPasswordToken: token }
+      data: {
+        resetPasswordToken: token,
+        resetPasswordTokenExpiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS),
+      }
     });
 
     return token;
   }
 
   async resetPassword(token: string, newPassword: string) {
-    const user = await this.prisma.user.findFirst({ where: { resetPasswordToken: token } });
-    if (!user) throw new BadRequestException('Invalid or expired reset token');
+    this.assertWellFormedToken(token);
+    if (typeof newPassword !== 'string' || newPassword.length === 0) {
+      throw new BadRequestException('A new password is required');
+    }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { passwordHash, resetPasswordToken: null }
+
+    // Atomic consume: the password changes only when the token matches AND
+    // is unexpired. Consuming clears the token (single use) and bumps
+    // sessionVersion, which revokes every JWT issued before this reset.
+    const result = await this.prisma.user.updateMany({
+      where: {
+        resetPasswordToken: token,
+        resetPasswordTokenExpiresAt: { gt: new Date() },
+      },
+      data: {
+        passwordHash,
+        resetPasswordToken: null,
+        resetPasswordTokenExpiresAt: null,
+        sessionVersion: { increment: 1 },
+      },
     });
+    if (result.count === 0) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
 
     return { message: 'Password has been successfully reset. You can now log in.' };
   }

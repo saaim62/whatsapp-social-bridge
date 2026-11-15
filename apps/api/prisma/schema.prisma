@@ -23,7 +23,10 @@ model User {
   isPaid             Boolean         @default(false)
   isEmailVerified    Boolean         @default(false)
   verificationToken  String?
+  verificationTokenExpiresAt DateTime?
   resetPasswordToken String?
+  resetPasswordTokenExpiresAt DateTime?
+  sessionVersion     Int             @default(0)
   storageLimitBytes  BigInt          @default(5368709120) // 5GB default
 
   batches       ProductBatch[]

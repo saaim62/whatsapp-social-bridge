@@ -42,13 +42,9 @@ export class EmailService {
 
   async sendVerificationEmail(email: string, token: string) {
     const url = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/verify-email?token=${token}`;
-    
-    // During dev, just log it so the user can click it from the console
-    this.logger.log(`\n\n======================================================\n`);
-    this.logger.log(`VERIFICATION EMAIL SENT TO: ${email}`);
-    this.logger.log(`Please click the link below to verify your account:`);
-    this.logger.log(`${url}`);
-    this.logger.log(`\n======================================================\n\n`);
+
+    // Never log the link itself — it carries a live token. Recipient + template only.
+    this.logger.log(`Verification email queued for ${email} (template: verify-email)`);
 
     const from = process.env.SMTP_FROM || process.env.SMTP_USER || '"DropRoute" <noreply@droproute.com>';
 
@@ -61,8 +57,7 @@ export class EmailService {
         subject: 'Verify your DropRoute account',
         html: this.verificationEmailHtml(url),
         text: this.verificationEmailText(url),
-      }).then(info => {
-        this.logger.log(`Ethereal Email Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
+      }).then(() => {
         this.logger.log('[EmailService] Verification sendMail completed successfully.');
       }).catch(e => {
         this.logger.error('Failed to send verification email', e);
@@ -72,13 +67,9 @@ export class EmailService {
 
   async sendPasswordResetEmail(email: string, token: string) {
     const url = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
-    
-    // During dev, just log it
-    this.logger.log(`\n\n======================================================\n`);
-    this.logger.log(`PASSWORD RESET EMAIL SENT TO: ${email}`);
-    this.logger.log(`Please click the link below to reset your password:`);
-    this.logger.log(`${url}`);
-    this.logger.log(`\n======================================================\n\n`);
+
+    // Never log the link itself — it carries a live token. Recipient + template only.
+    this.logger.log(`Password reset email queued for ${email} (template: reset-password)`);
 
     const from = process.env.SMTP_FROM || process.env.SMTP_USER || '"DropRoute" <noreply@droproute.com>';
 
@@ -91,8 +82,7 @@ export class EmailService {
         subject: 'Reset your DropRoute password',
         html: this.passwordResetEmailHtml(url),
         text: this.passwordResetEmailText(url),
-      }).then(info => {
-        this.logger.log(`Ethereal Email Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
+      }).then(() => {
         this.logger.log('[EmailService] Reset password sendMail completed successfully.');
       }).catch(e => {
         this.logger.error('Failed to send reset email', e);
