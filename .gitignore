@@ -12,3 +12,16 @@ build
 apps/api/sessions/
 apps/api/uploads/
 apps/api/venv/
+
+# WhatsApp session / auth artifacts — NEVER commit (contain live session credentials)
+.wwebjs_auth/
+.wwebjs_cache/
+.baileys_auth/
+wa-auth/
+**/sessions/
+
+# Local databases and uploaded media
+*.db
+*.sqlite
+*.sqlite3
+**/uploads/
