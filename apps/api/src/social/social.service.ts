@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import * as FormData from 'form-data';
@@ -14,6 +14,7 @@ import {
   decryptToken,
   assertTokenEncryptionConfigured,
 } from './token-crypto';
+import { MediaSigningService } from '../media/media-signing.service';
 
 const execPromise = util.promisify(exec);
 
@@ -42,6 +43,7 @@ export class SocialService {
   constructor(
     private configService: ConfigService,
     private prisma: PrismaService,
+    @Optional() private mediaSigning?: MediaSigningService,
   ) {
     // Meta access tokens are encrypted at rest; production must not
     // boot without the key (see token-crypto.ts).
@@ -90,10 +92,15 @@ export class SocialService {
   }
 
   private getPublicMediaUrl(absolutePath: string): string {
-    // Rely on PUBLIC_API_URL or default to the user's known public API domain
-    const baseUrl = this.configService.get('PUBLIC_API_URL') || 'https://api-droproute.duckdns.org';
     const filename = path.basename(absolutePath);
-    // The NestJS ServeStaticModule serves the uploads folder at /api/uploads
+    if (this.mediaSigning) {
+      // P1-5: Meta fetches media through a short-lived signed URL
+      // (15 minutes) — uploads are not publicly served anymore.
+      return this.mediaSigning.signedUrl(`f:${filename}`, 15 * 60);
+    }
+    // Fallback for contexts where signing is not wired (unit tests):
+    // the legacy public path. Production always injects the signer.
+    const baseUrl = this.configService.get('PUBLIC_API_URL') || 'https://api-droproute.duckdns.org';
     return `${baseUrl}/api/uploads/${filename}`;
   }
 

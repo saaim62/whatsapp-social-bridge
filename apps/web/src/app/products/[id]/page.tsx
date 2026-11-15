@@ -43,6 +43,7 @@ import {
   Search,
 } from "lucide-react";
 import { API_URL, fetchWithAuth } from "@/lib/api";
+import { mediaSrcFor } from "@/lib/media";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { ImageMaskModal } from "@/components/ui/ImageMaskModal";
@@ -845,9 +846,10 @@ export default function ProductDetailPage() {
                             : -1;
                           const isSelected = selectedMediaIds.has(asset.id);
                           const timestamp = mediaTimestamps[asset.id] || 0;
-                          const mediaSrc = asset.originalUrl 
-                            ? `${asset.originalUrl}${timestamp ? `?t=${timestamp}` : ""}`
-                            : `${API_URL}/${asset.localPath}${timestamp ? `?t=${timestamp}` : ""}`;
+                          const baseMediaSrc = mediaSrcFor(asset);
+                          const mediaSrc = baseMediaSrc
+                            ? `${baseMediaSrc}${timestamp ? `?t=${timestamp}` : ""}`
+                            : "";
 
                           return (
                             <SortableMediaItem

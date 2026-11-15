@@ -1,9 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
-import { ServeStaticModule } from '@nestjs/serve-static';
-import { join } from 'path';
 import { PrismaModule } from './prisma/prisma.module';
+import { MediaModule } from './media/media.module';
 import { WebhookModule } from './webhook/webhook.module';
 import { BatchModule } from './batch/batch.module';
 import { ProcessorModule } from './processor/processor.module';
@@ -24,16 +23,11 @@ import { AppController } from './app.controller';
       isGlobal: true,
       envFilePath: '.env', // root .env or apps/api/.env
     }),
-    ServeStaticModule.forRoot(
-      {
-        rootPath: join(process.cwd(), 'uploads'),
-        serveRoot: '/api/uploads',
-      },
-      {
-        rootPath: join(process.cwd(), 'uploads'),
-        serveRoot: '/uploads', // For backward compatibility with old localPath records
-      }
-    ),
+    // NOTE (P1-5): the uploads directory is deliberately NOT served
+    // statically anymore — supplier media was reachable by anyone who
+    // knew a filename. Media is delivered through MediaModule:
+    // JWT + tenant-checked /api/media/:id for the dashboard and
+    // short-lived signed /api/media/signed/:token URLs for Meta.
     BullModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => {
@@ -47,6 +41,7 @@ import { AppController } from './app.controller';
       inject: [ConfigService],
     }),
     PrismaModule,
+    MediaModule,
     WebhookModule,
     BatchModule,
     ProcessorModule.register(),

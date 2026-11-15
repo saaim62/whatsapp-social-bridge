@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
@@ -21,6 +21,7 @@ import {
 } from '../ai/image-mask.util';
 import { StorageService } from '../storage/storage.service';
 import { formatRs } from '../pricing/pricing.util';
+import { MediaSigningService } from '../media/media-signing.service';
 
 @Injectable()
 export class BatchService implements OnModuleDestroy {
@@ -40,6 +41,7 @@ export class BatchService implements OnModuleDestroy {
     @InjectQueue('batch-processing') private batchQueue: Queue,
     @InjectQueue('history-sync-queue') private historySyncQueue: Queue,
     @InjectQueue('image-blur') private imageBlurQueue: Queue,
+    @Optional() private mediaSigning?: MediaSigningService,
   ) {
     this.redisClient = new Redis({
       host: this.configService.get<string>('REDIS_HOST', '127.0.0.1'),
@@ -318,8 +320,25 @@ export class BatchService implements OnModuleDestroy {
   }
 
   // Dashboard API
+  /**
+   * Attach a short-lived signed media URL to an asset (P1-5). The
+   * dashboard loads media through /api/media/signed/<token> (or the
+   * JWT-guarded /api/media/:id) — never through a public static path.
+   * Assets without a local file (demo data, R2-only) get mediaUrl
+   * null and the web falls back to originalUrl.
+   */
+  private withMediaUrl(asset: any) {
+    if (!asset?.localPath || !this.mediaSigning) {
+      return { ...asset, mediaUrl: null };
+    }
+    return {
+      ...asset,
+      mediaUrl: this.mediaSigning.signedUrl(`a:${asset.id}`, 2 * 60 * 60),
+    };
+  }
+
   async getBatches(userId: string) {
-    return this.prisma.productBatch.findMany({
+    const batches = await this.prisma.productBatch.findMany({
       where: { userId },
       include: {
         mediaAssets: {
@@ -330,10 +349,14 @@ export class BatchService implements OnModuleDestroy {
       },
       orderBy: { createdAt: 'desc' },
     });
+    return batches.map((b: any) => ({
+      ...b,
+      mediaAssets: (b.mediaAssets ?? []).map((a: any) => this.withMediaUrl(a)),
+    }));
   }
 
   async getBatch(id: string, userId: string) {
-    return this.prisma.productBatch.findUnique({
+    const batch = await this.prisma.productBatch.findUnique({
       where: { id, userId },
       include: {
         mediaAssets: {
@@ -346,6 +369,11 @@ export class BatchService implements OnModuleDestroy {
         publications: true,
       },
     });
+    if (!batch) return batch;
+    return {
+      ...batch,
+      mediaAssets: ((batch as any).mediaAssets ?? []).map((a: any) => this.withMediaUrl(a)),
+    };
   }
 
   async approveBatch(id: string, body: any, userId: string) {

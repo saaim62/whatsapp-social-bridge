@@ -17,6 +17,7 @@ import {
   Clock
 } from "lucide-react";
 import { API_URL, fetchWithAuth } from "@/lib/api";
+import { mediaSrcFor } from "@/lib/media";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 
@@ -181,7 +182,7 @@ export default function DashboardPage() {
     const isVid = (m: any) => m?.mimeType?.startsWith("video/") || m?.originalUrl?.endsWith(".mp4") || m?.localPath?.endsWith(".mp4");
     const m = batch.mediaAssets?.find((x: any) => !isVid(x)) || batch.mediaAssets?.[0];
     return {
-      src: m?.originalUrl || (m?.localPath ? `${API_URL}/${m.localPath}` : null),
+      src: mediaSrcFor(m),
       isVideo: isVid(m),
     };
   };
@@ -445,7 +446,7 @@ export default function DashboardPage() {
                     {(() => {
                       const isVid = (m: any) => m?.mimeType?.startsWith('video/') || m?.originalUrl?.endsWith('.mp4') || m?.localPath?.endsWith('.mp4');
                       const thumbMedia = batch.mediaAssets?.find((m: any) => !isVid(m)) || batch.mediaAssets?.[0];
-                      const mediaSrc = thumbMedia?.originalUrl || (thumbMedia?.localPath ? `${API_URL}/${thumbMedia.localPath}` : null);
+                      const mediaSrc = mediaSrcFor(thumbMedia);
                       const isVideo = isVid(thumbMedia);
 
                       return (

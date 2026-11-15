@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Crop, Check, ChevronLeft, ChevronRight, RotateCcw, Sparkles } from "lucide-react";
 import { API_URL, fetchWithAuth } from "@/lib/api";
+import { mediaSrcFor } from "@/lib/media";
 
 interface Box {
   left: number;
@@ -214,9 +215,10 @@ export function ImageMaskModal({
     }
   };
 
-  const imageUrl = currentMedia.originalUrl 
-    ? `${currentMedia.originalUrl}${currentTimestamp ? `?t=${currentTimestamp}` : ""}`
-    : `${API_URL}/${currentMedia.localPath}${currentTimestamp ? `?t=${currentTimestamp}` : ""}`;
+  const baseImageUrl = mediaSrcFor(currentMedia);
+  const imageUrl = baseImageUrl
+    ? `${baseImageUrl}${currentTimestamp ? `?t=${currentTimestamp}` : ""}`
+    : "";
 
   return (
     <AnimatePresence>

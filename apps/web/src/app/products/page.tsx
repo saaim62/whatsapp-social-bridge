@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { formatDistanceToNow } from "date-fns";
 import { Layers, Clock3, CheckCircle2, ImageIcon, Trash2, Loader2, AlertCircle, Search, Filter, Send, Edit2 } from "lucide-react";
 import { API_URL, fetchWithAuth } from "@/lib/api";
+import { mediaSrcFor } from "@/lib/media";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { useNotifications } from "@/contexts/NotificationContext";
@@ -373,7 +374,7 @@ export default function ProductsPage() {
                       {(() => {
                         const isVid = (m: any) => m?.mimeType?.startsWith('video/') || m?.originalUrl?.endsWith('.mp4') || m?.localPath?.endsWith('.mp4');
                         const thumbMedia = batch.mediaAssets?.find((m: any) => !isVid(m)) || batch.mediaAssets?.[0];
-                        const mediaSrc = thumbMedia?.originalUrl || (thumbMedia?.localPath ? `${API_URL}/${thumbMedia.localPath}` : null);
+                        const mediaSrc = mediaSrcFor(thumbMedia);
                         const isVideo = isVid(thumbMedia);
 
                         if (!mediaSrc) {

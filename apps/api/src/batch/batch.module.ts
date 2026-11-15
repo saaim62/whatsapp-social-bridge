@@ -4,6 +4,7 @@ import { BatchService } from './batch.service';
 import { BatchController } from './batch.controller';
 import { AiModule } from '../ai/ai.module';
 import { StorageService } from '../storage/storage.service';
+import { MediaModule } from '../media/media.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { StorageService } from '../storage/storage.service';
       name: 'image-blur',
     }),
     AiModule,
+    MediaModule,
   ],
   controllers: [BatchController],
   providers: [BatchService, StorageService],
