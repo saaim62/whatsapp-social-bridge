@@ -6,7 +6,6 @@ import { AiService } from '../ai/ai.service';
 import { SocialService } from '../social/social.service';
 import { ConfigService } from '@nestjs/config';
 import {
-  parsePrice,
   analyzePrice,
   computeSellingPrice,
   formatRs,
@@ -206,12 +205,20 @@ export class BatchProcessor extends WorkerHost {
         extracted.manual_price_override > 0
           ? extracted.manual_price_override
           : null;
-      const selling =
-        manualOverride ??
-        computeSellingPrice(parsePrice(extracted.price), rule) ??
-        (typeof extracted.selling_price_value === 'number'
-          ? extracted.selling_price_value
-          : null);
+      // Derive FRESH from the current supplier price text. There is
+      // deliberately NO fallback to a stored selling_price_value: when
+      // the current parse is ambiguous or unparseable, a stored value
+      // can only be a stale calculation made by an older, guessing
+      // parser (e.g. "2 pcs 1850" once stored selling_price_value 0 —
+      // or worse, a positive wrong price). A stale calculation is not
+      // a price decision; only the manual override above is. (When the
+      // parse IS unambiguous, the fresh derivation is authoritative
+      // anyway, so the stored value never needs to be consulted.)
+      const priceAnalysis = analyzePrice(extracted.price);
+      const derived = priceAnalysis.ambiguous
+        ? null
+        : computeSellingPrice(priceAnalysis.price, rule);
+      const selling = manualOverride ?? derived;
 
       // PRICE DECISION GATE: publishing requires a real price decision —
       //   (a) a structured selling price > 0 derived from an UNAMBIGUOUS

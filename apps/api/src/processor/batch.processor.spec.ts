@@ -153,6 +153,29 @@ describe('BatchProcessor publish price gate', () => {
     expect(prisma.notification.create).not.toHaveBeenCalled();
   });
 
+  it('BLOCKS publishing when an ambiguous price carries a stale POSITIVE selling_price_value and no override', async () => {
+    // Processed by the old guessing parser: "2 pcs 1850" was stored
+    // with a calculated selling price. The stale value must not rescue
+    // the batch — only a human override may.
+    setup(batchWith({ price: '2 pcs 1850', selling_price: 'Rs. 2,400', selling_price_value: 2400 }));
+    await publish();
+    expect(socialService.publishInstagram).not.toHaveBeenCalled();
+    expect(socialService.publishFacebook).not.toHaveBeenCalled();
+    expect(statusUpdates()).toContain('READY');
+    expect(prisma.notification.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('a manual override wins over the derived price (derived 2400, override 2500 → publishes at 2500)', async () => {
+    const batch = batchWith({ price: 'Rs. 1,850', manual_price_override: 2500 });
+    setup(batch);
+    await publish();
+    expect(socialService.publishInstagram).toHaveBeenCalledTimes(1);
+    const publishedBatch = socialService.publishInstagram.mock.calls[0][0];
+    expect(publishedBatch.generatedContent.instagramCaption).toContain('Rs. 2,500');
+    expect(publishedBatch.generatedContent.instagramCaption).not.toContain('Rs. 2,400');
+    expect(statusUpdates()).toContain('PUBLISHED');
+  });
+
   it('BLOCKS a batch with no price at all and no override, even with placeholder-free captions', async () => {
     const batch = batchWith(
       { price: 'Price not specified' },
