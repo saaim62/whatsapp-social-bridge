@@ -6,6 +6,7 @@ jest.mock('ioredis', () => ({
     connect: jest.fn().mockResolvedValue(undefined),
     ping: jest.fn().mockResolvedValue('PONG'),
     disconnect: jest.fn(),
+    on: jest.fn(),
   })),
 }));
 
