@@ -1,8 +1,15 @@
 import { getSession } from 'next-auth/react';
+import { useDemoStore } from './demo-store';
+import { demoFetch } from './demo-data';
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 export async function fetchWithAuth(url: string, options: RequestInit = {}) {
+  // Demo mode (logged-out visitor): serve sample data, gate real actions.
+  if (useDemoStore.getState().active) {
+    return demoFetch(url, options);
+  }
+
   const session: any = await getSession();
   const headers = new Headers(options.headers || {});
   

@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import ShowroomBackdrop from "./ShowroomBackdrop";
-import { GuestPreview } from "./GuestPreview";
+import { AuthPrompt } from "./AuthPrompt";
+import { useDemoStore } from "@/lib/demo-store";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
@@ -60,19 +61,22 @@ export function CinematicScene() {
   );
 }
 
-/* Logged-out shell: the same showroom, sidebar frame and header as the
-   signed-in app, wrapped around a sample-data preview. A visitor sees
-   the real product first; sign-in is one prominent tap away. */
-export function GuestShell() {
+/* Logged-out shell: the REAL app — same showroom, sidebar, header and
+   pages — running on demo data (see lib/demo-data). Visitors can open
+   every screen and see exactly how DropRoute looks and works; the API
+   layer serves sample data and any real action opens the auth prompt. */
+export function GuestShell({ children, pageTitle }: { children: React.ReactNode; pageTitle: string }) {
+  const pathname = usePathname();
+
   return (
     <div className="h-dvh w-full bg-obsidian flex overflow-hidden selection:bg-gold-dim selection:text-gold-400">
       <CinematicScene />
       <ShowroomBackdrop />
 
-      {/* Sidebar frame (desktop) — nav leads to sign-in */}
+      {/* Sidebar (desktop) — real navigation through the demo */}
       <aside className="hidden md:flex flex-col w-[280px] h-[calc(100dvh-2rem)] my-4 ml-4 rounded-3xl glass-panel relative z-40 overflow-hidden shrink-0">
         <div className="p-6 border-b border-graphite-border">
-          <Link href="/login" className="flex items-center gap-4 group">
+          <Link href="/" className="flex items-center gap-4 group">
             <div className="w-11 h-11 rounded-xl bg-gradient-to-b from-gold-300 via-gold-500 to-gold-600 flex items-center justify-center shadow-[0_10px_26px_-6px_rgba(217,165,33,0.65),inset_0_1px_0_rgba(255,255,255,0.5)] relative">
               <Zap className="w-5 h-5 text-black" strokeWidth={2.5} />
             </div>
@@ -81,20 +85,24 @@ export function GuestShell() {
                 {BRAND.name}
               </span>
               <span className="block text-[10px] uppercase tracking-widest text-gold-400 font-semibold mt-1 opacity-90">
-                Preview Mode
+                Demo Mode
               </span>
             </div>
           </Link>
         </div>
 
         <nav className="flex-1 px-4 space-y-1 mt-6 overflow-y-auto custom-scrollbar">
-          {NAV_ITEMS.map((item, i) => {
+          {NAV_ITEMS.map((item) => {
+            const isActive = pathname
+              ? item.href === "/"
+                ? pathname === "/"
+                : pathname.startsWith(item.href)
+              : false;
             const Icon = item.icon;
-            const isActive = i === 0;
             return (
               <Link
                 key={item.href}
-                href="/login"
+                href={item.href}
                 className={`flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-300 relative overflow-hidden ${
                   isActive
                     ? "bg-gold-500/[0.07] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
@@ -113,7 +121,7 @@ export function GuestShell() {
 
         <div className="p-4 border-t border-graphite-border bg-graphite/30">
           <p className="text-xs text-slate-400 leading-relaxed px-2 mb-4">
-            You&apos;re viewing a live preview with sample data. Sign in to run
+            You&apos;re exploring with sample data. Create a free account to run
             DropRoute on your own WhatsApp sources.
           </p>
           <Link
@@ -139,11 +147,15 @@ export function GuestShell() {
               <Zap className="w-4 h-4 text-black" strokeWidth={2.5} />
             </div>
             <div className="min-w-0">
-              <h1 className="text-xl md:text-2xl font-heading font-bold text-white tracking-tight truncate">Command Center</h1>
+              <h1 className="text-xl md:text-2xl font-heading font-bold text-white tracking-tight truncate">{pageTitle}</h1>
               <div className="mt-1.5 h-[2px] w-14 rounded-full bg-gradient-to-r from-gold-400 via-gold-500 to-transparent" />
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <span className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-bold tracking-widest uppercase">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+              Demo
+            </span>
             <Link
               href="/login"
               className="px-4 sm:px-5 py-2.5 rounded-xl bg-white/[0.04] border border-white/15 text-sm font-semibold text-white hover:bg-white/[0.08] transition-colors"
@@ -160,34 +172,59 @@ export function GuestShell() {
         </header>
 
         <main
-          className="flex-1 overflow-x-hidden overflow-y-auto pb-[calc(6.5rem+env(safe-area-inset-bottom))] md:pb-8 px-4 md:px-10 custom-scrollbar"
+          className="flex-1 overflow-x-hidden overflow-y-auto pb-[calc(7rem+env(safe-area-inset-bottom))] md:pb-8 px-4 md:px-10 custom-scrollbar"
           onScroll={(e) => {
             const el = e.currentTarget;
             const max = el.scrollHeight - el.clientHeight;
             useSceneStore.getState().setScroll(max > 0 ? el.scrollTop / max : 0);
           }}
         >
-          <div className="max-w-[1600px] mx-auto w-full min-h-full pt-2 md:pt-0">
-            <GuestPreview />
+          <div className="max-w-[1600px] mx-auto w-full min-h-full">
+            {/* Demo banner — unmissable, honest, one tap to the real thing */}
+            <div className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-amber-500/25 bg-amber-500/[0.07] px-4 py-3">
+              <p className="text-sm text-amber-200 flex-1 min-w-[220px]">
+                <span className="font-bold">Demo mode</span> — you&apos;re browsing
+                sample data, nothing here is real. Click anything: every screen
+                works. Actions like Publish will ask you to sign in.
+              </p>
+              <Link
+                href="/register"
+                className="text-xs font-bold uppercase tracking-wider text-amber-300 border border-amber-500/40 rounded-full px-3.5 py-1.5 hover:bg-amber-500/10 transition-colors"
+              >
+                Create free account
+              </Link>
+            </div>
+            {children}
           </div>
         </main>
       </div>
 
-      {/* Mobile CTA bar */}
-      <nav className="md:hidden fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 right-4 glass-panel rounded-2xl flex items-center gap-2 p-2 z-50 border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
-        <Link
-          href="/login"
-          className="flex-1 flex items-center justify-center px-4 py-3 rounded-xl bg-white/[0.05] border border-white/10 text-sm font-semibold text-white"
-        >
-          Sign in
-        </Link>
-        <Link
-          href="/register"
-          className="btn-primary flex-1 flex items-center justify-center px-4 py-3 rounded-xl text-sm font-semibold"
-        >
-          Create free account
-        </Link>
+      {/* Mobile dock — real navigation through the demo */}
+      <nav className="md:hidden fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] left-4 right-4 h-16 glass-panel rounded-2xl flex items-center justify-around px-2 z-50 border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
+        {NAV_ITEMS.map((item) => {
+          const isActive = pathname
+            ? item.href === "/"
+              ? pathname === "/"
+              : pathname.startsWith(item.href)
+            : false;
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`relative flex flex-col items-center justify-center w-14 h-full gap-1 transition-colors ${
+                isActive ? "text-gold-400" : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              {isActive && <div className="absolute inset-0 bg-gold-500/10 rounded-xl" />}
+              <Icon className="w-5 h-5 relative z-10" />
+              <span className="text-[9px] font-medium uppercase tracking-wider relative z-10">{item.label}</span>
+            </Link>
+          );
+        })}
       </nav>
+
+      <AuthPrompt />
     </div>
   );
 }
@@ -202,6 +239,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password", "/reset-password", "/verify-email"];
   const isPublicRoute = PUBLIC_ROUTES.includes(pathname || "");
+
+  // Demo mode follows the session: logged-out on an app route = demo.
+  useEffect(() => {
+    useDemoStore.getState().setActive(status === "unauthenticated" && !isPublicRoute);
+  }, [status, isPublicRoute]);
 
   // Feed the WebGL camera rig: route changes retarget the camera.
   useEffect(() => {
@@ -231,7 +273,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   if (status === "unauthenticated") {
-    return <GuestShell />;
+    return <GuestShell pageTitle={pageTitle}>{children}</GuestShell>;
   }
 
   if (status === "loading") {

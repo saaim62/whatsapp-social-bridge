@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Bell, CheckCircle2, XCircle, AlertTriangle, X, Zap } from "lucide-react";
 import { API_URL, fetchWithAuth } from "@/lib/api";
+import { useDemoStore } from "@/lib/demo-store";
 
 type ToastType = "success" | "error" | "info" | "warning";
 type BannerType = "success" | "warning" | "info";
@@ -43,6 +44,7 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const { status } = useSession();
+  const demoActive = useDemoStore((s) => s.active);
   const [batches, setBatches] = useState<any[]>([]);
   const [dbNotifications, setDbNotifications] = useState<any[]>([]);
   const [loadingBatches, setLoadingBatches] = useState(true);
@@ -112,7 +114,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   };
 
   const refreshBatches = async () => {
-    if (status !== "authenticated") return;
+    if (status !== "authenticated" && !demoActive) return;
     try {
       const res = await fetchWithAuth(`${API_URL}/api/batches`);
       if (res.ok) {
@@ -184,7 +186,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   };
 
   useEffect(() => {
-    if (status === "authenticated") {
+    if (status === "authenticated" || demoActive) {
       refreshBatches();
       fetchDbNotifications();
       const interval = setInterval(() => {
@@ -195,7 +197,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     } else {
       setLoadingBatches(false);
     }
-  }, [status]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, demoActive]);
 
   return (
     <NotificationContext.Provider value={{ batches, setBatches, dbNotifications, unreadCount, markAsRead, markAllAsRead, loadingBatches, addToast, addBanner, removeBanner, refreshBatches }}>
