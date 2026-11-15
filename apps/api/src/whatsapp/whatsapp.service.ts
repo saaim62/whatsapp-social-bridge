@@ -199,10 +199,10 @@ export class WhatsappService implements OnModuleInit {
         const debugLog = `[${new Date().toISOString()}] UP EVENT: ${m.type} for ${userId}, count: ${m.messages?.length || 0}\n`;
         require('fs').appendFileSync(require('path').join(process.cwd(), 'debug-messages.log'), debugLog);
 
-        if (m.messages && m.messages.length > 0) {
-          this.saveMessagesToCache(userId, m.messages);
-        }
-
+        // Privacy gate FIRST: nothing is cached or buffered before the
+        // paused check and the per-source allowlist check have passed.
+        // Previously every incoming message was written to the on-disk
+        // history cache before either check ran.
         const settings = await this.settingsService.getSettings(userId);
         if (!settings.isSyncActive) {
           this.logger.log(
@@ -212,6 +212,7 @@ export class WhatsappService implements OnModuleInit {
         }
 
         if (m.type === 'notify' || m.type === 'append') {
+          const cacheable: any[] = [];
           for (const msg of m.messages) {
             const senderId = msg.key.remoteJid;
             if (!senderId) continue;
@@ -237,6 +238,9 @@ export class WhatsappService implements OnModuleInit {
 
             if (!isAllowed) continue;
 
+            // Only allowlisted, non-own messages may enter the history cache.
+            cacheable.push(msg);
+
             const bufferKey = `${userId}_${senderId}`;
             if (!this.messageBuffer.has(bufferKey)) {
               this.messageBuffer.set(bufferKey, []);
@@ -253,6 +257,10 @@ export class WhatsappService implements OnModuleInit {
               setTimeout(() => this.flushMessageBuffer(userId, senderId), 3500),
             );
           }
+
+          if (cacheable.length > 0) {
+            this.saveMessagesToCache(userId, cacheable);
+          }
         }
       });
 
@@ -266,9 +274,10 @@ export class WhatsappService implements OnModuleInit {
             `Received historical sync for user ${userId}: ${contacts.length} contacts, ${chats.length} chats, ${messages.length} messages.`,
           );
 
-          if (messages && messages.length > 0) {
-            this.saveMessagesToCache(userId, messages);
-          }
+          // NOTE: messages are deliberately NOT written to the history
+          // cache here. Caching happens further down, after the paused
+          // check and the per-source allowlist gate, and only for sources
+          // the user has explicitly enabled.
 
           // 1. Synchronize Address Book & Contacts first
           const uniqueContacts = new Map<string, any>();
@@ -315,11 +324,6 @@ export class WhatsappService implements OnModuleInit {
           this.logger.log(
             `Historical buffer depth: ${depthHours}h. Filtering ${messages.length} messages since ${new Date(cutoffTimeMs).toISOString()}...`,
           );
-
-          // Check if user has ANY enabled sources already configured in DB
-          const enabledSourcesCount = await this.prisma.whatsappSource.count({
-            where: { userId, isEnabled: true },
-          });
 
           // 3. Filter messages by timestamp and not fromMe
           let droppedCount = 0;
@@ -371,24 +375,18 @@ export class WhatsappService implements OnModuleInit {
           }
 
           let totalBundlesIngested = 0;
+          const allowedMessages: any[] = [];
 
           for (const sender in chatGroups) {
             const chatMsgs = chatGroups[sender];
             if (!chatMsgs || chatMsgs.length === 0) continue;
 
-            // Source gating check
-            if (enabledSourcesCount > 0) {
-              const source = await this.prisma.whatsappSource.findUnique({
-                where: { userId_jid: { userId, jid: sender } },
-              });
-              // If the user already has custom source filtering configured, respect disabled sources
-              if (source && !source.isEnabled) {
-                this.logger.log(`Skipping historical messages for disabled source: ${sender}`);
-                continue;
-              }
-            }
-
-            // Register/resolve source in DB
+            // Register/resolve the source and apply the allowlist gate.
+            // isSourceAllowed registers unknown sources as DISABLED (so the
+            // user can enable them in the UI) and returns true only for
+            // sources the user explicitly enabled. An empty allowlist
+            // therefore ingests ZERO messages, and history import never
+            // auto-enables a source the user did not select.
             let pushName = chatMsgs[0]?.pushName;
             if (sender.endsWith('@newsletter') && !pushName) {
               try {
@@ -396,15 +394,12 @@ export class WhatsappService implements OnModuleInit {
                 if (meta?.name) pushName = meta.name;
               } catch (err) { }
             }
-            await this.sourcesService.isSourceAllowed(sender, pushName, userId);
-
-            // If user has NO sources enabled yet (fresh node connection), auto-enable this source
-            if (enabledSourcesCount === 0) {
-              await this.prisma.whatsappSource.updateMany({
-                where: { userId, jid: sender },
-                data: { isEnabled: true },
-              });
+            const isAllowed = await this.sourcesService.isSourceAllowed(sender, pushName, userId);
+            if (!isAllowed) {
+              this.logger.log(`Skipping historical messages for source not in allowlist: ${sender}`);
+              continue;
             }
+            allowedMessages.push(...chatMsgs);
 
             // Sort messages strictly by timestamp
             const sortedChatMessages = chatMsgs.sort((a: any, b: any) => {
@@ -438,6 +433,11 @@ export class WhatsappService implements OnModuleInit {
               await this.batchService.forceCloseActiveBatch(userId, sender);
               totalBundlesIngested++;
             }
+          }
+
+          // Only now — after the allowlist gate — may messages enter the cache.
+          if (allowedMessages.length > 0) {
+            this.saveMessagesToCache(userId, allowedMessages);
           }
 
           this.logger.log(`Finished retroactive historical sync for user ${userId}: ${totalBundlesIngested} product drops ingested.`);
@@ -873,10 +873,6 @@ export class WhatsappService implements OnModuleInit {
       chatGroups[sender].push(msg);
     }
 
-    const enabledSourcesCount = await this.prisma.whatsappSource.count({
-      where: { userId, isEnabled: true },
-    });
-
     let importedCount = 0;
     let skippedCount = 0;
 
@@ -884,22 +880,13 @@ export class WhatsappService implements OnModuleInit {
       const chatMsgs = chatGroups[sender];
       if (!chatMsgs || chatMsgs.length === 0) continue;
 
-      if (enabledSourcesCount > 0) {
-        const source = await this.prisma.whatsappSource.findUnique({
-          where: { userId_jid: { userId, jid: sender } },
-        });
-        if (source && !source.isEnabled) {
-          this.logger.log(`Skipping retroactive sync for disabled source: ${sender}`);
-          continue;
-        }
-      }
-
-      await this.sourcesService.isSourceAllowed(sender, chatMsgs[0]?.pushName, userId);
-      if (enabledSourcesCount === 0) {
-        await this.prisma.whatsappSource.updateMany({
-          where: { userId, jid: sender },
-          data: { isEnabled: true },
-        });
+      // Allowlist gate: unknown sources are registered as disabled by
+      // isSourceAllowed and rejected here; a source is imported only when
+      // the user explicitly enabled it. Re-sync never auto-enables sources.
+      const isAllowed = await this.sourcesService.isSourceAllowed(sender, chatMsgs[0]?.pushName, userId);
+      if (!isAllowed) {
+        this.logger.log(`Skipping retroactive sync for source not in allowlist: ${sender}`);
+        continue;
       }
 
       const sortedChatMessages = chatMsgs.sort((a: any, b: any) => {
