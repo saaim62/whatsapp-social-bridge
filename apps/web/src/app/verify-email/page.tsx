@@ -40,7 +40,7 @@ function VerifyEmailContent() {
   }, [token]);
 
   return (
-    <div className="min-h-screen w-full relative flex items-center justify-center bg-[#0a0a0a] overflow-hidden">
+    <div className="min-h-dvh w-full relative flex items-center justify-center bg-transparent">
       <div className="absolute inset-0 z-0">
         <div className="absolute top-1/4 -right-1/4 w-[800px] h-[800px] bg-brand-500/20 rounded-full blur-[120px] mix-blend-screen animate-pulse" style={{ animationDuration: '4s' }} />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[url('/noise.png')] opacity-20 mix-blend-overlay pointer-events-none" />
@@ -54,7 +54,7 @@ function VerifyEmailContent() {
         <div className="bg-white/5 backdrop-blur-2xl border border-white/10 p-8 sm:p-10 rounded-[2.5rem] shadow-2xl relative text-center">
           {status === 'loading' && (
             <div className="py-10">
-              <Loader2 className="w-12 h-12 text-brand-500 animate-spin mx-auto mb-6" />
+              <Loader2 className="w-12 h-12 text-gold-500 animate-spin mx-auto mb-6" />
               <h2 className="text-2xl font-bold text-white mb-2">Verifying Email</h2>
               <p className="text-white/60">Please wait while we verify your email address...</p>
             </div>
@@ -99,7 +99,7 @@ function VerifyEmailContent() {
 
 export default function VerifyEmailPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center"><Loader2 className="w-8 h-8 text-brand-500 animate-spin" /></div>}>
+    <Suspense fallback={<div className="min-h-dvh flex items-center justify-center"><Loader2 className="w-8 h-8 text-gold-500 animate-spin" /></div>}>
       <VerifyEmailContent />
     </Suspense>
   );

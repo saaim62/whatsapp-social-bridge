@@ -60,7 +60,7 @@ function ResetPasswordContent() {
   };
 
   return (
-    <div className="min-h-screen w-full relative flex items-center justify-center bg-[#0a0a0a] overflow-hidden selection:bg-brand-500/30">
+    <div className="min-h-dvh w-full relative flex items-center justify-center bg-transparent selection:bg-gold-500/30">
       <div className="absolute inset-0 z-0">
         <div className="absolute top-1/4 -right-1/4 w-[800px] h-[800px] bg-brand-500/20 rounded-full blur-[120px] mix-blend-screen animate-pulse" style={{ animationDuration: '4s' }} />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[url('/noise.png')] opacity-20 mix-blend-overlay pointer-events-none" />
@@ -125,7 +125,7 @@ function ResetPasswordContent() {
                         id="password"
                         type={showPassword ? "text" : "password"}
                         required
-                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white placeholder-transparent focus:bg-white/10 focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all peer pr-12"
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white placeholder-transparent focus:bg-white/10 focus:border-gold-500/50 focus:ring-2 focus:ring-gold-500/20 outline-none transition-all peer pr-12"
                         placeholder="New Password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
@@ -133,7 +133,7 @@ function ResetPasswordContent() {
                       />
                       <label 
                         htmlFor="password" 
-                        className="absolute left-5 -top-2.5 bg-[#1a1a1a] px-2 text-xs font-medium text-white/50 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:bg-transparent peer-focus:-top-2.5 peer-focus:text-xs peer-focus:bg-[#1a1a1a] peer-focus:text-brand-400 rounded"
+                        className="absolute left-5 -top-2.5 bg-[#1a1a1a] px-2 text-xs font-medium text-white/50 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:bg-transparent peer-focus:-top-2.5 peer-focus:text-xs peer-focus:bg-[#1a1a1a] peer-focus:text-gold-400 rounded"
                       >
                         New Password
                       </label>
@@ -151,7 +151,7 @@ function ResetPasswordContent() {
                         id="confirmPassword"
                         type={showPassword ? "text" : "password"}
                         required
-                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white placeholder-transparent focus:bg-white/10 focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all peer"
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white placeholder-transparent focus:bg-white/10 focus:border-gold-500/50 focus:ring-2 focus:ring-gold-500/20 outline-none transition-all peer"
                         placeholder="Confirm Password"
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
@@ -159,7 +159,7 @@ function ResetPasswordContent() {
                       />
                       <label 
                         htmlFor="confirmPassword" 
-                        className="absolute left-5 -top-2.5 bg-[#1a1a1a] px-2 text-xs font-medium text-white/50 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:bg-transparent peer-focus:-top-2.5 peer-focus:text-xs peer-focus:bg-[#1a1a1a] peer-focus:text-brand-400 rounded"
+                        className="absolute left-5 -top-2.5 bg-[#1a1a1a] px-2 text-xs font-medium text-white/50 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:bg-transparent peer-focus:-top-2.5 peer-focus:text-xs peer-focus:bg-[#1a1a1a] peer-focus:text-gold-400 rounded"
                       >
                         Confirm Password
                       </label>
@@ -168,7 +168,7 @@ function ResetPasswordContent() {
                     <button
                       type="submit"
                       disabled={loading || !token}
-                      className="group relative w-full flex items-center justify-center gap-2 bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white font-semibold py-4 px-8 rounded-2xl transition-all shadow-[0_0_40px_-10px_rgba(99,102,241,0.5)] hover:shadow-[0_0_60px_-15px_rgba(99,102,241,0.7)] overflow-hidden disabled:opacity-70 disabled:cursor-not-allowed"
+                      className="group relative w-full flex items-center justify-center gap-2 bg-gradient-to-r from-gold-400 via-gold-500 to-gold-600 hover:from-gold-300 hover:to-gold-500 text-black font-semibold py-4 px-8 rounded-2xl transition-all shadow-[0_0_40px_-10px_rgba(217,165,33,0.5)] hover:shadow-[0_0_60px_-15px_rgba(217,165,33,0.7)] overflow-hidden disabled:opacity-70 disabled:cursor-not-allowed"
                     >
                       <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-in-out" />
                       <span className="relative z-10 flex items-center gap-2">
@@ -195,7 +195,7 @@ function ResetPasswordContent() {
 
 export default function ResetPasswordPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center"><Loader2 className="w-8 h-8 text-brand-500 animate-spin" /></div>}>
+    <Suspense fallback={<div className="min-h-dvh flex items-center justify-center"><Loader2 className="w-8 h-8 text-gold-500 animate-spin" /></div>}>
       <ResetPasswordContent />
     </Suspense>
   );
