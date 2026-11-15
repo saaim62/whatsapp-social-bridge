@@ -35,6 +35,7 @@ describe('BatchProcessor publish price gate', () => {
     prisma = {
       productBatch: {
         update: jest.fn().mockResolvedValue({}),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         findUnique: jest.fn().mockResolvedValue(batch),
       },
       settings: {
@@ -46,7 +47,14 @@ describe('BatchProcessor publish price gate', () => {
         }),
       },
       notification: { create: jest.fn().mockResolvedValue({}) },
-      publication: { create: jest.fn().mockResolvedValue({}) },
+      publication: {
+        create: jest.fn().mockResolvedValue({}),
+        findMany: jest.fn().mockResolvedValue([]),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      $transaction: jest.fn(async (ops: any) =>
+        Array.isArray(ops) ? Promise.all(ops) : ops,
+      ),
     };
     socialService = {
       publishInstagram: jest.fn().mockResolvedValue({ id: 'ig-1' }),
@@ -74,6 +82,55 @@ describe('BatchProcessor publish price gate', () => {
   function statusUpdates() {
     return prisma.productBatch.update.mock.calls.map((c: any) => c[0].data.status);
   }
+
+  it('IDEMPOTENT RETRY: Instagram already PUBLISHED, Facebook failed before → retry attempts Facebook only', async () => {
+    setup(batchWith({ price: 'Rs. 1,850' }));
+    prisma.publication.findMany.mockResolvedValue([
+      { id: 'pub-ig', batchId: 'batch-1', platform: 'INSTAGRAM', status: 'PUBLISHED', publishedKey: 'batch-1:INSTAGRAM' },
+      { id: 'pub-fb', batchId: 'batch-1', platform: 'FACEBOOK', status: 'FAILED', publishedKey: null },
+    ]);
+    await publish();
+    expect(socialService.publishInstagram).not.toHaveBeenCalled();
+    expect(socialService.publishFacebook).toHaveBeenCalledTimes(1);
+    // The skipped destination counts as success: the batch completes.
+    expect(statusUpdates()).toContain('PUBLISHED');
+    // The new Facebook record is the live one for its destination.
+    const fbCreate = prisma.publication.create.mock.calls
+      .map((c: any) => c[0].data)
+      .find((d: any) => d.platform === 'FACEBOOK' && d.status === 'PUBLISHED');
+    expect(fbCreate.publishedKey).toBe('batch-1:FACEBOOK');
+  });
+
+  it('CLAIM: a second publish job while one is in flight (claim count 0) is a complete no-op', async () => {
+    setup(batchWith({ price: 'Rs. 1,850' }));
+    prisma.productBatch.updateMany.mockResolvedValue({ count: 0 });
+    await publish();
+    expect(socialService.publishInstagram).not.toHaveBeenCalled();
+    expect(socialService.publishFacebook).not.toHaveBeenCalled();
+    expect(prisma.publication.create).not.toHaveBeenCalled();
+    expect(prisma.productBatch.update).not.toHaveBeenCalled();
+    expect(prisma.notification.create).not.toHaveBeenCalled();
+  });
+
+  it('FORCE re-publish: posts to Instagram again, supersedes the old record, writes a new live record', async () => {
+    setup(batchWith({ price: 'Rs. 1,850' }));
+    prisma.publication.findMany.mockResolvedValue([
+      { id: 'pub-ig', batchId: 'batch-1', platform: 'INSTAGRAM', status: 'PUBLISHED', publishedKey: 'batch-1:INSTAGRAM' },
+    ]);
+    await (processor as any).handlePublishBatch('batch-1', ['INSTAGRAM'], true);
+    expect(socialService.publishInstagram).toHaveBeenCalledTimes(1);
+    // Old live record superseded (status + key cleared) inside a transaction.
+    const supersede = prisma.publication.updateMany.mock.calls[0][0];
+    expect(supersede.where).toEqual({ batchId: 'batch-1', platform: 'INSTAGRAM', status: 'PUBLISHED' });
+    expect(supersede.data.status).toBe('SUPERSEDED');
+    expect(supersede.data.publishedKey).toBeNull();
+    expect(prisma.$transaction).toHaveBeenCalled();
+    const newRecord = prisma.publication.create.mock.calls
+      .map((c: any) => c[0].data)
+      .find((d: any) => d.platform === 'INSTAGRAM' && d.status === 'PUBLISHED');
+    expect(newRecord.publishedKey).toBe('batch-1:INSTAGRAM');
+    expect(newRecord.platformPostId).toBe('ig-1');
+  });
 
   it('BLOCKS publishing when no Meta destination is saved — social publish methods never called, batch returns to APPROVED with a notification', async () => {
     setup(batchWith({ price: 'Rs. 1,850' }));

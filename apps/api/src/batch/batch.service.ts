@@ -375,19 +375,19 @@ export class BatchService implements OnModuleDestroy {
       where: { id, userId },
       data: { status: 'APPROVED' },
     });
-    await this.batchQueue.add('publish-batch', { batchId: id, userId, targets: body?.targets });
+    await this.batchQueue.add('publish-batch', { batchId: id, userId, targets: body?.targets, force: body?.force === true });
     return { success: true };
   }
 
-  async publishBatch(id: string, userId: string, targets?: string[]) {
+  async publishBatch(id: string, userId: string, targets?: string[], force = false) {
     const batch = await this.prisma.productBatch.findUnique({ where: { id, userId } });
     if (!batch) return { success: false, message: 'Batch not found' };
 
-    await this.batchQueue.add('publish-batch', { batchId: id, userId, targets });
+    await this.batchQueue.add('publish-batch', { batchId: id, userId, targets, force });
     return { success: true };
   }
 
-  async publishBatchesBulk(ids: string[], userId: string) {
+  async publishBatchesBulk(ids: string[], userId: string, force = false) {
     const batches = await this.prisma.productBatch.findMany({
       where: {
         id: { in: ids },
@@ -406,7 +406,7 @@ export class BatchService implements OnModuleDestroy {
       const batch = batches[i];
       await this.batchQueue.add(
         'publish-batch',
-        { batchId: batch.id, userId },
+        { batchId: batch.id, userId, force },
         { delay: i * delayIntervalMs }
       );
     }

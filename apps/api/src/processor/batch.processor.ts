@@ -31,7 +31,7 @@ export class BatchProcessor extends WorkerHost {
       case 'process-batch':
         return this.handleProcessBatch(job.data.batchId);
       case 'publish-batch':
-        return this.handlePublishBatch(job.data.batchId, job.data.targets);
+        return this.handlePublishBatch(job.data.batchId, job.data.targets, job.data.force === true);
       default:
         this.logger.warn(`Unknown job name: ${job.name}`);
     }
@@ -159,13 +159,37 @@ export class BatchProcessor extends WorkerHost {
     };
   }
 
-  private async handlePublishBatch(batchId: string, targets?: string[]) {
-    this.logger.log(`Publishing batch ${batchId} to targets: ${targets?.join(', ') || 'ALL'}...`);
+  private async handlePublishBatch(batchId: string, targets?: string[], force = false) {
+    this.logger.log(`Publishing batch ${batchId} to targets: ${targets?.join(', ') || 'ALL'}${force ? ' (FORCE re-publish)' : ''}...`);
 
-    await this.prisma.productBatch.update({
-      where: { id: batchId },
+    // PUBLISH CLAIM (P0-3): atomically transition the batch to
+    // PUBLISHING, but only when it is not already being published by
+    // another job. The conditional updateMany is the lock: exactly one
+    // concurrent job wins it (count 1); the loser (count 0) is a no-op,
+    // so two publish jobs for the same batch can never attempt the
+    // same destination at the same time. A claim whose owner died
+    // mid-publish goes stale after 10 minutes and can be reclaimed.
+    // The gates below release the claim by moving the batch out of
+    // PUBLISHING (READY / APPROVED / final status).
+    const claim = await this.prisma.productBatch.updateMany({
+      where: {
+        id: batchId,
+        OR: [
+          { status: { not: 'PUBLISHING' } },
+          {
+            status: 'PUBLISHING',
+            updatedAt: { lt: new Date(Date.now() - 10 * 60 * 1000) },
+          },
+        ],
+      },
       data: { status: 'PUBLISHING' },
     });
+    if (claim.count === 0) {
+      this.logger.log(
+        `Publish of batch ${batchId} skipped: another publish job is already in flight for this batch.`,
+      );
+      return;
+    }
 
     const batch = await this.prisma.productBatch.findUnique({
       where: { id: batchId },
@@ -294,108 +318,90 @@ export class BatchProcessor extends WorkerHost {
 
     const publishTargets = (targets && targets.length > 0) ? targets : ['INSTAGRAM', 'FACEBOOK'];
 
-    // Instagram Feed
-    if (publishTargets.includes('INSTAGRAM')) {
+    // PER-DESTINATION IDEMPOTENCY (P0-3): a destination with a live
+    // PUBLISHED record is skipped on retry — if Instagram succeeded
+    // and Facebook failed, the retry attempts Facebook only, instead
+    // of posting a duplicate to Instagram. Re-posting to an already
+    // published destination requires the explicit force flag: the new
+    // post is created and the old record is superseded in the same
+    // transaction. The publishedKey unique index (see schema) is the
+    // DB-level guarantee behind this logic.
+    const existingPublications = await this.prisma.publication.findMany({
+      where: { batchId },
+    });
+    const alreadyPublished = new Set(
+      existingPublications
+        .filter((p: any) => p.status === 'PUBLISHED')
+        .map((p: any) => p.platform),
+    );
+
+    const attemptDestination = async (
+      platform: string,
+      publishFn: () => Promise<{ id: string }>,
+    ) => {
+      if (alreadyPublished.has(platform) && !force) {
+        this.logger.log(
+          `Skipping ${platform} for batch ${batchId}: already published (idempotent retry).`,
+        );
+        anySuccess = true;
+        return;
+      }
       try {
-        const igResult = await this.socialService.publishInstagram(batch);
-        await this.prisma.publication.create({
-          data: {
-            batchId,
-            platform: 'INSTAGRAM',
-            platformPostId: igResult.id,
-            status: 'PUBLISHED',
-          },
-        });
+        const result = await publishFn();
+        const liveRecord = {
+          batchId,
+          platform,
+          platformPostId: result.id,
+          status: 'PUBLISHED',
+          publishedKey: `${batchId}:${platform}`,
+          publishedAt: new Date(),
+        };
+        if (alreadyPublished.has(platform)) {
+          // Force re-publish: supersede the old live record and write
+          // the new one atomically, so the unique publishedKey is
+          // never held by two rows at once.
+          await this.prisma.$transaction([
+            this.prisma.publication.updateMany({
+              where: { batchId, platform, status: 'PUBLISHED' },
+              data: { status: 'SUPERSEDED', publishedKey: null },
+            }),
+            this.prisma.publication.create({ data: liveRecord }),
+          ]);
+        } else {
+          await this.prisma.publication.create({ data: liveRecord });
+        }
         anySuccess = true;
       } catch (e) {
         allSuccess = false;
         await this.prisma.publication.create({
           data: {
             batchId,
-            platform: 'INSTAGRAM',
+            platform,
             status: 'FAILED',
             error: e.message,
           },
         });
       }
+    };
+
+    // Instagram Feed
+    if (publishTargets.includes('INSTAGRAM')) {
+      await attemptDestination('INSTAGRAM', () => this.socialService.publishInstagram(batch));
     }
 
     // Instagram Story
     if (publishTargets.includes('INSTAGRAM_STORY')) {
-      try {
-        const igStoryResult = await this.socialService.publishInstagramStory(batch);
-        await this.prisma.publication.create({
-          data: {
-            batchId,
-            platform: 'INSTAGRAM_STORY',
-            platformPostId: igStoryResult.id,
-            status: 'PUBLISHED',
-          },
-        });
-        anySuccess = true;
-      } catch (e) {
-        allSuccess = false;
-        await this.prisma.publication.create({
-          data: {
-            batchId,
-            platform: 'INSTAGRAM_STORY',
-            status: 'FAILED',
-            error: e.message,
-          },
-        });
-      }
+      await attemptDestination('INSTAGRAM_STORY', () => this.socialService.publishInstagramStory(batch));
     }
 
     // Facebook Feed
     if (publishTargets.includes('FACEBOOK')) {
-      try {
-        const fbResult = await this.socialService.publishFacebook(batch);
-        await this.prisma.publication.create({
-          data: {
-            batchId,
-            platform: 'FACEBOOK',
-            platformPostId: fbResult.id,
-            status: 'PUBLISHED',
-          },
-        });
-        anySuccess = true;
-      } catch (e) {
-        allSuccess = false;
-        await this.prisma.publication.create({
-          data: {
-            batchId,
-            platform: 'FACEBOOK',
-            status: 'FAILED',
-            error: e.message,
-          },
-        });
-      }
+      await attemptDestination('FACEBOOK', () => this.socialService.publishFacebook(batch));
     }
 
     // Facebook Story
     if (publishTargets.includes('FACEBOOK_STORY')) {
-      try {
-        const fbStoryResult = await this.socialService.publishFacebookStory(batch);
-        await this.prisma.publication.create({
-          data: {
-            batchId,
-            platform: 'FACEBOOK_STORY',
-            platformPostId: fbStoryResult.id,
-            status: 'PUBLISHED',
-          },
-        });
-        anySuccess = true;
-      } catch (e) {
-        allSuccess = false;
-        await this.prisma.publication.create({
-          data: {
-            batchId,
-            platform: 'FACEBOOK_STORY',
-            status: 'FAILED',
-            error: e.message,
-          },
-        });
-      }
+      await attemptDestination('FACEBOOK_STORY', () => this.socialService.publishFacebookStory(batch));
     }
 
     const finalStatus = allSuccess

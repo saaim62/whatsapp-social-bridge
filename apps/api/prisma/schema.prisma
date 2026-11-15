@@ -132,7 +132,14 @@ model Publication {
   batch          ProductBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
   platform       String       // INSTAGRAM, FACEBOOK, STORY
   platformPostId String?
-  status         String       @default("PENDING") // PENDING, PUBLISHED, FAILED
+  status         String       @default("PENDING") // PENDING, PUBLISHED, FAILED, SUPERSEDED
+  // Per-destination idempotency guard (P0-3): set to "<batchId>:<platform>"
+  // on the LIVE published record only, null everywhere else (failed
+  // attempts, superseded records). The unique index guarantees at most
+  // one live PUBLISHED record per (batch, platform) at the DB level —
+  // a retry can never create a second live record for a destination
+  // that already succeeded.
+  publishedKey   String?      @unique
   error          String?
   createdAt      DateTime     @default(now())
   publishedAt    DateTime?

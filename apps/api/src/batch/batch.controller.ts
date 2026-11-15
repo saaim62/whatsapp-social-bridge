@@ -42,11 +42,11 @@ export class BatchController {
   }
 
   @Post('publish-bulk')
-  async publishBatchesBulk(@Request() req: any, @Body() body: { ids: string[] }) {
+  async publishBatchesBulk(@Request() req: any, @Body() body: { ids: string[]; force?: boolean }) {
     if (!body.ids || !Array.isArray(body.ids) || body.ids.length === 0) {
       throw new HttpException('No IDs provided', HttpStatus.BAD_REQUEST);
     }
-    return this.batchService.publishBatchesBulk(body.ids, req.user.userId);
+    return this.batchService.publishBatchesBulk(body.ids, req.user.userId, body?.force === true);
   }
 
   @Post(':id/approve')
@@ -56,7 +56,9 @@ export class BatchController {
 
   @Post(':id/publish')
   async publishBatch(@Request() req: any, @Param('id') id: string, @Body() body: any) {
-    return this.batchService.publishBatch(id, req.user.userId, body?.targets);
+    // `force: true` is the explicit opt-in to re-post to destinations
+    // that already have a live PUBLISHED record (P0-3); default false.
+    return this.batchService.publishBatch(id, req.user.userId, body?.targets, body?.force === true);
   }
 
   @Post(':id/reject')
